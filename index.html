@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#7D5730">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Lexi Handles It</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ONBOARDING MODAL -->
+  <div id="onboardingModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+    <div class="modal-card onboarding-card">
+      <h1 id="onboardingTitle" class="onboarding-title">
+        Welcome to <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" class="onboarding-title-logo" onerror="this.style.display='none'">
+      </h1>
+      <p class="onboarding-sub">You're 3 simple steps away from sending your first professional quote.</p>
+      <div class="onboarding-steps">
+        <div class="ob-step">
+          <span class="ob-num">①</span>
+          <div class="ob-step-text">
+            <strong>Set up your business</strong>
+            <span>Add your name, logo and contact details.</span>
+          </div>
+        </div>
+        <div class="ob-step">
+          <span class="ob-num">②</span>
+          <div class="ob-step-text">
+            <strong>Build your price list</strong>
+            <span>Add the jobs you do most. You only need to do this once.</span>
+          </div>
+        </div>
+        <div class="ob-step">
+          <span class="ob-num">③</span>
+          <div class="ob-step-text">
+            <strong>Create your first quote</strong>
+            <span>Pick a customer, tap your jobs, send it off.</span>
+          </div>
+        </div>
+      </div>
+      <div class="ob-referral">
+        <select id="referralSource" class="ob-referral-select">
+          <option value="">How did you hear about Lexi?</option>
+          <option value="google">google / search</option>
+          <option value="social">social media</option>
+          <option value="friend">friend or colleague</option>
+          <option value="advertised">saw it advertised</option>
+          <option value="other">other</option>
+        </select>
+        <p class="ob-referral-error" id="referralError" style="display:none">Please let us know how you heard about Lexi.</p>
+      </div>
+      <button id="startBtn" class="btn btn-primary btn-full ob-start-btn">Sort me out Lexi</button>
+    </div>
+  </div>
+
+  <!-- FIXED HEADER -->
+  <header class="app-header" id="appHeader">
+    <div class="header-logo" id="headerLogoArea">
+      <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" class="header-logo-img" onerror="this.style.display='none'">
+      <img src="2 So you dont have to transparent.png" alt="So you don't have to" class="header-strap-img" onerror="this.style.display='none'">
+    </div>
+    <div class="header-right">
+      <button class="hamburger-btn" id="hamburgerBtn" aria-label="Open menu" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <img src="Lexi Profile.png" alt="Lexi" class="header-avatar" onerror="this.style.display='none'">
+    </div>
+  </header>
+
+  <!-- SLIDE-OUT NAV MENU -->
+  <div class="nav-menu" id="navMenu" aria-hidden="true">
+    <button class="nav-menu-item" data-target="page3" id="menuNewQuote">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      New Quote
+    </button>
+    <button class="nav-menu-item" data-target="page1" id="menuEditBusiness">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Edit My Business
+    </button>
+    <button class="nav-menu-item" data-target="page2" id="menuPriceList">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Edit My Price List
+    </button>
+    <button class="nav-menu-item" data-target="page4" id="menuSavedDocs">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      View Saved Documents
+      <span class="nav-menu-badge" id="savedBadge" style="display:none">0</span>
+    </button>
+  </div>
+  <div class="nav-menu-overlay" id="navMenuOverlay"></div>
+
+  <!-- MAIN CONTENT -->
+  <main class="app-main">
+
+    <!-- PAGE 1: BUSINESS SETUP -->
+    <section id="page1" class="page active" data-page="1">
+<div class="page-header">
+        <h1 class="page-title"><span class="page-num">1.</span> Set Up Your Business</h1>
+        <p class="page-sub">This takes 2 minutes and only needs doing once.</p>
+      </div>
+
+      <!-- About You -->
+      <div class="card">
+        <h2 class="card-title">About You</h2>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="p1FirstName">First Name</label>
+            <input type="text" id="p1FirstName" autocomplete="given-name">
+          </div>
+          <div class="form-group">
+            <label for="p1LastName">Last Name <span class="required">*</span></label>
+            <input type="text" id="p1LastName" autocomplete="family-name" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="p1BusinessName">Business Name</label>
+          <input type="text" id="p1BusinessName" autocomplete="organization">
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="p1Phone">Phone</label>
+            <input type="tel" id="p1Phone" autocomplete="tel">
+          </div>
+          <div class="form-group">
+            <label for="p1Email">Email</label>
+            <input type="email" id="p1Email" autocomplete="email">
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="p1Website">Website</label>
+            <input type="url" id="p1Website" autocomplete="url">
+          </div>
+          <div class="form-group">
+            <label for="p1Postcode">Postcode</label>
+            <input type="text" id="p1Postcode" autocomplete="postal-code">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="p1Address">Business Address</label>
+          <textarea id="p1Address" rows="3" autocomplete="street-address"></textarea>
+        </div>
+
+        <!-- Logo Upload -->
+        <div class="form-group">
+          <label>Business Logo</label>
+          <div class="logo-upload-area" id="logoUploadArea" tabindex="0" role="button" aria-label="Upload business logo">
+            <div id="logoPlaceholder" class="logo-placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              <span>Tap to upload logo</span>
+              <small>PNG, JPG or SVG — shown on documents</small>
+            </div>
+            <div id="logoPreview" class="logo-preview" style="display:none">
+              <img id="logoImg" src="" alt="Business logo preview">
+              <div class="logo-actions">
+                <button type="button" class="btn btn-sm btn-outline" id="changeLogoBtn">Change</button>
+                <button type="button" class="btn btn-sm btn-danger" id="removeLogoBtn">Remove</button>
+              </div>
+            </div>
+          </div>
+          <input type="file" id="logoFile" accept="image/*" style="display:none" aria-hidden="true">
+        </div>
+      </div>
+
+      <!-- Payment Methods -->
+      <div class="card sage-focus">
+        <h2 class="card-title">How Would You Like to Be Paid?</h2>
+        <div class="pay-methods">
+          <label class="checkbox-label">
+            <input type="checkbox" id="payBankTransfer" value="bank"> Bank Transfer
+          </label>
+          <div id="bankDetails" class="expand-panel" style="display:none">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="bankAccHolder">Account Holder Name</label>
+                <input type="text" id="bankAccHolder" placeholder="Sam Clarke">
+              </div>
+              <div class="form-group">
+                <label for="bankName">Bank Name</label>
+                <input type="text" id="bankName" placeholder="Barclays">
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="bankSort">Sort Code</label>
+                <input type="text" id="bankSort" placeholder="12-34-56" maxlength="8">
+              </div>
+              <div class="form-group">
+                <label for="bankAcc">Account Number</label>
+                <input type="text" id="bankAcc" placeholder="12345678" maxlength="8">
+              </div>
+            </div>
+          </div>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="payCash" value="cash"> Cash on Completion
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="payPaypal" value="paypal"> PayPal
+          </label>
+          <div id="paypalDetails" class="expand-panel" style="display:none">
+            <div class="form-group">
+              <label for="paypalRef">PayPal Email or Phone</label>
+              <input type="text" id="paypalRef" placeholder="sam@paypal.com">
+            </div>
+          </div>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="payOther" value="other"> Other
+          </label>
+          <div id="payOtherDetails" class="expand-panel" style="display:none">
+            <div class="form-group">
+              <label for="payOtherText">Payment Details</label>
+              <textarea id="payOtherText" rows="2" placeholder="e.g. Cheque made payable to..."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Brand Colours -->
+      <div class="card">
+        <h2 class="card-title">
+          Add Your Brand Colours
+          <button type="button" class="tooltip-btn" id="brandTooltipBtn" aria-label="Why set brand colours?">?</button>
+        </h2>
+        <div id="brandTooltip" class="tooltip-box" style="display:none">
+          <p>Every quote and invoice you send is a chance to get your name known. Add your brand colours once and every document goes out looking professional, helping customers recognise and remember you above the competition.</p>
+        </div>
+        <div class="colour-pickers">
+          <div class="colour-picker-group">
+            <label>Header</label>
+            <div class="colour-input-row">
+              <input type="color" id="colourHeader" value="#7D5730" class="colour-swatch">
+              <div class="rgb-inputs">
+                <label class="rgb-label">R <input type="number" id="colourHeaderR" min="0" max="255" class="rgb-input"></label>
+                <label class="rgb-label">G <input type="number" id="colourHeaderG" min="0" max="255" class="rgb-input"></label>
+                <label class="rgb-label">B <input type="number" id="colourHeaderB" min="0" max="255" class="rgb-input"></label>
+              </div>
+            </div>
+          </div>
+          <div class="colour-picker-group">
+            <label>Accent</label>
+            <div class="colour-input-row">
+              <input type="color" id="colourAccent" value="#6B7C5C" class="colour-swatch">
+              <div class="rgb-inputs">
+                <label class="rgb-label">R <input type="number" id="colourAccentR" min="0" max="255" class="rgb-input"></label>
+                <label class="rgb-label">G <input type="number" id="colourAccentG" min="0" max="255" class="rgb-input"></label>
+                <label class="rgb-label">B <input type="number" id="colourAccentB" min="0" max="255" class="rgb-input"></label>
+              </div>
+            </div>
+          </div>
+          <div class="colour-picker-group">
+            <label>Background</label>
+            <div class="colour-input-row">
+              <input type="color" id="colourBg" value="#F5F0E8" class="colour-swatch">
+              <div class="rgb-inputs">
+                <label class="rgb-label">R <input type="number" id="colourBgR" min="0" max="255" class="rgb-input"></label>
+                <label class="rgb-label">G <input type="number" id="colourBgG" min="0" max="255" class="rgb-input"></label>
+                <label class="rgb-label">B <input type="number" id="colourBgB" min="0" max="255" class="rgb-input"></label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Live preview -->
+        <p class="cp-example-label">Example</p>
+        <div class="colour-preview" id="colourPreview">
+          <div class="cp-header" id="cpHeader">
+            <span id="cpBusinessName">Ace Trades</span>
+            <span id="cpDocType">QUOTE</span>
+          </div>
+          <div class="cp-body" id="cpBody">
+            <div class="cp-col-header"><span class="cp-label" id="cpAccentSample">Job Description</span></div>
+            <div class="cp-row"><span>Parts</span><span>£150.00</span></div>
+            <div class="cp-row"><span>Labour</span><span>£75.00</span></div>
+            <div class="cp-total">Total: <strong>£225.00</strong></div>
+          </div>
+        </div>
+        <div class="colour-reset-row">
+          <button type="button" class="btn btn-sm btn-outline" id="resetColourMenu">Reset ▾</button>
+          <div id="resetColourDropdown" class="dropdown" style="display:none">
+            <button type="button" class="dropdown-item" data-reset="all">Reset All</button>
+            <button type="button" class="dropdown-item" data-reset="header">Reset Header</button>
+            <button type="button" class="dropdown-item" data-reset="accent">Reset Accent</button>
+            <button type="button" class="dropdown-item" data-reset="bg">Reset Background</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backup & Restore -->
+      <div class="card">
+        <h2 class="card-title">Backup &amp; Restore</h2>
+        <p class="card-desc">Export all your data (business details, price list and saved documents) as a file, or restore from a previous backup.</p>
+        <div class="backup-actions">
+          <button type="button" class="btn btn-outline" id="exportDataBtn">⬇ Export Backup</button>
+          <button type="button" class="btn btn-outline" id="importDataBtn">⬆ Import Backup</button>
+          <input type="file" id="importDataFile" accept=".json" style="display:none" aria-hidden="true">
+        </div>
+      </div>
+
+      <!-- Page Footer -->
+      <div class="page-footer">
+        <button type="button" class="btn btn-primary btn-lg" id="saveBusinessBtn">Save My Business</button>
+        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToPriceListBtn"><span class="btn-step-num">2</span> Add Price List</button>
+      </div>
+    </section>
+
+    <!-- PAGE 2: PRICE LIST -->
+    <section id="page2" class="page" data-page="2">
+      <div class="page-header">
+        <h1 class="page-title"><span class="page-num">2.</span> Build Your Price List</h1>
+        <p class="page-sub">Add the jobs you do most. You can always edit these later.</p>
+      </div>
+
+      <!-- Add Jobs -->
+      <div class="card sage-focus">
+        <h2 class="card-title">Add Jobs</h2>
+
+        <!-- CSV Upload -->
+        <div class="upload-zone" id="csvUploadZone" tabindex="0" role="button" aria-label="Upload CSV or text file">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Drag &amp; drop or tap to upload CSV / TXT</span>
+          <small>Format: Job name, price — one per line</small>
+          <button type="button" class="btn btn-sm btn-outline" id="downloadTemplateBtn" style="margin-top:8px">Download Template</button>
+        </div>
+        <input type="file" id="csvFile" accept=".csv,.txt" style="display:none" aria-hidden="true">
+
+        <!-- Bulk Paste -->
+        <div class="form-group" style="margin-top:16px">
+          <label for="bulkPaste">Or paste jobs here (one per line: <em>Job name, price</em>)</label>
+          <textarea id="bulkPaste" rows="4" placeholder="Fit door handle, 45&#10;Hang door, 85&#10;Repair fence panel, 60"></textarea>
+          <button type="button" class="btn btn-sage btn-sm" id="parseBulkBtn" style="margin-top:8px">Add</button>
+        </div>
+
+        <!-- Individual Add -->
+        <div class="individual-add">
+          <h3 class="section-sub">Add Individually</h3>
+          <div class="form-grid-3">
+            <div class="form-group fg-grow">
+              <label for="jobName">Job Name</label>
+              <input type="text" id="jobName" placeholder="e.g. Fit door handle">
+            </div>
+            <div class="form-group">
+              <label for="jobPrice">Price (£)</label>
+              <input type="number" id="jobPrice" placeholder="45" min="0" step="0.01">
+            </div>
+            <div class="form-group">
+              <label for="jobUnit">Unit <span class="hint">(optional)</span></label>
+              <input type="text" id="jobUnit" placeholder="per room">
+            </div>
+          </div>
+          <button type="button" class="btn btn-sage" id="addJobBtn">Add</button>
+        </div>
+      </div>
+
+      <!-- Price List -->
+      <div class="card">
+        <div class="card-header-row">
+          <h2 class="card-title">Your Price List <span class="badge" id="priceListBadge">0</span></h2>
+        </div>
+        <div class="price-list-toolbar">
+          <input type="text" id="priceListSearch" placeholder="Search jobs..." class="search-input">
+          <button type="button" class="btn btn-sm btn-danger-outline" id="deleteSelectedBtn" style="display:none">Delete selected</button>
+        </div>
+        <div class="price-list-header">
+          <label class="checkbox-label compact">
+            <input type="checkbox" id="selectAllJobs"> Select all
+          </label>
+          <div class="sort-row">
+            <label for="sortJobs" class="sort-label">Sort:</label>
+            <select id="sortJobs" class="sort-select">
+              <option value="added">Date added</option>
+              <option value="name">Job</option>
+              <option value="price">Price</option>
+            </select>
+          </div>
+        </div>
+        <div id="priceListContainer" class="price-list-container">
+          <div class="empty-state" id="priceListEmpty">
+            <p>No jobs added yet. Add your first job above.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-footer">
+        <button type="button" class="btn btn-outline btn-lg" id="backToSetupBtn">← Back to Setup</button>
+        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToQuoteBtn"><span class="btn-step-num">3</span> New Quote</button>
+      </div>
+    </section>
+
+    <!-- PAGE 3: NEW QUOTE -->
+    <section id="page3" class="page" data-page="3">
+      <div class="page-header">
+        <h1 class="page-title" id="page3Title">3. Create Your First Quote</h1>
+        <p class="page-sub">Fill in the details below and send it off.</p>
+      </div>
+
+      <!-- Step 1: Document Type & Customer -->
+      <div class="card">
+        <h2 class="card-title">Step 1 — Customer Details</h2>
+        <div class="doc-type-toggle">
+          <button type="button" class="doc-type-btn active" id="dtEstimate" data-type="Estimate">Estimate</button>
+          <button type="button" class="doc-type-btn" id="dtQuote" data-type="Quote">Quote</button>
+        </div>
+        <div class="form-grid-2" style="margin-top:12px">
+          <div class="form-group">
+            <label for="custTitle">Title</label>
+            <select id="custTitle">
+              <option value="">Title</option>
+              <option value="Mr">Mr</option>
+              <option value="Mrs">Mrs</option>
+              <option value="Ms">Ms</option>
+              <option value="Dr">Dr</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex;gap:8px">
+            <div class="form-group" style="flex:1;margin-bottom:0">
+              <label for="custFirstName">First Name</label>
+              <input type="text" id="custFirstName" autocomplete="given-name">
+            </div>
+            <div class="form-group" style="flex:1;margin-bottom:0">
+              <label for="custLastName">Last Name</label>
+              <input type="text" id="custLastName" autocomplete="family-name">
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="custAddr">Address</label>
+          <textarea id="custAddr" rows="3" autocomplete="street-address"></textarea>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="custPostcode">Postcode</label>
+            <input type="text" id="custPostcode" autocomplete="postal-code">
+          </div>
+          <div class="form-group">
+            <label for="custPhone">Phone</label>
+            <input type="tel" id="custPhone" autocomplete="tel">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="custEmail">Email</label>
+          <input type="email" id="custEmail" autocomplete="email">
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="docRef">Reference</label>
+            <input type="text" id="docRef" placeholder="EST-001">
+          </div>
+          <div class="form-group">
+            <label for="docDate">Date</label>
+            <input type="date" id="docDate">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="docValidFor">Valid For</label>
+          <select id="docValidFor">
+            <option value="7">7 days</option>
+            <option value="14">14 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="form-group" id="validCustomGroup" style="display:none">
+          <label for="docValidCustom">Custom validity (days)</label>
+          <input type="number" id="docValidCustom" min="1" placeholder="60">
+        </div>
+      </div>
+
+      <!-- Step 2: Add Jobs -->
+      <div class="card">
+        <h2 class="card-title">Step 2 — Add Jobs</h2>
+        <div class="form-group">
+          <input type="text" id="jobPickerSearch" placeholder="Search your price list..." class="search-input">
+        </div>
+        <div id="jobPickerList" class="picker-list"></div>
+        <div id="quoteItemsContainer" class="quote-items-container">
+          <div class="empty-state" id="quoteItemsEmpty" style="display:none">
+            <p>No jobs added yet.</p>
+          </div>
+        </div>
+        <!-- Custom item -->
+        <div class="custom-item-add">
+          <h3 class="section-sub">Add a one-off item</h3>
+          <div class="form-grid-3">
+            <div class="form-group fg-grow">
+              <label for="customItemName">Description</label>
+              <input type="text" id="customItemName" placeholder="e.g. Materials">
+            </div>
+            <div class="form-group">
+              <label for="customItemPrice">Price (£)</label>
+              <input type="number" id="customItemPrice" placeholder="0.00" min="0" step="0.01">
+            </div>
+            <div class="form-group">
+              <label for="customItemUnit">Unit</label>
+              <input type="text" id="customItemUnit" placeholder="each">
+            </div>
+          </div>
+          <button type="button" class="btn btn-sage" id="addCustomItemBtn">Add</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Totals & Notes -->
+      <div class="card">
+        <h2 class="card-title">Step 3 — Totals &amp; Notes</h2>
+        <div class="totals-block">
+          <div class="totals-row"><span>Subtotal</span><span id="qSubtotal">£0.00</span></div>
+          <div class="totals-row">
+            <span>VAT</span>
+            <div class="vat-row">
+              <select id="vatSelect" class="vat-select">
+                <option value="0">0%</option>
+                <option value="5">5%</option>
+                <option value="20">20%</option>
+                <option value="custom">Custom</option>
+              </select>
+              <input type="number" id="vatCustom" min="0" max="100" step="0.1" placeholder="%" class="vat-custom" style="display:none">
+            </div>
+            <span id="qVatAmount">£0.00</span>
+          </div>
+          <div class="totals-row">
+            <span>Discount</span>
+            <div class="discount-row">
+              <input type="number" id="discountPct" min="0" max="100" step="0.5" placeholder="0" class="discount-input"> %
+            </div>
+            <span id="qDiscount">-£0.00</span>
+          </div>
+          <div class="totals-row totals-total"><span>Total</span><span id="qTotal">£0.00</span></div>
+        </div>
+
+        <div class="form-group" style="margin-top:16px">
+          <label for="quoteNotes">Notes to Customer</label>
+          <textarea id="quoteNotes" rows="4" placeholder="Thank you for your enquiry. Please note..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="quotePrivateNotes">Private Notes <span class="hint">(not shown on document)</span></label>
+          <textarea id="quotePrivateNotes" rows="3" placeholder="Internal notes..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Terms &amp; Conditions</label>
+          <div class="terms-options">
+            <label class="checkbox-label"><input type="checkbox" name="terms" value="payment30"> Payment due within 30 days of invoice date.</label>
+            <label class="checkbox-label"><input type="checkbox" name="terms" value="depositRequired"> A 50% deposit is required before work commences.</label>
+            <label class="checkbox-label"><input type="checkbox" name="terms" value="quotationValid"> This quotation is valid for 30 days from the date shown.</label>
+            <label class="checkbox-label"><input type="checkbox" name="terms" value="materialsExtra"> Materials are not included unless stated above.</label>
+            <label class="checkbox-label"><input type="checkbox" name="terms" value="cancellation"> Cancellation within 48 hours of scheduled start date may incur a charge.</label>
+          </div>
+          <div class="form-group" style="margin-top:8px">
+            <label for="customTerms">Additional terms</label>
+            <textarea id="customTerms" rows="2" placeholder="Any additional terms..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Signature -->
+      <div class="card">
+        <h2 class="card-title">Step 4 — Signature <span class="hint">(optional)</span></h2>
+        <div class="form-group">
+          <label for="authSig">Authorised Signature (name)</label>
+          <input type="text" id="authSig" placeholder="Your business name or your name">
+        </div>
+        <div class="form-group">
+          <label>Customer Signature</label>
+          <div class="sig-container">
+            <canvas id="sigCanvas" class="sig-canvas" width="400" height="150"></canvas>
+            <div class="sig-actions">
+              <button type="button" class="btn btn-sm btn-outline" id="clearSigBtn">Clear</button>
+              <div class="sig-or">or</div>
+              <input type="text" id="custSigText" placeholder="Type to sign" class="sig-text-input">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quote Footer -->
+      <div class="page-footer quote-footer">
+        <button type="button" class="btn btn-outline btn-lg" id="previewQuoteBtn">👁 Preview</button>
+        <button type="button" class="btn btn-primary btn-lg" id="saveQuoteBtn">✓ Save</button>
+        <button type="button" class="btn btn-outline btn-lg" id="printQuoteBtn">⎙ Print</button>
+        <button type="button" class="btn btn-primary btn-lg" id="sendQuoteBtn">⇧ Send</button>
+      </div>
+    </section>
+
+    <!-- PAGE 4: SAVED DOCUMENTS -->
+    <section id="page4" class="page" data-page="4">
+      <div class="page-header">
+        <h1 class="page-title">Saved Documents</h1>
+      </div>
+      <div class="what-next-bar" id="whatNextBar" style="display:none">
+        <p class="what-next-label">What would you like to do next?</p>
+        <div class="what-next-btns">
+          <button class="btn btn-outline-sage what-next-btn" onclick="showPage('page1')">⚙ Edit My Setup</button>
+          <button class="btn btn-primary what-next-btn" onclick="prepareNewQuote(); showPage('page3')">✎ New Quote</button>
+          <button class="btn btn-outline-sage what-next-btn" onclick="document.getElementById('whatNextBar').style.display='none'">✕ Dismiss</button>
+        </div>
+      </div>
+      <div class="saved-filter-bar">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="Estimate">Estimates</button>
+        <button class="filter-btn" data-filter="Quote">Quotes</button>
+        <button class="filter-btn" data-filter="invoiced">Invoiced</button>
+        <button class="filter-btn" data-filter="paid">Paid</button>
+      </div>
+      <div id="savedDocsList" class="saved-docs-list">
+        <div class="empty-state" id="savedDocsEmpty">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <p>No saved documents yet.</p>
+          <button type="button" class="btn btn-primary" id="createFirstQuoteBtn">Create your first quote</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- PREVIEW MODAL -->
+  <div id="previewModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Document Preview">
+    <div class="modal-card preview-modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">Preview</h2>
+        <button type="button" class="modal-close" id="closePreviewBtn" aria-label="Close preview">✕</button>
+      </div>
+      <div id="previewContent" class="preview-content"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="previewPrintBtn">⎙ Print</button>
+        <button type="button" class="btn btn-primary" id="previewSendBtn">⇧ Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVOICE MODAL -->
+  <div id="invoiceModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Send Invoice">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">Send Invoice</h2>
+        <button type="button" class="modal-close" id="closeInvoiceBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="invRef">Invoice Reference</label>
+            <input type="text" id="invRef" placeholder="INV-001">
+          </div>
+          <div class="form-group">
+            <label for="invDate">Invoice Date</label>
+            <input type="date" id="invDate">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="invDueDate">Due Date</label>
+          <input type="date" id="invDueDate">
+        </div>
+        <div class="form-group">
+          <label for="invNotes">Notes</label>
+          <textarea id="invNotes" rows="3" placeholder="Thank you for choosing us..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="invPreviewBtn">👁 Preview</button>
+        <button type="button" class="btn btn-primary" id="invSendBtn">⇧ Send Invoice</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECEIPT MODAL -->
+  <div id="receiptModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Send Receipt">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">Send Receipt</h2>
+        <button type="button" class="modal-close" id="closeReceiptBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="recAmount">Amount Paid (£)</label>
+            <input type="number" id="recAmount" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label for="recDate">Payment Date</label>
+            <input type="date" id="recDate">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="recMethod">Payment Method</label>
+          <select id="recMethod">
+            <option value="Bank Transfer">Bank Transfer</option>
+            <option value="Cash">Cash</option>
+            <option value="PayPal">PayPal</option>
+            <option value="Card">Card</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="recNotes">Notes</label>
+          <textarea id="recNotes" rows="3" placeholder="Thank you for your payment..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="recPreviewBtn">👁 Preview</button>
+        <button type="button" class="btn btn-primary" id="recSendBtn">⇧ Send Receipt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MARK PAID MODAL -->
+  <div id="markPaidModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Mark as Paid">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-header">
+        <h2 class="modal-title">Mark as Paid</h2>
+        <button type="button" class="modal-close" id="closeMarkPaidBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="mpAmount">Amount Paid (£)</label>
+            <input type="number" id="mpAmount" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label for="mpDate">Date Paid</label>
+            <input type="date" id="mpDate">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="cancelMarkPaidBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirmMarkPaidBtn">Mark Paid</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
