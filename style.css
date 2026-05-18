@@ -173,10 +173,18 @@ h3 { font-size: 1rem; font-weight: 600; }
 
 .card-title {
   color: var(--sage);
+  font-weight: 700;
   margin-bottom: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.form-grid-cust-name {
+  display: grid;
+  grid-template-columns: 90px 1fr 1fr;
+  gap: 8px;
+  align-items: end;
 }
 
 .card-header-row {
@@ -363,6 +371,11 @@ input[type="text"].sig-text-input:focus {
 .quote-footer { flex-wrap: wrap; gap: 8px; }
 .quote-footer .btn { flex: 1 1 calc(50% - 4px); min-width: 120px; }
 
+@media (min-width: 540px) {
+  .quote-footer { flex-wrap: nowrap; }
+  .quote-footer .btn { flex: 1 1 auto; }
+}
+
 @media (min-width: 720px) {
   .page-footer { max-width: 720px; left: 50%; transform: translateX(-50%); border-radius: var(--radius) var(--radius) 0 0; }
 }
@@ -437,7 +450,7 @@ input[type="text"].sig-text-input:focus {
   font-size: 0.95rem;
 }
 
-.onboarding-steps {
+.onboarding-steps, .ob-steps {
   text-align: left;
   display: flex;
   flex-direction: column;
@@ -478,7 +491,7 @@ input[type="text"].sig-text-input:focus {
 .ob-step-text span { font-size: 0.875rem; color: #666; }
 
 .ob-referral {
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   text-align: left;
 }
 
@@ -526,7 +539,94 @@ input[type="text"].sig-text-input:focus {
   margin-top: 6px;
 }
 
-.ob-start-btn { margin-top: 4px; }
+.ob-start-btn { margin-top: 0; }
+
+/* ── Onboarding screen + card ──────────────────────────────── */
+.ob-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.ob-card {
+  position: relative;
+  width: 100%;
+  max-width: 390px;
+  height: min(844px, calc(100vh - 32px));
+  background: #F5F0E8;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 28px 20px 28px;
+  overflow: hidden;
+}
+
+/* On true mobile (edge-to-edge), go full screen with no rounding */
+@media (max-width: 420px) {
+  .ob-screen { padding: 0; }
+  .ob-card { border-radius: 0; height: 100vh; max-width: 100%; }
+}
+
+.ob-left {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.ob-header,
+.ob-footer {
+  position: relative;
+  z-index: 2;
+}
+
+.ob-middle {
+  display: grid;
+  grid-template-columns: minmax(0, 0.58fr) minmax(0, 0.42fr);
+  align-items: stretch;
+  min-height: 0;
+  position: relative;
+}
+
+.ob-right {
+  position: relative;
+  min-width: 0;
+  overflow: visible;
+}
+
+.ob-portrait {
+  position: absolute;
+  top: -76px;
+  right: -172px;
+  width: calc(100% + 300px);
+  max-width: none;
+  height: auto;
+  object-fit: contain;
+  object-position: center top;
+  display: block;
+}
+
+.ob-wordmark {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.ob-intro {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--charcoal);
+  margin-bottom: 0;
+}
 
 /* ===== LOGO UPLOAD ===== */
 .logo-upload-area {

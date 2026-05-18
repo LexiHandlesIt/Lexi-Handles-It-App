@@ -15,54 +15,71 @@
 <body>
 
   <!-- ONBOARDING MODAL -->
-  <div id="onboardingModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
-    <div class="modal-card onboarding-card">
-      <h1 id="onboardingTitle" class="onboarding-title">
-        Welcome to <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" class="onboarding-title-logo" onerror="this.style.display='none'">
-      </h1>
-      <p class="onboarding-sub">You're 3 simple steps away from sending your first professional quote.</p>
-      <div class="onboarding-steps">
+  <div id="onboardingModal" class="ob-screen" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+    <div class="ob-card">
+
+    <div class="ob-header">
+      <img src="3 Lexi Handles It All.png" alt="Lexi Handles It All" class="ob-wordmark" onerror="this.style.display='none'">
+
+      <p class="ob-intro" id="onboardingTitle">Hi, I'm Lexi, your AI business mate. I'll handle the drafts, you handle the graft. Three simple steps. Let's get you sorted.</p>
+    </div>
+
+    <div class="ob-middle">
+    <!-- LEFT COLUMN: steps -->
+    <div class="ob-left">
+      <div class="ob-steps">
         <div class="ob-step">
-          <span class="ob-num">①</span>
+          <span class="ob-num">1</span>
           <div class="ob-step-text">
             <strong>Set up your business</strong>
-            <span>Add your name, logo and contact details.</span>
+            <span>Your name, logo and details. Real simple.</span>
           </div>
         </div>
         <div class="ob-step">
-          <span class="ob-num">②</span>
+          <span class="ob-num">2</span>
           <div class="ob-step-text">
             <strong>Build your price list</strong>
-            <span>Add the jobs you do most. You only need to do this once.</span>
+            <span>You'll only do this once.</span>
           </div>
         </div>
         <div class="ob-step">
-          <span class="ob-num">③</span>
+          <span class="ob-num">3</span>
           <div class="ob-step-text">
-            <strong>Create your first quote</strong>
-            <span>Pick a customer, tap your jobs, send it off.</span>
+            <strong>Create your first quote or estimate</strong>
+            <span>Pick your customer, tap your jobs, send it off.</span>
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- RIGHT COLUMN: portrait -->
+    <div class="ob-right">
+      <img src="Lexi Portrait Transparent 3.png" alt="Lexi" class="ob-portrait" onerror="this.style.display='none'">
+    </div>
+    </div>
+
+    <div class="ob-footer">
       <div class="ob-referral">
         <select id="referralSource" class="ob-referral-select">
           <option value="">How did you hear about Lexi?</option>
-          <option value="google">google / search</option>
-          <option value="social">social media</option>
-          <option value="friend">friend or colleague</option>
-          <option value="advertised">saw it advertised</option>
-          <option value="other">other</option>
+          <option value="google">Google / search</option>
+          <option value="social">Social media</option>
+          <option value="friend">Friend or colleague</option>
+          <option value="advertised">Saw it advertised</option>
+          <option value="other">Other</option>
         </select>
-        <p class="ob-referral-error" id="referralError" style="display:none">Please let us know how you heard about Lexi.</p>
       </div>
-      <button id="startBtn" class="btn btn-primary btn-full ob-start-btn">Sort me out Lexi</button>
+
+      <button id="startBtn" class="btn btn-sage btn-full ob-start-btn">Sort me out Lexi</button>
     </div>
+
+    </div><!-- /.ob-card -->
   </div>
 
   <!-- FIXED HEADER -->
   <header class="app-header" id="appHeader">
     <div class="header-logo" id="headerLogoArea">
-      <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" class="header-logo-img" onerror="this.style.display='none'">
+      <img src="3 Lexi Handles It All.png" alt="Lexi Handles It All" class="header-logo-img" onerror="this.style.display='none'">
       <img src="2 So you dont have to transparent.png" alt="So you don't have to" class="header-strap-img" onerror="this.style.display='none'">
     </div>
     <div class="header-right">
@@ -156,7 +173,7 @@
             <div id="logoPlaceholder" class="logo-placeholder">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
               <span>Tap to upload logo</span>
-              <small>PNG, JPG or SVG — shown on documents</small>
+              <small>PNG, JPG or SVG (shown on documents)</small>
             </div>
             <div id="logoPreview" class="logo-preview" style="display:none">
               <img id="logoImg" src="" alt="Business logo preview">
@@ -328,7 +345,7 @@
         <div class="upload-zone" id="csvUploadZone" tabindex="0" role="button" aria-label="Upload CSV or text file">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <span>Drag &amp; drop or tap to upload CSV / TXT</span>
-          <small>Format: Job name, price — one per line</small>
+          <small>Format: Job name, price, one per line</small>
           <button type="button" class="btn btn-sm btn-outline" id="downloadTemplateBtn" style="margin-top:8px">Download Template</button>
         </div>
         <input type="file" id="csvFile" accept=".csv,.txt" style="display:none" aria-hidden="true">
@@ -399,19 +416,20 @@
     <!-- PAGE 3: NEW QUOTE -->
     <section id="page3" class="page" data-page="3">
       <div class="page-header">
-        <h1 class="page-title" id="page3Title">3. Create Your First Quote</h1>
+        <h1 class="page-title" id="page3Title">3. Create Your First Estimate or Quote</h1>
         <p class="page-sub">Fill in the details below and send it off.</p>
       </div>
 
       <!-- Step 1: Document Type & Customer -->
       <div class="card">
-        <h2 class="card-title">Step 1 — Customer Details</h2>
+        <h2 class="card-title">Step 1: Customer Details</h2>
         <div class="doc-type-toggle">
           <button type="button" class="doc-type-btn active" id="dtEstimate" data-type="Estimate">Estimate</button>
           <button type="button" class="doc-type-btn" id="dtQuote" data-type="Quote">Quote</button>
         </div>
-        <div class="form-grid-2" style="margin-top:12px">
+        <div class="form-grid-cust-name" style="margin-top:12px">
           <div class="form-group">
+            <label for="custTitle">&nbsp;</label>
             <select id="custTitle">
               <option value="">Title</option>
               <option value="Mr">Mr</option>
@@ -420,15 +438,13 @@
               <option value="Dr">Dr</option>
             </select>
           </div>
-          <div class="form-group" style="display:flex;gap:8px">
-            <div class="form-group" style="flex:1;margin-bottom:0">
-              <label for="custFirstName">First Name</label>
-              <input type="text" id="custFirstName" autocomplete="given-name">
-            </div>
-            <div class="form-group" style="flex:1;margin-bottom:0">
-              <label for="custLastName">Last Name</label>
-              <input type="text" id="custLastName" autocomplete="family-name">
-            </div>
+          <div class="form-group">
+            <label for="custFirstName">First Name</label>
+            <input type="text" id="custFirstName" autocomplete="given-name">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label for="custLastName">Last Name</label>
+            <input type="text" id="custLastName" autocomplete="family-name">
           </div>
         </div>
         <div class="form-group">
@@ -476,7 +492,7 @@
 
       <!-- Step 2: Add Jobs -->
       <div class="card">
-        <h2 class="card-title">Step 2 — Add Jobs</h2>
+        <h2 class="card-title">Step 2: Add Jobs</h2>
         <div class="form-group">
           <input type="text" id="jobPickerSearch" placeholder="Search your price list..." class="search-input">
         </div>
@@ -509,7 +525,7 @@
 
       <!-- Step 3: Totals & Notes -->
       <div class="card">
-        <h2 class="card-title">Step 3 — Totals &amp; Notes</h2>
+        <h2 class="card-title">Step 3: Totals &amp; Notes</h2>
         <div class="totals-block">
           <div class="totals-row"><span>Subtotal</span><span id="qSubtotal">£0.00</span></div>
           <div class="totals-row">
@@ -562,7 +578,7 @@
 
       <!-- Step 4: Signature -->
       <div class="card">
-        <h2 class="card-title">Step 4 — Signature <span class="hint">(optional)</span></h2>
+        <h2 class="card-title">Step 4: Signature <span class="hint">(optional)</span></h2>
         <div class="form-group">
           <label for="authSig">Authorised Signature (name)</label>
           <input type="text" id="authSig" placeholder="Your business name or your name">
@@ -582,10 +598,10 @@
 
       <!-- Quote Footer -->
       <div class="page-footer quote-footer">
-        <button type="button" class="btn btn-outline btn-lg" id="previewQuoteBtn">👁 Preview</button>
-        <button type="button" class="btn btn-primary btn-lg" id="saveQuoteBtn">✓ Save</button>
-        <button type="button" class="btn btn-outline btn-lg" id="printQuoteBtn">⎙ Print</button>
-        <button type="button" class="btn btn-primary btn-lg" id="sendQuoteBtn">⇧ Send</button>
+        <button type="button" class="btn btn-sage btn-lg" id="previewQuoteBtn">👁 Preview</button>
+        <button type="button" class="btn btn-sage btn-lg" id="saveQuoteBtn">✓ Save</button>
+        <button type="button" class="btn btn-sage btn-lg" id="printQuoteBtn">⎙ Print</button>
+        <button type="button" class="btn btn-sage btn-lg" id="sendQuoteBtn">⇧ Send</button>
       </div>
     </section>
 

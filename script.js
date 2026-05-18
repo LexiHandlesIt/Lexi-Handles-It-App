@@ -83,7 +83,7 @@ function save() {
     ls(KEY_CO,    state.company);
     ls(KEY_PL,    state.priceList);
     ls(KEY_SAVED, state.saved);
-  } catch(e) { toast('Storage full — some data may not have saved.', 'error'); }
+  } catch(e) { toast('Storage full. Some data may not have saved.', 'error'); }
 }
 
 function loadFromStorage() {
@@ -132,7 +132,7 @@ function showPage(pageId) {
     if (hasSaved) {
       titleEl.textContent = 'New Quote';
     } else {
-      titleEl.innerHTML = '<span class="page-num">3.</span> Create Your First Quote';
+      titleEl.innerHTML = '<span class="page-num">3.</span> Create Your First Estimate or Quote';
     }
   }
 }
@@ -514,7 +514,7 @@ function setupPage2() {
     setVal('bulkPaste', '');
     if (added) {
       let msg = `${added} job${added===1?'':'s'} added.`;
-      if (skipped) msg += ` ${skipped} skipped — already in your list.`;
+      if (skipped) msg += ` ${skipped} skipped (already in your list).`;
       toast(msg, 'success');
     } else if (skipped) {
       toast(`All jobs already in your list.`, 'error');
@@ -562,7 +562,7 @@ function readCSV(file) {
     const { added, skipped } = parseJobLines(e.target.result);
     if (added) {
       let msg = `${added} job${added===1?'':'s'} added from file.`;
-      if (skipped) msg += ` ${skipped} skipped — already in your list.`;
+      if (skipped) msg += ` ${skipped} skipped (already in your list).`;
       toast(msg, 'success');
     } else if (skipped) {
       toast('All jobs already in your list.', 'error');
@@ -643,7 +643,7 @@ function showDuplicatePrompt(name, onConfirm) {
   el.id = 'dupPrompt';
   el.className = 'dup-prompt';
   el.innerHTML = `
-    <span>"${esc(name)}" is already in your list — add as an alternative?</span>
+    <span>"${esc(name)}" is already in your list. Add as an alternative?</span>
     <div class="dup-prompt-btns">
       <button class="btn btn-sm btn-sage" id="dupYes">Yes, add it</button>
       <button class="btn btn-sm btn-outline" id="dupNo">Cancel</button>
@@ -1696,7 +1696,7 @@ function printDoc(html) {
 
 function printRaw(inner) {
   const win = window.open('', '_blank');
-  if (!win) { toast('Pop-up blocked — please allow pop-ups for printing.', 'error'); return; }
+  if (!win) { toast('Pop-up blocked. Please allow pop-ups for printing.', 'error'); return; }
   win.document.write(wrapDoc(inner));
   win.document.close();
   win.focus();
@@ -1726,7 +1726,7 @@ async function sendDocRaw(htmlStr, filename) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
-  toast('Document downloaded — open WhatsApp or email and attach this file.', '', 5000);
+  toast('Document downloaded. Open WhatsApp or email and attach this file.', '', 5000);
 }
 
 /* ===== BACKUP & RESTORE ===== */
