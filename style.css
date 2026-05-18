@@ -569,10 +569,13 @@ input[type="text"].sig-text-input:focus {
   overflow: hidden;
 }
 
-/* On true mobile (edge-to-edge), go full screen with no rounding */
 @media (max-width: 420px) {
-  .ob-screen { padding: 0; }
-  .ob-card { border-radius: 0; height: 100vh; max-width: 100%; }
+  .ob-screen { padding: 6px 4px; }
+  .ob-card {
+    border-radius: 24px;
+    height: min(844px, calc(100dvh - 12px));
+    max-width: 390px;
+  }
 }
 
 .ob-left {
