@@ -605,7 +605,7 @@ input[type="text"].sig-text-input:focus {
   position: absolute;
   top: -76px;
   right: -172px;
-  width: calc(100% + 200px);
+  width: calc(100% + 100px);
   max-width: none;
   height: auto;
   object-fit: contain;
@@ -614,7 +614,7 @@ input[type="text"].sig-text-input:focus {
 }
 
 .ob-wordmark {
-  height: 122px;
+  height: 162px;
   width: auto;
   object-fit: contain;
   margin-bottom: 14px;
