@@ -455,7 +455,7 @@ input[type="text"].sig-text-input:focus {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-bottom: 24px;
+  margin-bottom: 14px;
   background: var(--walnut-tint);
   border-radius: 10px;
   padding: 16px;
@@ -563,7 +563,7 @@ input[type="text"].sig-text-input:focus {
   border-radius: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
   padding: 28px 20px 28px;
   overflow: hidden;
@@ -605,7 +605,7 @@ input[type="text"].sig-text-input:focus {
   position: absolute;
   top: -76px;
   right: -172px;
-  width: calc(100% + 300px);
+  width: calc(100% + 250px);
   max-width: none;
   height: auto;
   object-fit: contain;
@@ -614,7 +614,7 @@ input[type="text"].sig-text-input:focus {
 }
 
 .ob-wordmark {
-  height: 52px;
+  height: 82px;
   width: auto;
   object-fit: contain;
   margin-bottom: 14px;
