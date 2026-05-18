@@ -610,6 +610,9 @@ input[type="text"].sig-text-input:focus {
   .ob-start-btn {
     min-height: 42px;
   }
+  .ob-portrait {
+    top: 8px;
+  }
 }
 
 .ob-left {
