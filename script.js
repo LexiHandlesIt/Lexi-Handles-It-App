@@ -924,7 +924,9 @@ function updateJobPicker() {
   }
 
   container.innerHTML = filtered.map(item => {
-    const inQuote = state.quote.items.some(qi => qi.id === item.id || qi.name === item.name);
+    const quoteItem = state.quote.items.find(qi => qi.id === item.id || qi.name === item.name);
+    const inQuote = !!quoteItem;
+    const qty = quoteItem ? quoteItem.qty : 0;
     return `
       <div class="pick-item${inQuote ? ' added' : ''}"
            data-job-id="${esc(item.id)}"
@@ -934,7 +936,7 @@ function updateJobPicker() {
           ${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}
         </div>
         <span class="pick-price">${fmtPrice(item.price)}</span>
-        <span class="pick-add-btn">${inQuote ? '✓' : '+'}</span>
+        <span class="pick-add-btn">${inQuote ? qty : '+'}</span>
       </div>
     `;
   }).join('');
@@ -980,14 +982,16 @@ function addCustomItem() {
 function renderQuoteItems() {
   const container = document.getElementById('quoteItemsContainer');
   const empty     = document.getElementById('quoteItemsEmpty');
-  container.innerHTML = '';
+
+  Array.from(container.children).forEach(child => {
+    if (child !== empty) child.remove();
+  });
 
   if (!state.quote.items.length) {
-    empty.style.display = 'block';
-    container.appendChild(empty);
+    if (empty) empty.style.display = 'block';
     return;
   }
-  empty.style.display = 'none';
+  if (empty) empty.style.display = 'none';
 
   state.quote.items.forEach((item, idx) => {
     const row = document.createElement('div');
