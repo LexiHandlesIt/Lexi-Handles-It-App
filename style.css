@@ -570,10 +570,13 @@ input[type="text"].sig-text-input:focus {
 }
 
 @media (max-width: 420px) {
-  .ob-screen { padding: 6px 4px; }
+  .ob-screen {
+    align-items: flex-start;
+    padding: 18px 4px 6px;
+  }
   .ob-card {
     border-radius: 24px;
-    height: min(844px, calc(100dvh - 12px));
+    height: min(844px, calc(100dvh - 24px));
     max-width: 390px;
   }
 }
