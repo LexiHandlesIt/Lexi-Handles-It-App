@@ -156,6 +156,17 @@ h3 { font-size: 1rem; font-weight: 600; }
   margin-bottom: 4px;
 }
 
+/* Numbered step titles — full-width green pill */
+.page-title:has(.page-num) {
+  display: flex;
+  align-items: center;
+  background: var(--sage);
+  color: white;
+  border-radius: 10px;
+  padding: 8px 18px 8px 10px;
+  margin-bottom: 12px;
+}
+
 .page-sub {
   color: #666;
   font-size: 0.95rem;
@@ -172,7 +183,7 @@ h3 { font-size: 1rem; font-weight: 600; }
 }
 
 .card-title {
-  color: var(--sage);
+  color: var(--walnut);
   font-weight: 700;
   margin-bottom: 16px;
   display: flex;
@@ -351,7 +362,7 @@ input[type="text"].sig-text-input:focus {
 
 .btn-full { width: 100%; }
 
-.btn-next { background: var(--walnut); color: var(--white); }
+.btn-next { background: var(--sage); color: var(--white); }
 
 /* ===== PAGE FOOTER ===== */
 .page-footer {
@@ -621,6 +632,48 @@ input[type="text"].sig-text-input:focus {
   z-index: 1;
 }
 
+/* ── Price list onboarding — single column ─────────────────── */
+.pl-card {
+  flex-direction: column !important;
+  height: auto !important;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+}
+
+.pl-content {
+  padding: 24px 24px 16px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.pl-tagline {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--walnut);
+  text-align: center;
+  margin: 8px 0 12px;
+  opacity: 0.8;
+}
+
+.pl-portrait-wrap {
+  flex: 1 1 auto;
+  overflow: hidden;
+  min-height: 160px;
+  max-height: 240px;
+  position: relative;
+}
+
+.pl-portrait {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+  object-position: top center;
+  transform: scale(1.05);
+  transform-origin: top center;
+}
+
 .ob-header,
 .ob-footer {
   position: relative;
@@ -746,11 +799,23 @@ input[type="text"].sig-text-input:focus {
 }
 
 /* ===== COLOUR PICKERS ===== */
+.colour-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
 .colour-pickers {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-bottom: 20px;
+  flex: 1 1 33%;
+}
+
+.colour-preview-col {
+  flex: 2 1 67%;
 }
 
 .colour-picker-group label {
@@ -811,7 +876,6 @@ input[type="text"].sig-text-input:focus {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
-  margin-bottom: 12px;
   font-size: 0.875rem;
 }
 
@@ -837,7 +901,15 @@ input[type="text"].sig-text-input:focus {
   border-bottom: 1px solid var(--border);
 }
 
-.cp-label { font-weight: 600; }
+.cp-label { font-weight: 700; }
+
+.cp-example-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+  vertical-align: middle;
+}
 
 .cp-col-header {
   padding: 4px 0 6px;
@@ -863,6 +935,7 @@ input[type="text"].sig-text-input:focus {
 .colour-reset-row {
   position: relative;
   display: inline-block;
+  margin-top: 8px;
 }
 
 .dropdown {
@@ -1687,18 +1760,14 @@ input[type="text"].sig-text-input:focus {
 
 /* ===== PAGE NUMBER BADGE ===== */
 .page-num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--sage);
-  color: var(--white);
-  border-radius: 6px;
-  padding: 0 7px;
-  font-size: 0.85em;
+  display: inline;
+  background: transparent;
+  color: white;
+  border-radius: 0;
+  padding: 0;
+  font-size: 1em;
   font-weight: 700;
   margin-right: 6px;
-  vertical-align: middle;
-  line-height: 1.6;
 }
 
 /* ===== HEADER AVATAR ===== */
@@ -1759,18 +1828,18 @@ input[type="text"].sig-text-input:focus {
 
 /* ===== HAMBURGER BUTTON ===== */
 .hamburger-btn {
-  width: 44px;
-  height: 44px;
+  width: 14px;
+  height: 14px;
   background: none;
   border: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 3px;
   cursor: pointer;
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: 5px;
+  padding: 4px;
   transition: background var(--transition);
 }
 .hamburger-btn:hover { background: rgba(125,87,48,.1); }

@@ -54,11 +54,11 @@
       <div class="ob-footer">
         <div class="ob-referral">
           <select id="referralSource" class="ob-referral-select">
-            <option value="">How'd you find me?</option>
-            <option value="google">I was googling</option>
-            <option value="social">Scrolling social media</option>
-            <option value="friend">A friend told me</option>
-            <option value="leaflet">I saw your leaflet</option>
+            <option value="" disabled selected>How'd you find me?</option>
+            <option value="google">I was Googling.</option>
+            <option value="social">Scrolling my Social Media.</option>
+            <option value="friend">A friend told me.</option>
+            <option value="flyer">I saw your flyer.</option>
             <option value="other">Other</option>
           </select>
         </div>
@@ -76,10 +76,54 @@
     </div><!-- /.ob-card -->
   </div>
 
+  <!-- PRICE LIST ONBOARDING -->
+  <div id="plOnboardingModal" class="ob-screen" style="display:none" role="dialog" aria-modal="true" aria-labelledby="plOnboardingTitle">
+    <div class="ob-card pl-card">
+
+      <div class="pl-content">
+        <img src="3 Lexi Handles It All.png" alt="Lexi Handles It All" class="ob-wordmark" onerror="this.style.display='none'">
+        <p class="ob-intro" id="plOnboardingTitle">Right, let's build your price list. There are three ways to get your jobs in...</p>
+
+        <div class="ob-steps">
+          <div class="ob-step">
+            <span class="ob-num">1</span>
+            <div class="ob-step-text">
+              <strong>Upload a file</strong>
+              <span>Drop in a CSV or TXT and I'll pull your jobs straight in.</span>
+            </div>
+          </div>
+          <div class="ob-step">
+            <span class="ob-num">2</span>
+            <div class="ob-step-text">
+              <strong>Paste a list</strong>
+              <span>Got a list already? Paste it in. One job per line, name then price.</span>
+            </div>
+          </div>
+          <div class="ob-step">
+            <span class="ob-num">3</span>
+            <div class="ob-step-text">
+              <strong>Add jobs one by one</strong>
+              <span>Type in a job name and price. Quick and easy.</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="pl-tagline">Your price list, your way.</p>
+
+        <button id="plOnboardingBtn" class="btn btn-sage btn-full ob-start-btn">Let's Build it Lexi</button>
+      </div>
+
+      <div class="pl-portrait-wrap">
+        <img src="Lexi Portrait Transparent 4.png" alt="Lexi" class="pl-portrait" onerror="this.style.display='none'">
+      </div>
+
+    </div><!-- /.ob-card -->
+  </div>
+
   <!-- FIXED HEADER -->
   <header class="app-header" id="appHeader">
     <div class="header-logo" id="headerLogoArea">
-      <img src="3 Lexi Handles It All.png" alt="Lexi Handles It All" class="header-logo-img" onerror="this.style.display='none'">
+      <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" class="header-logo-img" onerror="this.style.display='none'">
       <img src="2 So you dont have to transparent.png" alt="So you don't have to" class="header-strap-img" onerror="this.style.display='none'">
     </div>
     <div class="header-right">
@@ -121,7 +165,7 @@
     <section id="page1" class="page active" data-page="1">
 <div class="page-header">
         <h1 class="page-title"><span class="page-num">1.</span> Set Up Your Business</h1>
-        <p class="page-sub">This takes 2 minutes and only needs doing once.</p>
+        <p class="page-sub" style="text-align:center;">This takes a few minutes and only needs doing once.</p>
       </div>
 
       <!-- About You -->
@@ -252,62 +296,46 @@
         <div id="brandTooltip" class="tooltip-box" style="display:none">
           <p>Every quote and invoice you send is a chance to get your name known. Add your brand colours once and every document goes out looking professional, helping customers recognise and remember you above the competition.</p>
         </div>
-        <div class="colour-pickers">
-          <div class="colour-picker-group">
-            <label>Header</label>
-            <div class="colour-input-row">
+        <div class="colour-layout">
+          <!-- Left: colour pickers -->
+          <div class="colour-pickers">
+            <div class="colour-picker-group">
+              <label>Header</label>
               <input type="color" id="colourHeader" value="#7D5730" class="colour-swatch">
-              <div class="rgb-inputs">
-                <label class="rgb-label">R <input type="number" id="colourHeaderR" min="0" max="255" class="rgb-input"></label>
-                <label class="rgb-label">G <input type="number" id="colourHeaderG" min="0" max="255" class="rgb-input"></label>
-                <label class="rgb-label">B <input type="number" id="colourHeaderB" min="0" max="255" class="rgb-input"></label>
-              </div>
             </div>
-          </div>
-          <div class="colour-picker-group">
-            <label>Accent</label>
-            <div class="colour-input-row">
+            <div class="colour-picker-group">
+              <label>Accent</label>
               <input type="color" id="colourAccent" value="#6B7C5C" class="colour-swatch">
-              <div class="rgb-inputs">
-                <label class="rgb-label">R <input type="number" id="colourAccentR" min="0" max="255" class="rgb-input"></label>
-                <label class="rgb-label">G <input type="number" id="colourAccentG" min="0" max="255" class="rgb-input"></label>
-                <label class="rgb-label">B <input type="number" id="colourAccentB" min="0" max="255" class="rgb-input"></label>
-              </div>
             </div>
-          </div>
-          <div class="colour-picker-group">
-            <label>Background</label>
-            <div class="colour-input-row">
+            <div class="colour-picker-group">
+              <label>Background</label>
               <input type="color" id="colourBg" value="#F5F0E8" class="colour-swatch">
-              <div class="rgb-inputs">
-                <label class="rgb-label">R <input type="number" id="colourBgR" min="0" max="255" class="rgb-input"></label>
-                <label class="rgb-label">G <input type="number" id="colourBgG" min="0" max="255" class="rgb-input"></label>
-                <label class="rgb-label">B <input type="number" id="colourBgB" min="0" max="255" class="rgb-input"></label>
-              </div>
             </div>
           </div>
-        </div>
-        <!-- Live preview -->
-        <p class="cp-example-label">Example</p>
-        <div class="colour-preview" id="colourPreview">
-          <div class="cp-header" id="cpHeader">
-            <span id="cpBusinessName">Ace Trades</span>
-            <span id="cpDocType">QUOTE</span>
-          </div>
-          <div class="cp-body" id="cpBody">
-            <div class="cp-col-header"><span class="cp-label" id="cpAccentSample">Job Description</span></div>
-            <div class="cp-row"><span>Parts</span><span>£150.00</span></div>
-            <div class="cp-row"><span>Labour</span><span>£75.00</span></div>
-            <div class="cp-total">Total: <strong>£225.00</strong></div>
-          </div>
-        </div>
-        <div class="colour-reset-row">
-          <button type="button" class="btn btn-sm btn-outline" id="resetColourMenu">Reset ▾</button>
-          <div id="resetColourDropdown" class="dropdown" style="display:none">
-            <button type="button" class="dropdown-item" data-reset="all">Reset All</button>
-            <button type="button" class="dropdown-item" data-reset="header">Reset Header</button>
-            <button type="button" class="dropdown-item" data-reset="accent">Reset Accent</button>
-            <button type="button" class="dropdown-item" data-reset="bg">Reset Background</button>
+          <!-- Right: live preview -->
+          <div class="colour-preview-col">
+            <p class="cp-example-label">Example</p>
+            <div class="colour-preview" id="colourPreview">
+              <div class="cp-header" id="cpHeader">
+                <span id="cpBusinessName"><strong>Ace Trades</strong> <span class="cp-example-tag">EXAMPLE</span></span>
+                <span id="cpDocType">QUOTE</span>
+              </div>
+              <div class="cp-body" id="cpBody">
+                <div class="cp-col-header"><span class="cp-label" id="cpAccentSample">Job Description</span></div>
+                <div class="cp-row"><span>Parts</span><span>£150.00</span></div>
+                <div class="cp-row"><span>Labour</span><span>£75.00</span></div>
+                <div class="cp-total">Total: <strong>£225.00</strong></div>
+              </div>
+            </div>
+            <div class="colour-reset-row">
+              <button type="button" class="btn btn-sm btn-outline" id="resetColourMenu">Reset colours ▾</button>
+              <div id="resetColourDropdown" class="dropdown" style="display:none">
+                <button type="button" class="dropdown-item" data-reset="all">Reset All</button>
+                <button type="button" class="dropdown-item" data-reset="header">Reset Header</button>
+                <button type="button" class="dropdown-item" data-reset="accent">Reset Accent</button>
+                <button type="button" class="dropdown-item" data-reset="bg">Reset Background</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -416,7 +444,7 @@
     <!-- PAGE 3: NEW QUOTE -->
     <section id="page3" class="page" data-page="3">
       <div class="page-header">
-        <h1 class="page-title" id="page3Title">3. Create Your First Estimate or Quote</h1>
+        <h1 class="page-title" id="page3Title"><span class="page-num">3.</span> Create Estimate or Quote</h1>
         <p class="page-sub">Fill in the details below and send it off.</p>
       </div>
 

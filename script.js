@@ -9,7 +9,8 @@ const KEY_PL   = 'tq_pl';
 const KEY_SAVED = 'tq_saved';
 const KEY_REF   = 'tq_refseq';
 const KEY_INV   = 'tq_invseq';
-const KEY_ONBOARDED = 'tq_onboarded';
+const KEY_ONBOARDED    = 'tq_onboarded';
+const KEY_PL_ONBOARDED = 'tq_pl_onboarded';
 
 /* ===== DEFAULT COLOURS ===== */
 const DEFAULT_COLOURS = { primary: '#7D5730', accent: '#6B7C5C', bg: '#F5F0E8' };
@@ -132,7 +133,7 @@ function showPage(pageId) {
     if (hasSaved) {
       titleEl.textContent = 'New Quote';
     } else {
-      titleEl.innerHTML = '<span class="page-num">3.</span> Create Your First Estimate or Quote';
+      titleEl.innerHTML = '<span class="page-num">3.</span> Create Estimate or Quote';
     }
   }
 }
@@ -176,6 +177,16 @@ function setupNavigation() {
   // Page footer nav buttons
   document.getElementById('goToPriceListBtn').addEventListener('click', () => {
     saveBusinessDetails(false);
+    if (!localStorage.getItem(KEY_PL_ONBOARDED)) {
+      document.getElementById('plOnboardingModal').style.display = 'flex';
+    } else {
+      showPage('page2');
+    }
+  });
+
+  document.getElementById('plOnboardingBtn').addEventListener('click', () => {
+    localStorage.setItem(KEY_PL_ONBOARDED, '1');
+    document.getElementById('plOnboardingModal').style.display = 'none';
     showPage('page2');
   });
   document.getElementById('goToQuoteBtn').addEventListener('click', () => {
