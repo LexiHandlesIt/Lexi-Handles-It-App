@@ -681,6 +681,8 @@ function refreshPriceList() {
   const badge     = document.getElementById('priceListBadge');
 
   badge.textContent = state.priceList.length;
+  const bulkCount = document.getElementById('bulkJobCount');
+  if (bulkCount) bulkCount.textContent = state.priceList.length;
 
   // Remove job rows but keep #priceListEmpty so it is never destroyed by innerHTML
   Array.from(container.children).forEach(child => {
@@ -788,6 +790,19 @@ function setupPage3() {
   // Job picker search
   document.getElementById('jobPickerSearch').addEventListener('input', () => updateJobPicker());
 
+  // Picker click — event delegation so it works after every innerHTML redraw
+  const pickerContainer = document.getElementById('jobPickerList');
+  pickerContainer.addEventListener('click', e => {
+    const item = e.target.closest('.pick-item');
+    if (item) addJobToQuote(item.dataset.jobId);
+  });
+  pickerContainer.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      const item = e.target.closest('.pick-item');
+      if (item) { e.preventDefault(); addJobToQuote(item.dataset.jobId); }
+    }
+  });
+
   // Custom item
   document.getElementById('addCustomItemBtn').addEventListener('click', addCustomItem);
 
@@ -807,9 +822,22 @@ function setupPage3() {
     if (getVal('custSigText')) clearCanvas();
   });
 
+  // Auto-populate sig text from authSig name field
+  document.getElementById('authSig').addEventListener('input', () => {
+    const sigText = document.getElementById('custSigText');
+    // Only pre-fill if the canvas is blank and the sig text hasn't been manually changed
+    if (!sigText.dataset.userEdited) {
+      sigText.value = document.getElementById('authSig').value;
+    }
+  });
+  document.getElementById('custSigText').addEventListener('input', () => {
+    document.getElementById('custSigText').dataset.userEdited = '1';
+  });
+
   document.getElementById('clearSigBtn').addEventListener('click', () => {
     clearCanvas();
     setVal('custSigText', '');
+    delete document.getElementById('custSigText').dataset.userEdited;
   });
 
   // Quote footer buttons
@@ -952,14 +980,8 @@ function updateJobPicker() {
     `;
   }).join('');
 
-  container.querySelectorAll('.pick-item').forEach(el => {
-    const handler = () => addJobToQuote(el.dataset.jobId);
-    el.addEventListener('click', handler);
-    el.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); }
-    });
-  });
 }
+
 
 function addJobToQuote(jobId) {
   const job = state.priceList.find(j => j.id === jobId);
@@ -1205,26 +1227,22 @@ function getCanvasDataURL() {
 
 /* ===== PAGE 4 — SAVED DOCS ===== */
 function setupPage4() {
-  document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      refreshSavedDocs();
-    });
-  });
+  const sel = document.getElementById('savedFilterSelect');
+  if (sel) sel.addEventListener('change', () => refreshSavedDocs());
 }
 
 function refreshSavedDocs() {
-  const filterBtn = document.querySelector('.filter-btn.active');
-  const filter    = filterBtn ? filterBtn.dataset.filter : 'all';
+  const sel    = document.getElementById('savedFilterSelect');
+  const filter = sel ? sel.value : 'all';
   const container = document.getElementById('savedDocsList');
   const empty     = document.getElementById('savedDocsEmpty');
 
   let docs = [...state.saved];
-  if (filter === 'Estimate') docs = docs.filter(d => d.type === 'Estimate');
-  else if (filter === 'Quote') docs = docs.filter(d => d.type === 'Quote');
-  else if (filter === 'invoiced') docs = docs.filter(d => d.invoiceSent);
+  if      (filter === 'Estimate') docs = docs.filter(d => d.type === 'Estimate');
+  else if (filter === 'Quote')    docs = docs.filter(d => d.type === 'Quote');
   else if (filter === 'paid')     docs = docs.filter(d => d.paid);
+  else if (filter === 'unpaid')   docs = docs.filter(d => !d.paid);
+  else if (filter === 'accepted') docs = docs.filter(d => d.accepted);
 
   container.innerHTML = '';
 

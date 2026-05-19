@@ -367,42 +367,59 @@
 
       <!-- Add Jobs -->
       <div class="card sage-focus">
-        <h2 class="card-title">Add Jobs</h2>
-
-        <!-- CSV Upload -->
-        <div class="upload-zone" id="csvUploadZone" tabindex="0" role="button" aria-label="Upload CSV or text file">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <span>Drag &amp; drop or tap to upload CSV / TXT</span>
-          <small>Format: Job name, price, one per line</small>
-          <button type="button" class="btn btn-sm btn-outline" id="downloadTemplateBtn" style="margin-top:8px">Download Template</button>
+        <div class="bulk-header-row">
+          <h2 class="card-title" style="margin-bottom:0">Build in Bulk</h2>
+          <span class="bulk-counter"><span id="bulkJobCount">0</span> Nos Added</span>
         </div>
-        <input type="file" id="csvFile" accept=".csv,.txt" style="display:none" aria-hidden="true">
 
-        <!-- Bulk Paste -->
-        <div class="form-group" style="margin-top:16px">
-          <label for="bulkPaste">Or paste jobs here (one per line: <em>Job name, price</em>)</label>
-          <textarea id="bulkPaste" rows="4" placeholder="Fit door handle, 45&#10;Hang door, 85&#10;Repair fence panel, 60"></textarea>
-          <button type="button" class="btn btn-sage btn-sm" id="parseBulkBtn" style="margin-top:8px">Add</button>
+        <div class="add-jobs-columns">
+          <!-- CSV Upload -->
+          <div class="add-jobs-col">
+            <div class="upload-zone" id="csvUploadZone" tabindex="0" role="button" aria-label="Upload CSV or text file">
+              <span>Drag &amp; drop or tap to upload</span>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <small>Format: Job name, price, one per line</small>
+            </div>
+            <input type="file" id="csvFile" accept=".csv,.txt" style="display:none" aria-hidden="true">
+          </div>
+
+          <!-- Bulk Paste -->
+          <div class="add-jobs-col">
+            <div class="paste-zone">
+              <span class="paste-zone-label">Paste jobs here</span>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+              <small>(one per line: Job name, price)</small>
+              <textarea id="bulkPaste" placeholder="" class="paste-zone-textarea"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Buttons row -->
+        <div class="add-jobs-btns">
+          <button type="button" class="btn btn-sm btn-outline" id="downloadTemplateBtn">Download Template</button>
+          <button type="button" class="btn btn-sage btn-sm" id="parseBulkBtn">Add</button>
         </div>
 
         <!-- Individual Add -->
         <div class="individual-add">
-          <h3 class="section-sub">Add Individually</h3>
-          <div class="form-grid-3">
-            <div class="form-group fg-grow">
+          <h3 class="card-title">Build One by One</h3>
+          <div class="obo-grid">
+            <div class="form-group obo-name">
               <label for="jobName">Job Name</label>
-              <input type="text" id="jobName" placeholder="e.g. Fit door handle">
+              <input type="text" id="jobName" placeholder="">
             </div>
-            <div class="form-group">
+            <div class="form-group obo-price">
               <label for="jobPrice">Price (£)</label>
-              <input type="number" id="jobPrice" placeholder="45" min="0" step="0.01">
+              <input type="number" id="jobPrice" placeholder="" min="0" step="0.01">
             </div>
-            <div class="form-group">
-              <label for="jobUnit">Unit <span class="hint">(optional)</span></label>
+            <div class="form-group obo-unit">
+              <label for="jobUnit">Per Unit <span class="hint">(optional)</span></label>
               <input type="text" id="jobUnit" placeholder="per room">
             </div>
+            <div class="obo-add">
+              <button type="button" class="btn btn-sage btn-sm" id="addJobBtn">Add</button>
+            </div>
           </div>
-          <button type="button" class="btn btn-sage" id="addJobBtn">Add</button>
         </div>
       </div>
 
@@ -457,7 +474,7 @@
         </div>
         <div class="form-grid-cust-name" style="margin-top:12px">
           <div class="form-group">
-            <label for="custTitle">&nbsp;</label>
+            <label for="custTitle">Title</label>
             <select id="custTitle">
               <option value="">Title</option>
               <option value="Mr">Mr</option>
@@ -521,20 +538,23 @@
       <!-- Step 2: Add Jobs -->
       <div class="card">
         <h2 class="card-title">Step 2: Add Jobs</h2>
-        <div class="form-group">
-          <input type="text" id="jobPickerSearch" placeholder="Search your price list..." class="search-input">
-        </div>
-        <div id="jobPickerList" class="picker-list"></div>
-        <div id="quoteItemsContainer" class="quote-items-container">
-          <div class="empty-state" id="quoteItemsEmpty" style="display:none">
-            <p>No jobs added yet.</p>
+        <div class="step2-columns">
+          <!-- Left: search + picker -->
+          <div class="step2-left">
+            <div class="form-group">
+              <input type="text" id="jobPickerSearch" placeholder="Search your price list..." class="search-input">
+            </div>
+            <div id="jobPickerList" class="picker-list"></div>
+            <div id="quoteItemsContainer" class="quote-items-container">
+              <div class="empty-state" id="quoteItemsEmpty" style="display:none">
+                <p>No jobs added yet.</p>
+              </div>
+            </div>
           </div>
-        </div>
-        <!-- Custom item -->
-        <div class="custom-item-add">
-          <h3 class="section-sub">Add a one-off item</h3>
-          <div class="form-grid-3">
-            <div class="form-group fg-grow">
+          <!-- Right: one-off item -->
+          <div class="step2-right">
+            <h3 class="section-sub">Add a one-off item</h3>
+            <div class="form-group">
               <label for="customItemName">Description</label>
               <input type="text" id="customItemName" placeholder="e.g. Materials">
             </div>
@@ -546,60 +566,70 @@
               <label for="customItemUnit">Unit</label>
               <input type="text" id="customItemUnit" placeholder="each">
             </div>
+            <button type="button" class="btn btn-sage btn-sm" id="addCustomItemBtn">Add</button>
           </div>
-          <button type="button" class="btn btn-sage" id="addCustomItemBtn">Add</button>
         </div>
       </div>
 
       <!-- Step 3: Totals & Notes -->
       <div class="card">
         <h2 class="card-title">Step 3: Totals &amp; Notes</h2>
-        <div class="totals-block">
-          <div class="totals-row"><span>Subtotal</span><span id="qSubtotal">£0.00</span></div>
-          <div class="totals-row">
-            <span>VAT</span>
-            <div class="vat-row">
-              <select id="vatSelect" class="vat-select">
-                <option value="0">0%</option>
-                <option value="5">5%</option>
-                <option value="20">20%</option>
-                <option value="custom">Custom</option>
-              </select>
-              <input type="number" id="vatCustom" min="0" max="100" step="0.1" placeholder="%" class="vat-custom" style="display:none">
+        <div class="step3-columns">
+          <!-- Column 1: Totals -->
+          <div class="step3-left">
+            <div class="totals-block">
+              <div class="totals-row"><span>Subtotal</span><span id="qSubtotal">£0.00</span></div>
+              <div class="totals-row">
+                <span>VAT</span>
+                <div class="vat-row">
+                  <select id="vatSelect" class="vat-select">
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="20">20%</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                  <input type="number" id="vatCustom" min="0" max="100" step="0.1" placeholder="%" class="vat-custom" style="display:none">
+                </div>
+                <span id="qVatAmount">£0.00</span>
+              </div>
+              <div class="totals-row">
+                <span>Discount</span>
+                <div class="discount-row">
+                  <input type="number" id="discountPct" min="0" max="100" step="0.5" placeholder="0" class="discount-input"> %
+                </div>
+                <span id="qDiscount">-£0.00</span>
+              </div>
+              <div class="totals-row totals-total"><span>Total</span><span id="qTotal">£0.00</span></div>
             </div>
-            <span id="qVatAmount">£0.00</span>
           </div>
-          <div class="totals-row">
-            <span>Discount</span>
-            <div class="discount-row">
-              <input type="number" id="discountPct" min="0" max="100" step="0.5" placeholder="0" class="discount-input"> %
+          <!-- Column 2: Notes stacked -->
+          <div class="step3-right">
+            <div class="form-group">
+              <label for="quoteNotes">Notes to Customer</label>
+              <textarea id="quoteNotes" rows="3" placeholder="Thank you for your enquiry. Please note..."></textarea>
             </div>
-            <span id="qDiscount">-£0.00</span>
+            <div class="form-group" style="margin-bottom:0">
+              <label for="quotePrivateNotes">Private Notes <span class="hint">(not shown)</span></label>
+              <textarea id="quotePrivateNotes" rows="3" placeholder="Internal notes..."></textarea>
+            </div>
           </div>
-          <div class="totals-row totals-total"><span>Total</span><span id="qTotal">£0.00</span></div>
         </div>
 
-        <div class="form-group" style="margin-top:16px">
-          <label for="quoteNotes">Notes to Customer</label>
-          <textarea id="quoteNotes" rows="4" placeholder="Thank you for your enquiry. Please note..."></textarea>
-        </div>
-        <div class="form-group">
-          <label for="quotePrivateNotes">Private Notes <span class="hint">(not shown on document)</span></label>
-          <textarea id="quotePrivateNotes" rows="3" placeholder="Internal notes..."></textarea>
-        </div>
-
-        <div class="form-group">
-          <label>Terms &amp; Conditions</label>
-          <div class="terms-options">
-            <label class="checkbox-label"><input type="checkbox" name="terms" value="payment30"> Payment due within 30 days of invoice date.</label>
-            <label class="checkbox-label"><input type="checkbox" name="terms" value="depositRequired"> A 50% deposit is required before work commences.</label>
-            <label class="checkbox-label"><input type="checkbox" name="terms" value="quotationValid"> This quotation is valid for 30 days from the date shown.</label>
-            <label class="checkbox-label"><input type="checkbox" name="terms" value="materialsExtra"> Materials are not included unless stated above.</label>
-            <label class="checkbox-label"><input type="checkbox" name="terms" value="cancellation"> Cancellation within 48 hours of scheduled start date may incur a charge.</label>
+        <!-- Terms & Conditions two-column -->
+        <div class="terms-columns" style="margin-top:16px">
+          <div class="terms-col-left">
+            <label>Terms &amp; Conditions</label>
+            <div class="terms-options">
+              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="payment30"> Payment due within 30 days of invoice date.</label>
+              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="depositRequired"> A 50% deposit is required before work commences.</label>
+              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="quotationValid"> This quotation is valid for 30 days from the date shown.</label>
+              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="materialsExtra"> Materials are not included unless stated above.</label>
+              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="cancellation"> Cancellation within 48 hours of scheduled start date may incur a charge.</label>
+            </div>
           </div>
-          <div class="form-group" style="margin-top:8px">
+          <div class="terms-col-right">
             <label for="customTerms">Additional terms</label>
-            <textarea id="customTerms" rows="2" placeholder="Any additional terms..."></textarea>
+            <textarea id="customTerms" rows="6" placeholder="Any additional terms..."></textarea>
           </div>
         </div>
       </div>
@@ -612,7 +642,7 @@
           <input type="text" id="authSig" placeholder="Your business name or your name">
         </div>
         <div class="form-group">
-          <label>Customer Signature</label>
+          <label>Authorised Signature <span class="hint">(draw or amend below)</span></label>
           <div class="sig-container">
             <canvas id="sigCanvas" class="sig-canvas" width="400" height="150"></canvas>
             <div class="sig-actions">
@@ -621,6 +651,7 @@
               <input type="text" id="custSigText" placeholder="Type to sign" class="sig-text-input">
             </div>
           </div>
+          <p class="sig-hint-text">Pre-filled from your name above — draw over or retype to amend.</p>
         </div>
       </div>
 
@@ -647,11 +678,15 @@
         </div>
       </div>
       <div class="saved-filter-bar">
-        <button class="filter-btn active" data-filter="all">All</button>
-        <button class="filter-btn" data-filter="Estimate">Estimates</button>
-        <button class="filter-btn" data-filter="Quote">Quotes</button>
-        <button class="filter-btn" data-filter="invoiced">Invoiced</button>
-        <button class="filter-btn" data-filter="paid">Paid</button>
+        <label for="savedFilterSelect" class="saved-filter-label">Show:</label>
+        <select id="savedFilterSelect" class="saved-filter-select">
+          <option value="all">All</option>
+          <option value="Estimate">Estimates</option>
+          <option value="Quote">Quotes</option>
+          <option value="paid">Paid</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="accepted">Accepted</option>
+        </select>
       </div>
       <div id="savedDocsList" class="saved-docs-list">
         <div class="empty-state" id="savedDocsEmpty">
