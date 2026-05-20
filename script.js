@@ -117,6 +117,24 @@ function toast(msg, type = '', duration = 3000) {
   }, duration);
 }
 
+function showSavedPopup(onDone) {
+  const overlay = document.createElement('div');
+  overlay.className = 'saved-popup-overlay';
+  overlay.innerHTML = `
+    <div class="saved-popup-box">
+      <div class="saved-popup-tick">✓</div>
+      <div class="saved-popup-msg">Saved!</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => {
+      overlay.remove();
+      if (onDone) onDone();
+    }, 350);
+  }, 1200);
+}
+
 /* ===== PAGE NAVIGATION ===== */
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -126,12 +144,27 @@ function showPage(pageId) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  // Update page1 title if business already set up
+  if (pageId === 'page1') {
+    const hasSetUp = (state.company.lastName || '').trim() !== '';
+    const p1Title = document.getElementById('page1Title');
+    const p1Sub   = document.getElementById('page1Sub');
+    if (p1Title) {
+      if (hasSetUp) {
+        p1Title.innerHTML = 'Edit Your Business';
+      } else {
+        p1Title.innerHTML = '<span class="page-num">1.</span> Set Up Your Business';
+      }
+    }
+    if (p1Sub) p1Sub.style.display = hasSetUp ? 'none' : '';
+  }
+
   // Update page3 title after first save
   if (pageId === 'page3') {
     const hasSaved = state.saved.length > 0 || state.editingDocId;
     const titleEl = document.getElementById('page3Title');
     if (hasSaved) {
-      titleEl.textContent = 'New Quote';
+      titleEl.textContent = 'New Estimate or Quote';
     } else {
       titleEl.innerHTML = '<span class="page-num">3.</span> Create Estimate or Quote';
     }
@@ -173,6 +206,28 @@ function setupNavigation() {
       showPage(target);
     });
   });
+
+  // Backup & Restore menu item
+  const backupBtn = document.getElementById('menuBackupRestore');
+  if (backupBtn) {
+    backupBtn.addEventListener('click', () => {
+      closeMenu();
+      document.getElementById('backupRestoreModal').style.display = 'flex';
+    });
+  }
+
+  // Sign Out
+  const signOutBtn = document.getElementById('menuSignOut');
+  if (signOutBtn) {
+    signOutBtn.addEventListener('click', () => {
+      closeMenu();
+      if (confirm('Sign out? Your saved jobs will remain on this device.')) {
+        localStorage.removeItem('tq_onboarded');
+        localStorage.removeItem('tq_pl_onboarded');
+        location.reload();
+      }
+    });
+  }
 
   // Page footer nav buttons
   document.getElementById('goToPriceListBtn').addEventListener('click', () => {
@@ -298,10 +353,21 @@ function setupPage1() {
   // Save button
   document.getElementById('saveBusinessBtn').addEventListener('click', () => saveBusinessDetails(true));
 
-  // Backup/restore
+  // Backup/restore (page 1 card)
   document.getElementById('exportDataBtn').addEventListener('click', exportData);
   document.getElementById('importDataBtn').addEventListener('click', () => document.getElementById('importDataFile').click());
   document.getElementById('importDataFile').addEventListener('change', importData);
+
+  // Backup/restore modal (from menu)
+  document.getElementById('exportDataBtn2').addEventListener('click', exportData);
+  document.getElementById('importDataBtn2').addEventListener('click', () => document.getElementById('importDataFile2').click());
+  document.getElementById('importDataFile2').addEventListener('change', importData);
+  document.getElementById('closeBackupModal').addEventListener('click', () => {
+    document.getElementById('backupRestoreModal').style.display = 'none';
+  });
+  document.getElementById('backupRestoreModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
 }
 
 function handleLogoUpload(e) {
@@ -1153,10 +1219,11 @@ function saveQuote() {
   save();
   updateSavedBadge();
   refreshSavedDocs();
-  toast('Quote saved!', 'success');
-  showPage('page4');
-  const wnBar = document.getElementById('whatNextBar');
-  if (wnBar) wnBar.style.display = 'block';
+  showSavedPopup(() => {
+    showPage('page4');
+    const wnBar = document.getElementById('whatNextBar');
+    if (wnBar) wnBar.style.display = 'block';
+  });
 }
 
 function buildCustName(q) {
@@ -1244,10 +1311,12 @@ function refreshSavedDocs() {
   else if (filter === 'unpaid')   docs = docs.filter(d => !d.paid);
   else if (filter === 'accepted') docs = docs.filter(d => d.accepted);
 
-  container.innerHTML = '';
+  // Remove all doc cards but keep the empty-state element in the DOM
+  Array.from(container.children).forEach(child => {
+    if (child !== empty) child.remove();
+  });
 
   if (!docs.length) {
-    container.appendChild(empty);
     empty.style.display = 'flex';
     return;
   }
@@ -1686,20 +1755,20 @@ function buildTermsSection(q) {
 function buildSigSection(q, co, docType) {
   if (!q.authSig && !q.custSig && !getVal('custSigText')) return '';
   const authName = q.authSig || co.businessName || '';
-  const custSigContent = q.custSig
+  const authSigContent = q.custSig
     ? `<img src="${q.custSig}" class="sig-img">`
-    : (q.custSig === '' && document.getElementById('custSigText')?.value
+    : (document.getElementById('custSigText')?.value
         ? `<span class="sig-typed">${esc(document.getElementById('custSigText')?.value || '')}</span>`
         : '');
 
   return `
     <div class="sig-block">
       <div class="sig-box">
+        ${authSigContent}
         ${authName ? `<div style="font-size:0.9rem;font-weight:600">${esc(authName)}</div>` : ''}
         <div class="sig-label">Authorised Signature</div>
       </div>
       <div class="sig-box">
-        ${custSigContent}
         <div class="sig-label">Customer Signature &amp; Date</div>
       </div>
     </div>`;

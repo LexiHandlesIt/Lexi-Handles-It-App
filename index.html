@@ -140,7 +140,7 @@
   <div class="nav-menu" id="navMenu" aria-hidden="true">
     <button class="nav-menu-item" data-target="page3" id="menuNewQuote">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-      New Quote
+      New Estimate or Quote
     </button>
     <button class="nav-menu-item" data-target="page1" id="menuEditBusiness">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -152,11 +152,33 @@
     </button>
     <button class="nav-menu-item" data-target="page4" id="menuSavedDocs">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      View Saved Documents
+      View Saved Jobs
       <span class="nav-menu-badge" id="savedBadge" style="display:none">0</span>
+    </button>
+    <button class="nav-menu-item" id="menuBackupRestore">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+      Backup &amp; Restore
+    </button>
+    <button class="nav-menu-item nav-menu-signout" id="menuSignOut">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign Out
     </button>
   </div>
   <div class="nav-menu-overlay" id="navMenuOverlay"></div>
+
+  <!-- BACKUP & RESTORE MODAL -->
+  <div class="modal-overlay" id="backupRestoreModal" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-card backup-modal-card">
+      <button class="modal-close" id="closeBackupModal" aria-label="Close">&times;</button>
+      <h2 class="card-title" style="margin-bottom:8px">Backup &amp; Restore</h2>
+      <p class="card-desc" style="margin-bottom:20px">Export all your data (business details, price list and saved jobs) as a file, or restore from a previous backup.</p>
+      <div class="backup-modal-actions">
+        <button type="button" class="btn btn-outline" id="exportDataBtn2">⬇ Export Backup</button>
+        <button type="button" class="btn btn-outline" id="importDataBtn2">⬆ Import Backup</button>
+        <input type="file" id="importDataFile2" accept=".json" style="display:none" aria-hidden="true">
+      </div>
+    </div>
+  </div>
 
   <!-- MAIN CONTENT -->
   <main class="app-main">
@@ -164,8 +186,8 @@
     <!-- PAGE 1: BUSINESS SETUP -->
     <section id="page1" class="page active" data-page="1">
 <div class="page-header">
-        <h1 class="page-title"><span class="page-num">1.</span> Set Up Your Business</h1>
-        <p class="page-sub" style="text-align:center;">This takes a few minutes and only needs doing once.</p>
+        <h1 class="page-title" id="page1Title"><span class="page-num">1.</span> Set Up Your Business</h1>
+        <p class="page-sub" id="page1Sub" style="text-align:center;">This takes a few minutes and only needs doing once.</p>
       </div>
 
       <!-- About You -->
@@ -454,7 +476,7 @@
 
       <div class="page-footer">
         <button type="button" class="btn btn-outline btn-lg" id="backToSetupBtn">← Back to Setup</button>
-        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToQuoteBtn"><span class="btn-step-num">3</span> New Quote</button>
+        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToQuoteBtn"><span class="btn-step-num">3</span> New Estimate or Quote</button>
       </div>
     </section>
 
@@ -476,7 +498,7 @@
           <div class="form-group">
             <label for="custTitle">Title</label>
             <select id="custTitle">
-              <option value="">Title</option>
+              <option value=""> </option>
               <option value="Mr">Mr</option>
               <option value="Mrs">Mrs</option>
               <option value="Ms">Ms</option>
@@ -538,23 +560,19 @@
       <!-- Step 2: Add Jobs -->
       <div class="card">
         <h2 class="card-title">Step 2: Add Jobs</h2>
-        <div class="step2-columns">
-          <!-- Left: search + picker -->
-          <div class="step2-left">
-            <div class="form-group">
-              <input type="text" id="jobPickerSearch" placeholder="Search your price list..." class="search-input">
-            </div>
-            <div id="jobPickerList" class="picker-list"></div>
-            <div id="quoteItemsContainer" class="quote-items-container">
-              <div class="empty-state" id="quoteItemsEmpty" style="display:none">
-                <p>No jobs added yet.</p>
-              </div>
-            </div>
+        <div class="form-group">
+          <input type="text" id="jobPickerSearch" placeholder="Search your price list..." class="search-input">
+        </div>
+        <div id="jobPickerList" class="picker-list"></div>
+        <div id="quoteItemsContainer" class="quote-items-container">
+          <div class="empty-state" id="quoteItemsEmpty" style="display:none">
+            <p>No jobs added yet.</p>
           </div>
-          <!-- Right: one-off item -->
-          <div class="step2-right">
-            <h3 class="section-sub">Add a one-off item</h3>
-            <div class="form-group">
+        </div>
+        <div class="custom-item-add">
+          <h3 class="section-sub">Add a one-off item</h3>
+          <div class="form-grid-3">
+            <div class="form-group fg-grow">
               <label for="customItemName">Description</label>
               <input type="text" id="customItemName" placeholder="e.g. Materials">
             </div>
@@ -566,53 +584,45 @@
               <label for="customItemUnit">Unit</label>
               <input type="text" id="customItemUnit" placeholder="each">
             </div>
-            <button type="button" class="btn btn-sage btn-sm" id="addCustomItemBtn">Add</button>
           </div>
+          <button type="button" class="btn btn-sage btn-sm" id="addCustomItemBtn">Add</button>
         </div>
       </div>
 
       <!-- Step 3: Totals & Notes -->
       <div class="card">
         <h2 class="card-title">Step 3: Totals &amp; Notes</h2>
-        <div class="step3-columns">
-          <!-- Column 1: Totals -->
-          <div class="step3-left">
-            <div class="totals-block">
-              <div class="totals-row"><span>Subtotal</span><span id="qSubtotal">£0.00</span></div>
-              <div class="totals-row">
-                <span>VAT</span>
-                <div class="vat-row">
-                  <select id="vatSelect" class="vat-select">
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="20">20%</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                  <input type="number" id="vatCustom" min="0" max="100" step="0.1" placeholder="%" class="vat-custom" style="display:none">
-                </div>
-                <span id="qVatAmount">£0.00</span>
-              </div>
-              <div class="totals-row">
-                <span>Discount</span>
-                <div class="discount-row">
-                  <input type="number" id="discountPct" min="0" max="100" step="0.5" placeholder="0" class="discount-input"> %
-                </div>
-                <span id="qDiscount">-£0.00</span>
-              </div>
-              <div class="totals-row totals-total"><span>Total</span><span id="qTotal">£0.00</span></div>
+        <div class="totals-block">
+          <div class="totals-row"><span>Subtotal</span><span id="qSubtotal">£0.00</span></div>
+          <div class="totals-row">
+            <span>VAT</span>
+            <div class="vat-row">
+              <select id="vatSelect" class="vat-select">
+                <option value="0">0%</option>
+                <option value="5">5%</option>
+                <option value="20">20%</option>
+                <option value="custom">Custom</option>
+              </select>
+              <input type="number" id="vatCustom" min="0" max="100" step="0.1" placeholder="%" class="vat-custom" style="display:none">
             </div>
+            <span id="qVatAmount">£0.00</span>
           </div>
-          <!-- Column 2: Notes stacked -->
-          <div class="step3-right">
-            <div class="form-group">
-              <label for="quoteNotes">Notes to Customer</label>
-              <textarea id="quoteNotes" rows="3" placeholder="Thank you for your enquiry. Please note..."></textarea>
+          <div class="totals-row">
+            <span>Discount</span>
+            <div class="discount-row">
+              <input type="number" id="discountPct" min="0" max="100" step="0.5" placeholder="0" class="discount-input"> %
             </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label for="quotePrivateNotes">Private Notes <span class="hint">(not shown)</span></label>
-              <textarea id="quotePrivateNotes" rows="3" placeholder="Internal notes..."></textarea>
-            </div>
+            <span id="qDiscount">-£0.00</span>
           </div>
+          <div class="totals-row totals-total"><span>Total</span><span id="qTotal">£0.00</span></div>
+        </div>
+        <div class="form-group" style="margin-top:16px">
+          <label for="quoteNotes">Notes to Customer</label>
+          <textarea id="quoteNotes" rows="4" placeholder="Thank you for your enquiry. Please note..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="quotePrivateNotes">Private Notes <span class="hint">(not shown on document)</span></label>
+          <textarea id="quotePrivateNotes" rows="3" placeholder="Internal notes..."></textarea>
         </div>
 
         <!-- Terms & Conditions two-column -->
@@ -667,13 +677,13 @@
     <!-- PAGE 4: SAVED DOCUMENTS -->
     <section id="page4" class="page" data-page="4">
       <div class="page-header">
-        <h1 class="page-title">Saved Documents</h1>
+        <h1 class="page-title">Saved Jobs</h1>
       </div>
       <div class="what-next-bar" id="whatNextBar" style="display:none">
         <p class="what-next-label">What would you like to do next?</p>
         <div class="what-next-btns">
           <button class="btn btn-outline-sage what-next-btn" onclick="showPage('page1')">⚙ Edit My Setup</button>
-          <button class="btn btn-primary what-next-btn" onclick="prepareNewQuote(); showPage('page3')">✎ New Quote</button>
+          <button class="btn btn-primary what-next-btn" onclick="prepareNewQuote(); showPage('page3')">✎ New Estimate or Quote</button>
           <button class="btn btn-outline-sage what-next-btn" onclick="document.getElementById('whatNextBar').style.display='none'">✕ Dismiss</button>
         </div>
       </div>
