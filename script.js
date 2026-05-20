@@ -182,7 +182,15 @@ function showPage(pageId) {
         p1Title.innerHTML = '<span class="page-num">1.</span> Set Up Your Business';
       }
     }
-    if (p1Sub) p1Sub.style.display = hasSetUp ? 'none' : '';
+    if (p1Sub) {
+      if (hasSetUp) {
+        p1Sub.textContent = 'Brilliant, your business is progressing. Update your business details below.';
+        p1Sub.style.display = '';
+      } else {
+        p1Sub.textContent = 'This takes a few minutes and only needs doing once.';
+        p1Sub.style.display = '';
+      }
+    }
   }
 
   // Update page3 title after first save
@@ -1456,7 +1464,7 @@ function refreshSavedDocs() {
         <button type="button" class="journey-btn btn-send-invoice" data-id="${doc.id}" ${!doc.invoiceSent && !doc.paid ? '' : ''}>
           <span class="jb-circle">B</span> Send Invoice
         </button>
-        <button type="button" class="journey-btn btn-send-receipt" data-id="${doc.id}" ${doc.paid ? '' : 'disabled'}>
+        <button type="button" class="journey-btn btn-send-receipt" data-id="${doc.id}">
           <span class="jb-circle">C</span> Send Receipt
         </button>
       </div>
@@ -1475,6 +1483,7 @@ function refreshSavedDocs() {
     card.querySelector('.btn-send-invoice').addEventListener('click', () => openInvoiceModal(doc.id));
     card.querySelector('.btn-send-receipt').addEventListener('click', () => {
       if (doc.paid) openReceiptModal(doc.id);
+      else toast('Mark as Paid first to send a receipt', 'info');
     });
     card.querySelector('.btn-mark-paid')?.addEventListener('click', () => openMarkPaid(doc.id));
     card.querySelector('.btn-edit-doc').addEventListener('click', () => editDoc(doc.id));

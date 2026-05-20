@@ -325,15 +325,36 @@
           <div class="colour-pickers">
             <div class="colour-picker-group">
               <label>Header</label>
-              <input type="color" id="colourHeader" value="#7D5730" class="colour-swatch">
+              <div class="colour-input-row">
+                <input type="color" id="colourHeader" value="#7D5730" class="colour-swatch">
+                <div class="rgb-inputs">
+                  <label class="rgb-label">R <input type="number" id="colourHeaderR" class="rgb-input" min="0" max="255" value="125"></label>
+                  <label class="rgb-label">G <input type="number" id="colourHeaderG" class="rgb-input" min="0" max="255" value="87"></label>
+                  <label class="rgb-label">B <input type="number" id="colourHeaderB" class="rgb-input" min="0" max="255" value="48"></label>
+                </div>
+              </div>
             </div>
             <div class="colour-picker-group">
               <label>Accent</label>
-              <input type="color" id="colourAccent" value="#6B7C5C" class="colour-swatch">
+              <div class="colour-input-row">
+                <input type="color" id="colourAccent" value="#6B7C5C" class="colour-swatch">
+                <div class="rgb-inputs">
+                  <label class="rgb-label">R <input type="number" id="colourAccentR" class="rgb-input" min="0" max="255" value="107"></label>
+                  <label class="rgb-label">G <input type="number" id="colourAccentG" class="rgb-input" min="0" max="255" value="124"></label>
+                  <label class="rgb-label">B <input type="number" id="colourAccentB" class="rgb-input" min="0" max="255" value="92"></label>
+                </div>
+              </div>
             </div>
             <div class="colour-picker-group">
               <label>Background</label>
-              <input type="color" id="colourBg" value="#F5F0E8" class="colour-swatch">
+              <div class="colour-input-row">
+                <input type="color" id="colourBg" value="#F5F0E8" class="colour-swatch">
+                <div class="rgb-inputs">
+                  <label class="rgb-label">R <input type="number" id="colourBgR" class="rgb-input" min="0" max="255" value="245"></label>
+                  <label class="rgb-label">G <input type="number" id="colourBgG" class="rgb-input" min="0" max="255" value="240"></label>
+                  <label class="rgb-label">B <input type="number" id="colourBgB" class="rgb-input" min="0" max="255" value="232"></label>
+                </div>
+              </div>
             </div>
           </div>
           <!-- Right: live preview -->
@@ -682,14 +703,12 @@
       <div class="nav-hint-popup" id="navHintPopup" style="display:none" role="dialog" aria-modal="true">
         <button class="nav-hint-close" id="navHintClose" aria-label="Close">&#x2715;</button>
         <div class="nav-hint-body">
-          <img src="Lexi Profile.png" alt="Lexi" class="nav-hint-avatar" onerror="this.style.display='none'">
-          <div>
-            <p class="nav-hint-msg">What would you like to do next? Use the menu above to explore everything Lexi can help you with.</p>
-            <label class="nav-hint-suppress">
-              <input type="checkbox" id="navHintSuppress"> Do not show me this message again
-            </label>
-          </div>
+          <img src="Lexi with quote pointing up.png" alt="Lexi" class="nav-hint-avatar" onerror="this.style.display='none'">
+          <p class="nav-hint-msg">What would you like to do next? Use the menu above to explore everything Lexi can help you with.</p>
         </div>
+        <label class="nav-hint-suppress">
+          <input type="checkbox" id="navHintSuppress"> Do not show me this message again
+        </label>
       </div>
       <div class="saved-filter-bar">
         <label for="savedFilterSelect" class="saved-filter-label">Show:</label>
