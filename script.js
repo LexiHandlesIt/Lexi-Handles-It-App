@@ -85,13 +85,11 @@ document.addEventListener('DOMContentLoaded', () => {
   generateRef();
   updateJobPicker();
   updateColourPreview();
-  syncRGBfromHex('header');
-  syncRGBfromHex('accent');
-  syncRGBfromHex('bg');
   populateAuthSig();
 
   // Start on page1 (or wherever nav left off)
   showPage('page1');
+
 });
 
 /* ===== STORAGE ===== */
@@ -133,13 +131,13 @@ function toast(msg, type = '', duration = 3000) {
   }, duration);
 }
 
-function showSavedPopup(onDone) {
+function showSavedPopup(label, onDone) {
   const overlay = document.createElement('div');
   overlay.className = 'saved-popup-overlay';
   overlay.innerHTML = `
     <div class="saved-popup-box">
       <div class="saved-popup-tick">✓</div>
-      <div class="saved-popup-msg">Saved!</div>
+      <div class="saved-popup-msg">${label || 'Saved!'}</div>
     </div>`;
   document.body.appendChild(overlay);
   setTimeout(() => {
@@ -288,6 +286,18 @@ function setupNavigation() {
       if (target === 'page3') prepareNewQuote();
       showPage(target);
     });
+  });
+
+  // New Invoice from menu
+  document.getElementById('menuNewInvoice')?.addEventListener('click', () => {
+    closeMenu();
+    openClientPicker('invoice');
+  });
+
+  // New Receipt from menu
+  document.getElementById('menuNewReceipt')?.addEventListener('click', () => {
+    closeMenu();
+    openClientPicker('receipt');
   });
 
   // Backup & Restore menu item
@@ -582,99 +592,24 @@ function saveBusinessDetails(showToast = true) {
   };
   save();
   updateColourPreview();
-  if (showToast) toast('Business details saved!', 'success');
+  if (showToast) showSavedPopup('Business Details Saved');
   return true;
 }
 
 /* ===== COLOUR PICKER ===== */
-const RGB_PANEL_IDS = { header: 'rgbHeader', accent: 'rgbAccent', bg: 'rgbBg' };
-
-function closeAllRGBPanels() {
-  Object.values(RGB_PANEL_IDS).forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  });
-}
-
+// Native <input type="color"> handles the popup picker — just wire up the preview update
 function setupColourPicker(name, hexId, defaultVal) {
-  const hex      = document.getElementById(hexId);
-  const rId      = hexId + 'R', gId = hexId + 'G', bId = hexId + 'B';
-  const panelId  = RGB_PANEL_IDS[name];
-
-  // Toggle RGB panel when the colour swatch is clicked
-  hex.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const panel = document.getElementById(panelId);
-    if (!panel) return;
-    const isOpen = panel.style.display !== 'none';
-    closeAllRGBPanels();
-    if (!isOpen) {
-      panel.style.display = 'flex';
-      syncRGBfromHex(name);
-    }
-  });
-
-  hex.addEventListener('input', () => {
-    syncRGBfromHex(name);
-    updateColourPreview();
-  });
-
-  [rId, gId, bId].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', () => {
-      syncHexFromRGB(name);
-      updateColourPreview();
-    });
-  });
-}
-
-// Close RGB panels when tapping anywhere outside a swatch or panel
-document.addEventListener('click', (e) => {
-  const insidePanel = e.target.closest('.rgb-inputs');
-  const insideSwatch = e.target.classList.contains('colour-swatch');
-  if (!insidePanel && !insideSwatch) closeAllRGBPanels();
-});
-
-function colourIds(name) {
-  const map = { header: 'colourHeader', accent: 'colourAccent', bg: 'colourBg' };
-  return { hexId: map[name], rId: map[name]+'R', gId: map[name]+'G', bId: map[name]+'B' };
+  const hex = document.getElementById(hexId);
+  if (!hex) return;
+  hex.addEventListener('input', updateColourPreview);
+  hex.addEventListener('change', updateColourPreview);
 }
 
 function setColour(name, hex) {
-  const ids = colourIds(name);
-  document.getElementById(ids.hexId).value = hex;
-  syncRGBfromHex(name);
+  const map = { header: 'colourHeader', accent: 'colourAccent', bg: 'colourBg' };
+  const el = document.getElementById(map[name]);
+  if (el) el.value = hex;
 }
-
-function syncRGBfromHex(name) {
-  const ids = colourIds(name);
-  const hex = document.getElementById(ids.hexId).value;
-  const [r,g,b] = hexToRgb(hex);
-  const rEl = document.getElementById(ids.rId);
-  const gEl = document.getElementById(ids.gId);
-  const bEl = document.getElementById(ids.bId);
-  if (rEl) { rEl.value = r; gEl.value = g; bEl.value = b; }
-}
-
-function syncHexFromRGB(name) {
-  const ids = colourIds(name);
-  const r = parseInt(document.getElementById(ids.rId)?.value || '0');
-  const g = parseInt(document.getElementById(ids.gId)?.value || '0');
-  const b = parseInt(document.getElementById(ids.bId)?.value || '0');
-  const hex = rgbToHex(clamp(r), clamp(g), clamp(b));
-  document.getElementById(ids.hexId).value = hex;
-}
-
-function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return [0,0,0];
-  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
-}
-
-function rgbToHex(r,g,b) {
-  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
-}
-
-function clamp(n) { return Math.max(0, Math.min(255, isNaN(n) ? 0 : n)); }
 
 function updateColourPreview() {
   const primary = document.getElementById('colourHeader').value;
@@ -879,7 +814,7 @@ function addIndividualJob() {
       setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
       refreshPriceList();
       updateJobPicker();
-      toast('Added as alternative.', 'success');
+      showSavedPopup('Job Saved');
     });
     return;
   }
@@ -889,7 +824,7 @@ function addIndividualJob() {
   setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
   refreshPriceList();
   updateJobPicker();
-  toast('Job added.', 'success');
+  showSavedPopup('Job Saved');
 }
 
 function showDuplicatePrompt(name, onConfirm) {
@@ -1006,7 +941,7 @@ function editJobInline(row, job) {
     save();
     refreshPriceList();
     updateJobPicker();
-    toast('Job updated.', 'success');
+    showSavedPopup('Job Updated');
   };
 
   row.querySelector('.save-edit').addEventListener('click', saveEdit);
@@ -1392,6 +1327,9 @@ function saveQuote() {
     return;
   }
 
+  const isEditing = !!state.editingDocId;
+  const docType   = q.type || 'Document';
+
   if (state.editingDocId) {
     const idx = state.saved.findIndex(d => d.id === state.editingDocId);
     if (idx > -1) {
@@ -1435,7 +1373,8 @@ function saveQuote() {
   save();
   updateSavedBadge();
   refreshSavedDocs();
-  showSavedPopup(() => {
+  const popupLabel = isEditing ? 'Changes Saved' : `${docType} Saved`;
+  showSavedPopup(popupLabel, () => {
     showPage('page4');
     showNavHint();
   });
@@ -1564,8 +1503,8 @@ function refreshSavedDocs() {
          <button type="button" class="btn-edit-payment" data-id="${doc.id}" title="View / edit payments" aria-label="Edit payments">✎</button>`
       : payments.length > 0
         ? `<span class="partial-paid-label">Paid ${fmtPrice(totalPaid)} of ${fmtPrice(doc.total || 0)}</span>
-           <button type="button" class="btn btn-sm btn-outline btn-mark-paid" data-id="${doc.id}">+ Money In</button>
-           <button type="button" class="btn-edit-payment" data-id="${doc.id}" title="Edit payments" aria-label="Edit payments">✎</button>`
+           <button type="button" class="btn-edit-payment" data-id="${doc.id}" title="Edit payments" aria-label="Edit payments">✎</button>
+           <button type="button" class="btn btn-sm btn-outline btn-mark-paid" data-id="${doc.id}">+ Money In</button>`
         : `<button type="button" class="btn btn-sm btn-outline btn-mark-paid" data-id="${doc.id}">✓ Money In</button>`;
 
     card.innerHTML = `
@@ -1737,13 +1676,15 @@ function setupModals() {
   document.getElementById('cancelMarkPaidBtn').addEventListener('click', () => document.getElementById('markPaidModal').style.display = 'none');
   document.getElementById('closeEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
   document.getElementById('doneEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
+  document.getElementById('closeClientPickerBtn').addEventListener('click', () => document.getElementById('clientPickerModal').style.display = 'none');
 
   // Close on overlay click
   [document.getElementById('previewModal'),
    document.getElementById('invoiceModal'),
    document.getElementById('receiptModal'),
    document.getElementById('markPaidModal'),
-   document.getElementById('editPaymentsModal')].forEach(m => {
+   document.getElementById('editPaymentsModal'),
+   document.getElementById('clientPickerModal')].forEach(m => {
     m?.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
 
@@ -1810,7 +1751,7 @@ function setupModals() {
     save();
     refreshSavedDocs();
     document.getElementById('markPaidModal').style.display = 'none';
-    toast(doc.paid ? 'Fully paid — nice one! 🎉' : `Payment of ${fmtPrice(amount)} recorded.`, 'success');
+    showSavedPopup(doc.paid ? 'Fully Paid!' : 'Payment Saved');
   });
 }
 
@@ -1826,6 +1767,94 @@ function closePreview() {
   document.getElementById('previewModal').style.display = 'none';
 }
 
+/* ===== CLIENT PICKER (New Invoice / New Receipt from menu) ===== */
+function openClientPicker(mode) {
+  const titleEl   = document.getElementById('clientPickerTitle');
+  const listEl    = document.getElementById('clientPickerList');
+  const warningEl = document.getElementById('clientPickerWarning');
+
+  titleEl.textContent = mode === 'invoice'
+    ? 'Who would you like to invoice?'
+    : 'Who is this receipt for?';
+  warningEl.style.display = 'none';
+  warningEl.innerHTML = '';
+
+  const docs = [...state.saved].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (!docs.length) {
+    listEl.innerHTML = '<p class="cp-empty">No saved jobs yet — create an estimate or quote first.</p>';
+    document.getElementById('clientPickerModal').style.display = 'flex';
+    return;
+  }
+
+  listEl.innerHTML = docs.map(doc => {
+    const payments    = getDocPayments(doc);
+    const totalPaid   = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const statusClass = doc.paid ? 'paid' : doc.invoiceSent ? 'invoiced' : (doc.type || 'estimate').toLowerCase();
+    const statusLabel = doc.paid ? 'Paid' : doc.invoiceSent ? 'Invoiced' : (doc.type || 'Estimate');
+    const jobDesc     = doc.quote?.items?.[0]?.name || doc.ref || 'Job';
+    return `
+      <button type="button" class="cp-row" data-id="${doc.id}">
+        <div class="cp-row-main">
+          <span class="cp-name">${esc(doc.custName || 'Unknown')}</span>
+          <span class="cp-job">${esc(jobDesc)}</span>
+        </div>
+        <div class="cp-row-right">
+          <span class="cp-total">${fmtPrice(doc.total || 0)}</span>
+          <span class="type-badge ${statusClass}">${statusLabel}</span>
+        </div>
+      </button>`;
+  }).join('');
+
+  listEl.querySelectorAll('.cp-row').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const docId = btn.dataset.id;
+      const doc   = state.saved.find(d => d.id === docId);
+      if (!doc) return;
+
+      if (mode === 'invoice') {
+        document.getElementById('clientPickerModal').style.display = 'none';
+        openInvoiceModal(docId);
+      } else {
+        // Receipt mode — warn if not fully paid
+        const payments  = getDocPayments(doc);
+        const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+        if (totalPaid === 0) {
+          showPickerWarning(docId,
+            `⚠️ No payment has been recorded for ${esc(doc.custName || 'this client')} yet. Do you still want to create a receipt?`);
+        } else if (!doc.paid) {
+          showPickerWarning(docId,
+            `⚠️ ${esc(doc.custName || 'This client')} has only paid ${fmtPrice(totalPaid)} of ${fmtPrice(doc.total || 0)}. Do you still want to create a receipt?`);
+        } else {
+          document.getElementById('clientPickerModal').style.display = 'none';
+          openReceiptModal(docId);
+        }
+      }
+    });
+  });
+
+  document.getElementById('clientPickerModal').style.display = 'flex';
+}
+
+function showPickerWarning(docId, message) {
+  const warningEl = document.getElementById('clientPickerWarning');
+  warningEl.style.display = 'block';
+  warningEl.innerHTML = `
+    <p class="cp-warning-msg">${message}</p>
+    <div class="cp-warning-actions">
+      <button type="button" class="btn btn-outline btn-sm" id="cpWarnCancel">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" id="cpWarnConfirm">Create Receipt</button>
+    </div>`;
+  warningEl.querySelector('#cpWarnCancel').addEventListener('click', () => {
+    warningEl.style.display = 'none';
+  });
+  warningEl.querySelector('#cpWarnConfirm').addEventListener('click', () => {
+    document.getElementById('clientPickerModal').style.display = 'none';
+    openReceiptModal(docId);
+  });
+  warningEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function openInvoiceModal(docId) {
   activeDocId = docId;
   const invRef = nextRef('INV', KEY_INV);
@@ -1839,7 +1868,10 @@ function openInvoiceModal(docId) {
 function openReceiptModal(docId) {
   activeDocId = docId;
   const doc = state.saved.find(d => d.id === docId);
-  setVal('recAmount', doc ? doc.total.toFixed(2) : '');
+  if (!doc) return;
+  const payments  = getDocPayments(doc);
+  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  setVal('recAmount', (totalPaid > 0 ? totalPaid : (doc.total || 0)).toFixed(2));
   setVal('recDate',   todayStr());
   setVal('recMethod', 'Bank Transfer');
   setVal('recNotes',  '');
