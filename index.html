@@ -264,21 +264,22 @@
             <div class="form-grid-2">
               <div class="form-group">
                 <label for="bankAccHolder">Account Holder Name</label>
-                <input type="text" id="bankAccHolder" placeholder="Sam Clarke">
+                <input type="text" id="bankAccHolder">
               </div>
               <div class="form-group">
                 <label for="bankName">Bank Name</label>
-                <input type="text" id="bankName" placeholder="Barclays">
+                <input type="text" id="bankName">
               </div>
             </div>
             <div class="form-grid-2">
               <div class="form-group">
                 <label for="bankSort">Sort Code</label>
-                <input type="text" id="bankSort" placeholder="12-34-56" maxlength="8">
+                <input type="text" id="bankSort" maxlength="8" inputmode="numeric">
+                <span class="field-error" id="bankSortError" style="display:none">Sort code must be 6 digits (XX-XX-XX)</span>
               </div>
               <div class="form-group">
                 <label for="bankAcc">Account Number</label>
-                <input type="text" id="bankAcc" placeholder="12345678" maxlength="8">
+                <input type="text" id="bankAcc" maxlength="8" inputmode="numeric">
               </div>
             </div>
           </div>
@@ -625,21 +626,19 @@
           <textarea id="quotePrivateNotes" rows="3" placeholder="Internal notes..."></textarea>
         </div>
 
-        <!-- Terms & Conditions two-column -->
-        <div class="terms-columns" style="margin-top:16px">
-          <div class="terms-col-left">
-            <label>Terms &amp; Conditions</label>
-            <div class="terms-options">
-              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="payment30"> Payment due within 30 days of invoice date.</label>
-              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="depositRequired"> A 50% deposit is required before work commences.</label>
-              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="quotationValid"> This quotation is valid for 30 days from the date shown.</label>
-              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="materialsExtra"> Materials are not included unless stated above.</label>
-              <label class="checkbox-label compact"><input type="checkbox" name="terms" value="cancellation"> Cancellation within 48 hours of scheduled start date may incur a charge.</label>
-            </div>
+        <!-- Terms & Conditions single column -->
+        <div style="margin-top:16px">
+          <label>Terms &amp; Conditions</label>
+          <div class="terms-options">
+            <label class="checkbox-label compact"><input type="checkbox" name="terms" value="payment30"> Payment due within 30 days of invoice date.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="terms" value="depositRequired"> A 50% deposit is required before work commences.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="terms" value="quotationValid"> This quotation is valid for 30 days from the date shown.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="terms" value="materialsExtra"> Materials are not included unless stated above.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="terms" value="cancellation"> Cancellation within 48 hours of scheduled start date may incur a charge.</label>
           </div>
-          <div class="terms-col-right">
-            <label for="customTerms">Additional terms</label>
-            <textarea id="customTerms" rows="6" placeholder="Any additional terms..."></textarea>
+          <div class="form-group" style="margin-top:12px">
+            <label for="customTerms">Additional Terms</label>
+            <textarea id="customTerms" rows="3" placeholder="Any additional terms..."></textarea>
           </div>
         </div>
       </div>
@@ -679,13 +678,13 @@
       <div class="page-header">
         <h1 class="page-title">Saved Jobs</h1>
       </div>
-      <div class="what-next-bar" id="whatNextBar" style="display:none">
-        <p class="what-next-label">What would you like to do next?</p>
-        <div class="what-next-btns">
-          <button class="btn btn-outline-sage what-next-btn" onclick="showPage('page1')">⚙ Edit My Setup</button>
-          <button class="btn btn-primary what-next-btn" onclick="prepareNewQuote(); showPage('page3')">✎ New Estimate or Quote</button>
-          <button class="btn btn-outline-sage what-next-btn" onclick="document.getElementById('whatNextBar').style.display='none'">✕ Dismiss</button>
-        </div>
+      <!-- Nav hint popup (shown after first save) -->
+      <div class="nav-hint-popup" id="navHintPopup" style="display:none" role="dialog" aria-modal="true">
+        <button class="nav-hint-close" id="navHintClose" aria-label="Close">&#x2715;</button>
+        <p class="nav-hint-msg">Use the menu above to navigate around the app.</p>
+        <label class="nav-hint-suppress">
+          <input type="checkbox" id="navHintSuppress"> Do not show me this message again
+        </label>
       </div>
       <div class="saved-filter-bar">
         <label for="savedFilterSelect" class="saved-filter-label">Show:</label>

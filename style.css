@@ -279,6 +279,12 @@ input[type="text"].sig-text-input:focus {
   border-color: var(--danger);
   box-shadow: 0 0 0 3px rgba(192,57,43,.1);
 }
+.field-error {
+  display: block;
+  color: var(--danger);
+  font-size: 0.78rem;
+  margin-top: 4px;
+}
 
 .form-group textarea {
   resize: vertical;
@@ -2060,6 +2066,57 @@ input[type="text"].sig-text-input:focus {
   flex-wrap: wrap;
 }
 .what-next-btn { flex: 1; min-width: 120px; max-width: 180px; }
+
+/* ===== NAV HINT POPUP ===== */
+.nav-hint-popup {
+  position: relative;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 12px rgba(44,44,44,.10);
+}
+.nav-hint-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--charcoal);
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.nav-hint-close:hover { opacity: 1; }
+.nav-hint-msg {
+  font-size: 0.95rem;
+  color: var(--charcoal);
+  margin: 0 0 12px;
+  padding-right: 20px;
+}
+.nav-hint-suppress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--charcoal);
+  opacity: 0.7;
+  cursor: pointer;
+  user-select: none;
+}
+.nav-hint-suppress input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  accent-color: var(--sage);
+  cursor: pointer;
+  flex-shrink: 0;
+}
 
 /* ===== SAGE FOCUS (payment & price list cards) ===== */
 .sage-focus input:focus,

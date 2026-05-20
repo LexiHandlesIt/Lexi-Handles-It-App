@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadFromStorage();
   setupOnboarding();
   setupNavigation();
+  setupNavHint();
   setupPage1();
   setupPage2();
   setupPage3();
@@ -133,6 +134,31 @@ function showSavedPopup(onDone) {
       if (onDone) onDone();
     }, 350);
   }, 1200);
+}
+
+const KEY_NAV_HINT = 'tq_nav_hint_suppressed';
+
+function showNavHint() {
+  if (localStorage.getItem(KEY_NAV_HINT)) return;
+  const popup = document.getElementById('navHintPopup');
+  if (popup) popup.style.display = 'block';
+}
+
+function setupNavHint() {
+  const popup    = document.getElementById('navHintPopup');
+  const closeBtn = document.getElementById('navHintClose');
+  const suppress = document.getElementById('navHintSuppress');
+  if (!popup || !closeBtn || !suppress) return;
+
+  closeBtn.addEventListener('click', () => {
+    if (suppress.checked) localStorage.setItem(KEY_NAV_HINT, '1');
+    popup.style.display = 'none';
+  });
+
+  suppress.addEventListener('change', () => {
+    if (suppress.checked) localStorage.setItem(KEY_NAV_HINT, '1');
+    else localStorage.removeItem(KEY_NAV_HINT);
+  });
 }
 
 /* ===== PAGE NAVIGATION ===== */
@@ -308,6 +334,20 @@ function setupPage1() {
   document.getElementById('payBankTransfer').addEventListener('change', e => {
     document.getElementById('bankDetails').style.display = e.target.checked ? 'block' : 'none';
   });
+
+  // Sort code auto-format: XX-XX-XX
+  document.getElementById('bankSort').addEventListener('input', function () {
+    const pos = this.selectionStart;
+    let digits = this.value.replace(/\D/g, '').slice(0, 6);
+    let formatted = digits;
+    if (digits.length > 4) formatted = digits.slice(0, 2) + '-' + digits.slice(2, 4) + '-' + digits.slice(4);
+    else if (digits.length > 2) formatted = digits.slice(0, 2) + '-' + digits.slice(2);
+    this.value = formatted;
+    // Restore cursor position (accounting for inserted hyphens)
+    const err = document.getElementById('bankSortError');
+    if (err) err.style.display = 'none';
+    this.classList.remove('error');
+  });
   document.getElementById('payPaypal').addEventListener('change', e => {
     document.getElementById('paypalDetails').style.display = e.target.checked ? 'block' : 'none';
   });
@@ -441,6 +481,24 @@ function saveBusinessDetails(showToast = true) {
     return false;
   }
   document.getElementById('p1LastName').classList.remove('error');
+
+  // Sort code validation: must be empty OR exactly 6 digits (XX-XX-XX)
+  const sortVal = getVal('bankSort').trim();
+  if (sortVal) {
+    const digits = sortVal.replace(/\D/g, '');
+    if (digits.length !== 6) {
+      const sortEl = document.getElementById('bankSort');
+      const sortErr = document.getElementById('bankSortError');
+      sortEl.classList.add('error');
+      if (sortErr) sortErr.style.display = 'block';
+      sortEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (showToast) toast('Sort code must be 6 digits.', 'error');
+      return false;
+    }
+    document.getElementById('bankSort').classList.remove('error');
+    const sortErr = document.getElementById('bankSortError');
+    if (sortErr) sortErr.style.display = 'none';
+  }
 
   const methods = [];
   if (document.getElementById('payBankTransfer').checked) methods.push('bank');
@@ -1221,8 +1279,7 @@ function saveQuote() {
   refreshSavedDocs();
   showSavedPopup(() => {
     showPage('page4');
-    const wnBar = document.getElementById('whatNextBar');
-    if (wnBar) wnBar.style.display = 'block';
+    showNavHint();
   });
 }
 
