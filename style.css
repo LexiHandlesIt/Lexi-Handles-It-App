@@ -884,13 +884,6 @@ input[type="text"].sig-text-input:focus {
     flex: none;
     width: 100%;
   }
-  .colour-input-row {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .rgb-inputs {
-    flex-wrap: wrap;
-  }
 }
 
 .colour-picker-group label {
@@ -903,8 +896,9 @@ input[type="text"].sig-text-input:focus {
 
 .colour-input-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .colour-swatch {
@@ -1793,6 +1787,20 @@ input[type="text"].sig-text-input:focus {
   align-items: center;
   gap: 10px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.export-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.export-select {
+  border-color: var(--walnut);
+  color: var(--walnut);
+}
+@media (max-width: 480px) {
+  .export-group { margin-left: 0; }
 }
 .saved-filter-label {
   font-size: 0.875rem;
@@ -1901,10 +1909,151 @@ input[type="text"].sig-text-input:focus {
 .saved-doc-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
   justify-content: flex-end;
   padding-top: 10px;
   border-top: 1px solid var(--cream-d);
 }
+.saved-doc-actions-left {
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.partial-paid-label {
+  font-size: 0.78rem;
+  color: var(--walnut);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ===== EDIT-PAYMENT PENCIL BUTTON ===== */
+.btn-edit-payment {
+  background: none;
+  border: none;
+  padding: 2px 7px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--walnut);
+  opacity: 0.65;
+  line-height: 1;
+  border-radius: 4px;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+.btn-edit-payment:hover { opacity: 1; background: rgba(125,87,48,.08); }
+
+/* ===== PAYMENT HISTORY ON CARD ===== */
+.payment-history {
+  border-top: 1px solid var(--border);
+  padding: 8px 0 4px;
+  margin: 0 0 2px;
+}
+.payment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  padding: 2px 0;
+  color: var(--charcoal);
+}
+.payment-row-num {
+  opacity: 0.5;
+  min-width: 52px;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+.payment-row-amount {
+  font-weight: 600;
+  color: var(--walnut);
+  min-width: 56px;
+}
+.payment-row-date {
+  flex: 1;
+  opacity: 0.65;
+}
+.payment-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  margin-top: 5px;
+  padding-top: 5px;
+  font-size: 0.8rem;
+}
+.payment-summary-row span { opacity: 0.65; }
+.payment-summary-row strong { color: var(--charcoal); }
+.payment-outstanding strong { color: var(--walnut); }
+
+/* ===== EDIT PAYMENTS MODAL ===== */
+.edit-payment-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ep-amount {
+  font-weight: 600;
+  color: var(--walnut);
+  min-width: 72px;
+}
+.ep-date {
+  flex: 1;
+  font-size: 0.88rem;
+  opacity: 0.7;
+}
+.btn-delete-payment {
+  background: none;
+  border: none;
+  color: #c0392b;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 3px 7px;
+  border-radius: 4px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.btn-delete-payment:hover { opacity: 1; background: rgba(192,57,43,0.08); }
+.ep-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0 2px;
+  font-size: 0.88rem;
+}
+.ep-summary-row span { opacity: 0.65; }
+.ep-outstanding strong { color: var(--walnut); }
+#editPaymentsList:empty::after {
+  content: 'No payments recorded.';
+  display: block;
+  text-align: center;
+  opacity: 0.5;
+  padding: 20px 0;
+  font-size: 0.9rem;
+}
+
+/* ===== MONEY IN MODAL PREV-INFO ===== */
+.mp-prev-info {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+}
+.mp-prev-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+  color: var(--charcoal);
+}
+.mp-prev-row span:first-child { opacity: 0.7; }
+.mp-prev-row strong { color: var(--walnut); }
 
 /* ===== MODAL ===== */
 .modal-header {
@@ -2233,7 +2382,7 @@ input[type="text"].sig-text-input:focus {
   box-shadow: 0 0 0 3px rgba(107,124,92,.12);
 }
 
-/* ===== HAMBURGER BUTTON ===== */
+/* ===== MENU BUTTON (vertical three-dot kebab) ===== */
 .hamburger-btn {
   width: 36px;
   height: 36px;
@@ -2250,17 +2399,18 @@ input[type="text"].sig-text-input:focus {
   transition: background var(--transition);
 }
 .hamburger-btn:hover { background: rgba(125,87,48,.1); }
-.hamburger-btn span {
+.hamburger-btn .dot {
   display: block;
-  width: 22px;
-  height: 2px;
+  width: 5px;
+  height: 5px;
   background: var(--walnut);
-  border-radius: 2px;
+  border-radius: 50%;
   transition: transform 0.22s ease, opacity 0.22s ease;
 }
-.hamburger-btn.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-.hamburger-btn.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
-.hamburger-btn.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+/* When open: fade the outer dots and scale the middle one up slightly */
+.hamburger-btn.open .dot:nth-child(1) { transform: translateY(10px); opacity: 0; }
+.hamburger-btn.open .dot:nth-child(2) { transform: scale(1.4); }
+.hamburger-btn.open .dot:nth-child(3) { transform: translateY(-10px); opacity: 0; }
 
 /* ===== SLIDE-OUT NAV MENU ===== */
 .nav-menu {

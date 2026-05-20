@@ -720,6 +720,18 @@
           <option value="unpaid">Unpaid</option>
           <option value="accepted">Accepted</option>
         </select>
+        <div class="export-group">
+          <label for="exportSelect" class="saved-filter-label">Export:</label>
+          <select id="exportSelect" class="saved-filter-select export-select">
+            <option value="">— choose —</option>
+            <option value="all">All</option>
+            <option value="Estimate">Estimates</option>
+            <option value="Quote">Quotes</option>
+            <option value="paid">Paid</option>
+            <option value="unpaid">Unpaid</option>
+            <option value="invoiced">Invoiced</option>
+          </select>
+        </div>
       </div>
       <div id="savedDocsList" class="saved-docs-list">
         <div class="empty-state" id="savedDocsEmpty">
@@ -825,7 +837,7 @@
   <div id="markPaidModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Money In">
     <div class="modal-card modal-card-sm">
       <div class="modal-header">
-        <h2 class="modal-title">Money In</h2>
+        <h2 class="modal-title" id="markPaidTitle">Money In</h2>
         <button type="button" class="modal-close" id="closeMarkPaidBtn" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
@@ -845,6 +857,22 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" id="cancelMarkPaidBtn">Cancel</button>
         <button type="button" class="btn btn-primary" id="confirmMarkPaidBtn">Money In</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT PAYMENTS MODAL -->
+  <div id="editPaymentsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Payment History">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-header">
+        <h2 class="modal-title">Payment History</h2>
+        <button type="button" class="modal-close" id="closeEditPaymentsBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="editPaymentsList"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="doneEditPaymentsBtn">Done</button>
       </div>
     </div>
   </div>
