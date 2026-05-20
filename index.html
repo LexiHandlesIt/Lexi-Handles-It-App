@@ -128,9 +128,9 @@
     </div>
     <div class="header-right">
       <button class="hamburger-btn" id="hamburgerBtn" aria-label="Open menu" aria-expanded="false">
-        <span></span>
-        <span></span>
-        <span></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
       </button>
       <img src="Lexi Profile.png" alt="Lexi" class="header-avatar" onerror="this.style.display='none'">
     </div>
@@ -327,7 +327,7 @@
               <label>Header</label>
               <div class="colour-input-row">
                 <input type="color" id="colourHeader" value="#7D5730" class="colour-swatch">
-                <div class="rgb-inputs">
+                <div class="rgb-inputs" id="rgbHeader" style="display:none">
                   <label class="rgb-label">R <input type="number" id="colourHeaderR" class="rgb-input" min="0" max="255" value="125"></label>
                   <label class="rgb-label">G <input type="number" id="colourHeaderG" class="rgb-input" min="0" max="255" value="87"></label>
                   <label class="rgb-label">B <input type="number" id="colourHeaderB" class="rgb-input" min="0" max="255" value="48"></label>
@@ -338,7 +338,7 @@
               <label>Accent</label>
               <div class="colour-input-row">
                 <input type="color" id="colourAccent" value="#6B7C5C" class="colour-swatch">
-                <div class="rgb-inputs">
+                <div class="rgb-inputs" id="rgbAccent" style="display:none">
                   <label class="rgb-label">R <input type="number" id="colourAccentR" class="rgb-input" min="0" max="255" value="107"></label>
                   <label class="rgb-label">G <input type="number" id="colourAccentG" class="rgb-input" min="0" max="255" value="124"></label>
                   <label class="rgb-label">B <input type="number" id="colourAccentB" class="rgb-input" min="0" max="255" value="92"></label>
@@ -349,7 +349,7 @@
               <label>Background</label>
               <div class="colour-input-row">
                 <input type="color" id="colourBg" value="#F5F0E8" class="colour-swatch">
-                <div class="rgb-inputs">
+                <div class="rgb-inputs" id="rgbBg" style="display:none">
                   <label class="rgb-label">R <input type="number" id="colourBgR" class="rgb-input" min="0" max="255" value="245"></label>
                   <label class="rgb-label">G <input type="number" id="colourBgG" class="rgb-input" min="0" max="255" value="240"></label>
                   <label class="rgb-label">B <input type="number" id="colourBgB" class="rgb-input" min="0" max="255" value="232"></label>
@@ -395,8 +395,8 @@
     <!-- PAGE 2: PRICE LIST -->
     <section id="page2" class="page" data-page="2">
       <div class="page-header">
-        <h1 class="page-title"><span class="page-num">2.</span> Build Your Price List</h1>
-        <p class="page-sub">Add the jobs you do most. You can always edit these later.</p>
+        <h1 class="page-title" id="page2Title"><span class="page-num">2.</span> Build Your Price List</h1>
+        <p class="page-sub" id="page2Sub">Add the jobs you do most. You can always edit these later.</p>
       </div>
 
       <!-- Add Jobs -->
@@ -821,28 +821,30 @@
     </div>
   </div>
 
-  <!-- MARK PAID MODAL -->
-  <div id="markPaidModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Mark as Paid">
+  <!-- MONEY IN MODAL -->
+  <div id="markPaidModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Money In">
     <div class="modal-card modal-card-sm">
       <div class="modal-header">
-        <h2 class="modal-title">Mark as Paid</h2>
+        <h2 class="modal-title">Money In</h2>
         <button type="button" class="modal-close" id="closeMarkPaidBtn" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
+        <!-- Previous payment summary — shown only when partial payment exists -->
+        <div id="mpPrevInfo" class="mp-prev-info" style="display:none"></div>
         <div class="form-grid-2">
           <div class="form-group">
-            <label for="mpAmount">Amount Paid (£)</label>
+            <label for="mpAmount">Amount Received (£)</label>
             <input type="number" id="mpAmount" min="0" step="0.01" placeholder="0.00">
           </div>
           <div class="form-group">
-            <label for="mpDate">Date Paid</label>
+            <label for="mpDate">Date Received</label>
             <input type="date" id="mpDate">
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" id="cancelMarkPaidBtn">Cancel</button>
-        <button type="button" class="btn btn-primary" id="confirmMarkPaidBtn">Mark Paid</button>
+        <button type="button" class="btn btn-primary" id="confirmMarkPaidBtn">Money In</button>
       </div>
     </div>
   </div>
