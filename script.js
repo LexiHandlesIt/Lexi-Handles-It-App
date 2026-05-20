@@ -33,7 +33,7 @@ let state = {
     type: 'Estimate',
     custTitle: '', custFirstName: '', custLastName: '',
     custAddr: '', custPostcode: '', custPhone: '', custEmail: '',
-    date: '', validFor: '30', validCustom: '',
+    date: '', validFor: '14', validCustom: '',
     ref: '',
     items: [],
     vatRate: '0', vatCustom: '',
@@ -393,11 +393,6 @@ function setupPage1() {
   // Save button
   document.getElementById('saveBusinessBtn').addEventListener('click', () => saveBusinessDetails(true));
 
-  // Backup/restore (page 1 card)
-  document.getElementById('exportDataBtn').addEventListener('click', exportData);
-  document.getElementById('importDataBtn').addEventListener('click', () => document.getElementById('importDataFile').click());
-  document.getElementById('importDataFile').addEventListener('change', importData);
-
   // Backup/restore modal (from menu)
   document.getElementById('exportDataBtn2').addEventListener('click', exportData);
   document.getElementById('importDataBtn2').addEventListener('click', () => document.getElementById('importDataFile2').click());
@@ -641,6 +636,35 @@ function setupPage2() {
     downloadTemplate();
   });
 
+  // Paste zone: accept text or screenshot image
+  document.getElementById('bulkPaste').addEventListener('paste', e => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const zone = document.querySelector('.paste-zone');
+          // Remove any existing preview
+          const old = zone.querySelector('.paste-img-preview');
+          if (old) old.remove();
+          // Create preview
+          const wrap = document.createElement('div');
+          wrap.className = 'paste-img-preview';
+          wrap.innerHTML = `<img src="${ev.target.result}" alt="Pasted price list">
+            <button type="button" class="paste-img-clear" aria-label="Remove image">&#x2715;</button>`;
+          zone.appendChild(wrap);
+          wrap.querySelector('.paste-img-clear').addEventListener('click', () => wrap.remove());
+        };
+        reader.readAsDataURL(file);
+        return; // image handled — stop checking items
+      }
+    }
+  });
+
   // Bulk paste
   document.getElementById('parseBulkBtn').addEventListener('click', () => {
     const text = getVal('bulkPaste');
@@ -654,7 +678,7 @@ function setupPage2() {
     } else if (skipped) {
       toast(`All jobs already in your list.`, 'error');
     } else {
-      toast('No valid jobs found. Format: Job name, price', 'error');
+      toast("Can't read your input — remember format: job, price", 'error');
     }
   });
 
@@ -702,7 +726,7 @@ function readCSV(file) {
     } else if (skipped) {
       toast('All jobs already in your list.', 'error');
     } else {
-      toast('No valid rows found. Format: Job name, price', 'error');
+      toast("Can't read your input — remember format: job, price", 'error');
     }
   };
   reader.readAsText(file);
@@ -712,16 +736,25 @@ function parseJobLines(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   let added = 0, skipped = 0;
   lines.forEach(line => {
+    let name, rest;
     const commaIdx = line.indexOf(',');
-    if (commaIdx === -1) return;
-    const name = line.slice(0, commaIdx).trim();
-    const rest = line.slice(commaIdx + 1).trim();
+    if (commaIdx !== -1) {
+      // Comma present: split on first comma
+      name = line.slice(0, commaIdx).trim();
+      rest = line.slice(commaIdx + 1).trim();
+    } else {
+      // No comma: find the last number (with optional currency symbol) at the end of the line
+      const noCommaMatch = line.match(/^(.*)\s+[£$€]?([\d]+(?:\.\d{1,2})?)\s*$/);
+      if (!noCommaMatch) { skipped++; return; }
+      name = noCommaMatch[1].trim();
+      rest = noCommaMatch[2];
+    }
     const priceMatch = rest.match(/[£$€]?([\d,]+(?:\.\d+)?)/);
-    if (!priceMatch) return;
+    if (!priceMatch) { skipped++; return; }
     const price = parseFloat(priceMatch[1].replace(/,/g, ''));
     const afterPrice = rest.slice(priceMatch.index + priceMatch[0].length).replace(/^\s*,\s*/, '').trim();
     const unit = afterPrice || '';
-    if (!name || isNaN(price)) return;
+    if (!name || isNaN(price)) { skipped++; return; }
     const duplicate = state.priceList.find(j => j.name.toLowerCase() === name.toLowerCase());
     if (duplicate) { skipped++; return; }
     addJob(name, price, unit);
@@ -936,7 +969,11 @@ function setupPage3() {
     recalcTotals();
   });
   document.getElementById('vatCustom').addEventListener('input', recalcTotals);
-  document.getElementById('discountPct').addEventListener('input', recalcTotals);
+  document.getElementById('discountPct').addEventListener('change', e => {
+    document.getElementById('discountCustom').style.display = e.target.value === 'custom' ? 'inline-block' : 'none';
+    recalcTotals();
+  });
+  document.getElementById('discountCustom').addEventListener('input', recalcTotals);
 
   // Signature canvas
   setupSignatureCanvas();
@@ -993,7 +1030,7 @@ function prepareNewQuote() {
     type: 'Estimate',
     custTitle: '', custFirstName: '', custLastName: '',
     custAddr: '', custPostcode: '', custPhone: '', custEmail: '',
-    date: todayStr(), validFor: '30', validCustom: '',
+    date: todayStr(), validFor: '14', validCustom: '',
     ref: buildRef(pendingRefNum),
     items: [],
     vatRate: '0', vatCustom: '',
@@ -1023,14 +1060,25 @@ function populateQuoteForm() {
   setVal('custEmail',     q.custEmail);
   setVal('docRef',        q.ref);
   setVal('docDate',       q.date || todayStr());
-  setVal('docValidFor',   q.validFor || '30');
+  setVal('docValidFor',   q.validFor || '14');
   setVal('docValidCustom',q.validCustom || '');
   setVal('quoteNotes',    q.notes);
   setVal('quotePrivateNotes', q.privateNotes);
   setVal('customTerms',   q.customTerms || '');
   setVal('authSig',       q.authSig || state.company.businessName || '');
   setVal('custSigText',   '');
-  setVal('discountPct',   q.discount || '0');
+  // Set discount select (backwards-compat: old docs stored any number, new ones use preset or 'custom')
+  const savedDisc = String(q.discount || '0');
+  const discPresets = ['0', '5', '10', '20'];
+  if (discPresets.includes(savedDisc)) {
+    document.getElementById('discountPct').value = savedDisc;
+    document.getElementById('discountCustom').style.display = 'none';
+    setVal('discountCustom', '');
+  } else {
+    document.getElementById('discountPct').value = 'custom';
+    setVal('discountCustom', savedDisc);
+    document.getElementById('discountCustom').style.display = 'inline-block';
+  }
   setVal('vatCustom',     q.vatCustom || '');
   document.getElementById('vatSelect').value = q.vatRate || '0';
   document.getElementById('vatCustom').style.display = q.vatRate === 'custom' ? 'inline-block' : 'none';
@@ -1188,7 +1236,8 @@ function recalcTotals() {
   const subtotal  = state.quote.items.reduce((s, i) => s + i.unitPrice * i.qty, 0);
   const vatSel    = document.getElementById('vatSelect').value;
   const vatRate   = vatSel === 'custom' ? parseFloat(getVal('vatCustom')) || 0 : parseFloat(vatSel) || 0;
-  const discPct   = parseFloat(getVal('discountPct')) || 0;
+  const discSel   = document.getElementById('discountPct').value;
+  const discPct   = discSel === 'custom' ? parseFloat(getVal('discountCustom')) || 0 : parseFloat(discSel) || 0;
   const discount  = subtotal * discPct / 100;
   const afterDisc = subtotal - discount;
   const vatAmt    = afterDisc * vatRate / 100;
@@ -1201,7 +1250,9 @@ function recalcTotals() {
 }
 
 function collectQuoteState() {
-  const vatSel = document.getElementById('vatSelect').value;
+  const vatSel  = document.getElementById('vatSelect').value;
+  const discSel = document.getElementById('discountPct').value;
+  const discount = discSel === 'custom' ? getVal('discountCustom') : discSel;
   const selectedTerms = [...document.querySelectorAll('[name="terms"]:checked')].map(cb => cb.value);
   return {
     type:          state.quote.type,
@@ -1219,7 +1270,7 @@ function collectQuoteState() {
     items:         [...state.quote.items],
     vatRate:       vatSel,
     vatCustom:     getVal('vatCustom'),
-    discount:      getVal('discountPct'),
+    discount:      discount,
     notes:         getVal('quoteNotes'),
     privateNotes:  getVal('quotePrivateNotes'),
     selectedTerms,
@@ -1232,6 +1283,8 @@ function collectQuoteState() {
 
 function saveQuote() {
   const q = collectQuoteState();
+  // Always use the live items array directly from state
+  q.items = [...state.quote.items];
   if (!q.custLastName && !q.custFirstName) {
     toast('Please add a customer name.', 'error');
     document.getElementById('custFirstName').focus();
@@ -1628,6 +1681,9 @@ const DOC_CSS = `
 
 function buildQuoteDoc() {
   const q = collectQuoteState();
+  // Always pull the live items from state — collectQuoteState may be called
+  // before the DOM is fully settled in some edge cases
+  q.items = [...state.quote.items];
   const tempDoc = {
     quote: q,
     company: { ...state.company },
@@ -1699,9 +1755,9 @@ function buildDocHtml(doc, docType, extra = {}) {
       <td>${esc(item.unit || '')}</td>
       <td style="text-align:right">${item.qty}</td>
       <td style="text-align:right">${fmtPrice(item.unitPrice)}</td>
-      <td>${fmtPrice(item.unitPrice * item.qty)}</td>
+      <td style="text-align:right">${fmtPrice(item.unitPrice * item.qty)}</td>
     </tr>
-  `).join('');
+  `).join('') || `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:12px 0;font-style:italic">No jobs added — go back and add jobs in Step 2</td></tr>`;
 
   const paymentSection = buildPaymentSection(co, docType);
   const termsSection   = buildTermsSection(q);
@@ -1780,7 +1836,7 @@ function buildDocHtml(doc, docType, extra = {}) {
 }
 
 function buildPaymentSection(co, docType) {
-  if (docType === 'receipt') return '';
+  if (docType !== 'invoice') return '';   // only show on invoices
   const methods = co.payMethods || [];
   let lines = [];
 

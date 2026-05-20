@@ -1155,6 +1155,41 @@ input[type="text"].sig-text-input:focus {
   background: rgba(255,255,255,0.6);
   color: var(--charcoal);
 }
+.paste-img-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: var(--cream);
+  border-radius: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.paste-img-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.paste-img-clear {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--charcoal);
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}
+.paste-img-clear:hover { background: var(--cream); }
 
 /* ===== PRICE LIST ===== */
 .price-list-toolbar {
@@ -1598,6 +1633,26 @@ input[type="text"].sig-text-input:focus {
   border-radius: 6px;
   font-size: 14px;
   text-align: center;
+}
+
+/* ===== DISCOUNT / VAT / VALID-FOR THREE-COLUMN GRID ===== */
+.dvv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0 6px;
+}
+.dvv-grid .vat-select,
+.dvv-grid select {
+  width: 100%;
+}
+.dvv-amount {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--walnut);
+  margin-top: 4px;
+  min-height: 1.1em;
 }
 
 /* ===== TERMS ===== */
@@ -2073,7 +2128,7 @@ input[type="text"].sig-text-input:focus {
   background: var(--white);
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px 20px 14px;
+  padding: 16px 20px 14px;
   margin-bottom: 12px;
   box-shadow: 0 2px 12px rgba(44,44,44,.10);
 }
@@ -2093,11 +2148,25 @@ input[type="text"].sig-text-input:focus {
   transition: opacity 0.15s;
 }
 .nav-hint-close:hover { opacity: 1; }
+.nav-hint-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-right: 22px;
+}
+.nav-hint-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid var(--cream);
+}
 .nav-hint-msg {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   color: var(--charcoal);
-  margin: 0 0 12px;
-  padding-right: 20px;
+  margin: 0 0 10px;
+  line-height: 1.45;
 }
 .nav-hint-suppress {
   display: flex;
