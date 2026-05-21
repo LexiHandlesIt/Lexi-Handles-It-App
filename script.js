@@ -11,6 +11,7 @@ const KEY_REF   = 'tq_refseq';
 const KEY_INV   = 'tq_invseq';
 const KEY_ONBOARDED    = 'tq_onboarded';
 const KEY_PL_ONBOARDED = 'tq_pl_onboarded';
+const KEY_PREVIEW_FIRST_SUPPRESSED = 'tq_preview_first_suppressed';
 
 /* ===== DEFAULT COLOURS ===== */
 const DEFAULT_COLOURS = { primary: '#7D5730', accent: '#6B7C5C', bg: '#F5F0E8' };
@@ -50,6 +51,13 @@ let state = {
 let activeDocId = null;   // for invoice/receipt modals
 let editingJobId = null;  // tracks inline edit to prevent search from blowing it away
 let pendingRefNum = null; // ref number held in memory until quote is actually saved
+let pendingReceiptDocId = null;
+let pendingPreviewSend = null;
+let activePhotoDocId = null;
+let activeEditChoiceDocId = null;
+let receiptPreviewed = false;
+let quotePreviewed = false;
+let activeQuoteDraftDoc = null;
 /* ===== PAYMENT HELPERS ===== */
 // Returns doc.payments array, synthesising one entry from legacy paidAmount/paidDate if needed
 function getDocPayments(doc) {
@@ -64,6 +72,28 @@ function recalcDocPayments(doc) {
   doc.paidAmount = payments.reduce((s, p) => s + (p.amount || 0), 0);
   doc.paid       = doc.paidAmount >= (doc.total || 0);
   doc.paidDate   = payments.length ? payments[payments.length - 1].date : '';
+}
+
+function traderFirstName() {
+  return (state.company.firstName || '').trim() || 'there';
+}
+
+function personaliseText() {
+  const first = traderFirstName();
+  const p1Sub = document.getElementById('page1Sub');
+  if (p1Sub && document.getElementById('page1')?.classList.contains('active')) {
+    const hasSetUp = (state.company.lastName || '').trim() !== '';
+    p1Sub.textContent = hasSetUp
+      ? `Brilliant ${first}, your business is progressing. Let us get your details up to date.`
+      : `Brilliant ${first}, let us get your business details set up.`;
+  }
+  const p3Sub = document.getElementById('page3Sub');
+  if (p3Sub) {
+    const docType = (state.quote.type || 'quote').toLowerCase();
+    p3Sub.textContent = `Hey ${first}. Tell me about your customer and what you are doing for them and I will make your ${docType} ready to send.`;
+  }
+  const savedTitle = document.getElementById('savedJobsTitle');
+  if (savedTitle) savedTitle.textContent = `${first}'s Saved Jobs`;
 }
 
 /* ===== INIT ===== */
@@ -86,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateJobPicker();
   updateColourPreview();
   populateAuthSig();
+  personaliseText();
 
   // Start on page1 (or wherever nav left off)
   showPage('page1');
@@ -131,13 +162,13 @@ function toast(msg, type = '', duration = 3000) {
   }, duration);
 }
 
-function showSavedPopup(label, onDone) {
+function showSavedPopup(label, onDone, duration = 2500) {
   const overlay = document.createElement('div');
   overlay.className = 'saved-popup-overlay';
   overlay.innerHTML = `
     <div class="saved-popup-box">
       <div class="saved-popup-tick">✓</div>
-      <div class="saved-popup-msg">${label || 'Saved!'}</div>
+      <div class="saved-popup-msg">${label || "I've saved that for you."}</div>
     </div>`;
   document.body.appendChild(overlay);
   setTimeout(() => {
@@ -146,7 +177,7 @@ function showSavedPopup(label, onDone) {
       overlay.remove();
       if (onDone) onDone();
     }, 350);
-  }, 1200);
+  }, duration);
 }
 
 const KEY_NAV_HINT = 'tq_nav_hint_suppressed';
@@ -154,6 +185,10 @@ const KEY_NAV_HINT = 'tq_nav_hint_suppressed';
 function showNavHint() {
   if (localStorage.getItem(KEY_NAV_HINT)) return;
   const popup = document.getElementById('navHintPopup');
+  const msg = popup?.querySelector('.nav-hint-msg');
+  if (msg) {
+    msg.textContent = `What would you like to do next ${traderFirstName()}? Use the menu above to explore everything Lexi can help you with.`;
+  }
   if (popup) popup.style.display = 'block';
 }
 
@@ -197,7 +232,7 @@ function showPage(pageId) {
     }
     if (p1Sub) {
       if (hasSetUp) {
-        p1Sub.textContent = 'Brilliant, your business is progressing. Update your business details below.';
+        p1Sub.textContent = `Brilliant ${traderFirstName()}, your business is progressing. Let us get your details up to date.`;
         p1Sub.style.display = '';
         p1Sub.style.textAlign = 'left';
       } else {
@@ -218,6 +253,8 @@ function showPage(pageId) {
     updatePage2Header();
   }
 
+  personaliseText();
+
   // Update page3 title after first save
   if (pageId === 'page3') {
     const hasSaved = state.saved.length > 0 || state.editingDocId;
@@ -234,7 +271,7 @@ function updatePriceListBtn() {
   const btn = document.getElementById('goToPriceListBtn');
   if (!btn) return;
   if (state.priceList.length > 0) {
-    btn.innerHTML = 'Edit Price List';
+    btn.innerHTML = 'Edit My Price List';
   } else {
     btn.innerHTML = '<span class="btn-step-num">2</span> Add Price List';
   }
@@ -244,11 +281,14 @@ function updatePage2Header() {
   const title = document.getElementById('page2Title');
   const sub   = document.getElementById('page2Sub');
   if (state.priceList.length > 0) {
-    if (title) title.textContent = 'Edit Price List';
-    if (sub)   sub.style.display = 'none';
+    if (title) title.textContent = 'Edit My Price List';
+    if (sub) {
+      sub.textContent = `${traderFirstName()}, expanding your offer or focusing on a niche? Make sure you charge the price you deserve for your expertise.`;
+      sub.style.display = '';
+    }
   } else {
     if (title) title.innerHTML = '<span class="page-num">2.</span> Build Your Price List';
-    if (sub) { sub.textContent = 'Add the jobs you do most. You can always edit these later.'; sub.style.display = ''; }
+    if (sub) { sub.textContent = `${traderFirstName()}, add the jobs you do most. You can always edit these later.`; sub.style.display = ''; }
   }
 }
 
@@ -298,6 +338,16 @@ function setupNavigation() {
   document.getElementById('menuNewReceipt')?.addEventListener('click', () => {
     closeMenu();
     openClientPicker('receipt');
+  });
+
+  document.getElementById('menuBankDetails')?.addEventListener('click', () => {
+    closeMenu();
+    openBankDetailsModal();
+  });
+
+  document.getElementById('menuShareLexi')?.addEventListener('click', () => {
+    closeMenu();
+    shareLexiApp();
   });
 
   // Backup & Restore menu item
@@ -483,6 +533,7 @@ function handleLogoUpload(e) {
     state.company.logo = ev.target.result;
     showLogoState();
     save();
+    showSavedPopup("Great Logo, you'll really stand out", null, 5000);
   };
   reader.readAsDataURL(file);
 }
@@ -536,7 +587,15 @@ function populatePage1Fields() {
 }
 
 function saveBusinessDetails(showToast = true) {
+  const firstName = getVal('p1FirstName').trim();
   const lastName = getVal('p1LastName').trim();
+  if (!firstName) {
+    document.getElementById('p1FirstName').classList.add('error');
+    document.getElementById('p1FirstName').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (showToast) toast('First name is required.', 'error');
+    return false;
+  }
+  document.getElementById('p1FirstName').classList.remove('error');
   if (!lastName) {
     document.getElementById('p1LastName').classList.add('error');
     document.getElementById('p1LastName').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -563,6 +622,11 @@ function saveBusinessDetails(showToast = true) {
     if (sortErr) sortErr.style.display = 'none';
   }
 
+  const colourChanged =
+    state.company.brandPrimary !== document.getElementById('colourHeader').value ||
+    state.company.brandAccent !== document.getElementById('colourAccent').value ||
+    state.company.brandBg !== document.getElementById('colourBg').value;
+
   const methods = [];
   if (document.getElementById('payBankTransfer').checked) methods.push('bank');
   if (document.getElementById('payCash').checked)         methods.push('cash');
@@ -571,7 +635,7 @@ function saveBusinessDetails(showToast = true) {
 
   state.company = {
     ...state.company,
-    firstName:    getVal('p1FirstName'),
+    firstName:    firstName,
     lastName:     lastName,
     businessName: getVal('p1BusinessName'),
     phone:        getVal('p1Phone'),
@@ -592,7 +656,12 @@ function saveBusinessDetails(showToast = true) {
   };
   save();
   updateColourPreview();
-  if (showToast) showSavedPopup('Business Details Saved');
+  personaliseText();
+  if (showToast) showSavedPopup(
+    colourChanged ? "Loving the brand colours" : "I've saved your business details.",
+    null,
+    colourChanged ? 5000 : 2500
+  );
   return true;
 }
 
@@ -603,6 +672,17 @@ function setupColourPicker(name, hexId, defaultVal) {
   if (!hex) return;
   hex.addEventListener('input', updateColourPreview);
   hex.addEventListener('change', updateColourPreview);
+  hex.addEventListener('click', () => {
+    if (typeof hex.showPicker === 'function') {
+      try { hex.showPicker(); } catch {}
+    }
+  });
+  hex.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && typeof hex.showPicker === 'function') {
+      e.preventDefault();
+      try { hex.showPicker(); } catch {}
+    }
+  });
 }
 
 function setColour(name, hex) {
@@ -814,7 +894,7 @@ function addIndividualJob() {
       setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
       refreshPriceList();
       updateJobPicker();
-      showSavedPopup('Job Saved');
+      showSavedPopup("I've added that job to your price list.");
     });
     return;
   }
@@ -824,7 +904,7 @@ function addIndividualJob() {
   setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
   refreshPriceList();
   updateJobPicker();
-  showSavedPopup('Job Saved');
+  showSavedPopup("I've added that job to your price list.");
 }
 
 function showDuplicatePrompt(name, onConfirm) {
@@ -941,7 +1021,7 @@ function editJobInline(row, job) {
     save();
     refreshPriceList();
     updateJobPicker();
-    showSavedPopup('Job Updated');
+    showSavedPopup("I've updated that job for you.");
   };
 
   row.querySelector('.save-edit').addEventListener('click', saveEdit);
@@ -1032,7 +1112,7 @@ function setupPage3() {
   document.getElementById('previewQuoteBtn').addEventListener('click', () => openPreview(buildQuoteDoc(), 'quote'));
   document.getElementById('saveQuoteBtn').addEventListener('click', saveQuote);
   document.getElementById('printQuoteBtn').addEventListener('click', () => printDoc(buildQuoteDoc()));
-  document.getElementById('sendQuoteBtn').addEventListener('click', () => sendDoc(buildQuoteDoc(), getDocFilename('quote')));
+  document.getElementById('sendQuoteBtn').addEventListener('click', () => openQuoteModalFromCurrentForm());
 }
 
 function setDocType(type) {
@@ -1040,6 +1120,7 @@ function setDocType(type) {
   document.getElementById('dtEstimate').classList.toggle('active', type === 'Estimate');
   document.getElementById('dtQuote').classList.toggle('active', type === 'Quote');
   generateRef();
+  personaliseText();
 }
 
 function prepareNewQuote() {
@@ -1373,7 +1454,7 @@ function saveQuote() {
   save();
   updateSavedBadge();
   refreshSavedDocs();
-  const popupLabel = isEditing ? 'Changes Saved' : `${docType} Saved`;
+  const popupLabel = isEditing ? "I've saved your changes." : `I've saved your ${docType.toLowerCase()}.`;
   showSavedPopup(popupLabel, () => {
     showPage('page4');
     showNavHint();
@@ -1456,9 +1537,11 @@ function setupPage4() {
     expSel.addEventListener('change', () => {
       const val = expSel.value;
       if (!val) return;
+      if (val === 'customer') {
+        openCustomerDashboard();
+        return;
+      }
       exportDocsCSV(val);
-      // Reset dropdown back to placeholder after triggering
-      setTimeout(() => { expSel.value = ''; }, 300);
     });
   }
 }
@@ -1533,6 +1616,9 @@ function refreshSavedDocs() {
         <div class="saved-doc-actions-left">
           ${actionsLeftHtml}
         </div>
+        <button type="button" class="btn-photo-doc" data-id="${doc.id}" title="Before and after photos" aria-label="Before and after photos">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
         <button type="button" class="btn btn-sm btn-outline btn-edit-doc" data-id="${doc.id}">Edit</button>
         <button type="button" class="btn btn-sm btn-danger-outline btn-delete-doc" data-id="${doc.id}">Delete</button>
       </div>
@@ -1541,16 +1627,14 @@ function refreshSavedDocs() {
     container.appendChild(card);
 
     card.querySelector('.btn-send-quote').addEventListener('click', () => {
-      openPreview(buildDocHtml(doc, 'quote'), 'quote', doc.id);
+      openQuoteModal(doc.id);
     });
     card.querySelector('.btn-send-invoice').addEventListener('click', () => openInvoiceModal(doc.id));
-    card.querySelector('.btn-send-receipt').addEventListener('click', () => {
-      if (doc.paid) openReceiptModal(doc.id);
-      else toast('Record full payment first to send a receipt', 'info');
-    });
+    card.querySelector('.btn-send-receipt').addEventListener('click', () => handleReceiptRequest(doc.id));
     card.querySelector('.btn-mark-paid')?.addEventListener('click', () => openMarkPaid(doc.id));
     card.querySelector('.btn-edit-payment')?.addEventListener('click', () => openEditPayments(doc.id));
-    card.querySelector('.btn-edit-doc').addEventListener('click', () => editDoc(doc.id));
+    card.querySelector('.btn-photo-doc')?.addEventListener('click', () => openPhotosModal(doc.id));
+    card.querySelector('.btn-edit-doc').addEventListener('click', () => openEditChoice(doc.id));
     card.querySelector('.btn-delete-doc').addEventListener('click', () => deleteDoc(doc.id));
   });
 }
@@ -1670,6 +1754,7 @@ function updateSavedBadge() {
 /* ===== MODALS ===== */
 function setupModals() {
   document.getElementById('closePreviewBtn').addEventListener('click', closePreview);
+  document.getElementById('closeQuoteBtn').addEventListener('click', () => document.getElementById('quoteModal').style.display = 'none');
   document.getElementById('closeInvoiceBtn').addEventListener('click', () => document.getElementById('invoiceModal').style.display = 'none');
   document.getElementById('closeReceiptBtn').addEventListener('click', () => document.getElementById('receiptModal').style.display = 'none');
   document.getElementById('closeMarkPaidBtn').addEventListener('click', () => document.getElementById('markPaidModal').style.display = 'none');
@@ -1677,14 +1762,61 @@ function setupModals() {
   document.getElementById('closeEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
   document.getElementById('doneEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
   document.getElementById('closeClientPickerBtn').addEventListener('click', () => document.getElementById('clientPickerModal').style.display = 'none');
+  document.getElementById('closeEditChoiceBtn')?.addEventListener('click', () => document.getElementById('editChoiceModal').style.display = 'none');
+  document.getElementById('closePhotosBtn')?.addEventListener('click', () => document.getElementById('photosModal').style.display = 'none');
+  document.getElementById('savePhotosBtn')?.addEventListener('click', () => document.getElementById('photosModal').style.display = 'none');
+  document.getElementById('closeOutstandingBtn')?.addEventListener('click', closeOutstandingReceipt);
+  document.getElementById('outstandingNoBtn')?.addEventListener('click', closeOutstandingReceipt);
+  document.getElementById('outstandingYesBtn')?.addEventListener('click', () => {
+    const docId = pendingReceiptDocId;
+    closeOutstandingReceipt();
+    if (docId) openReceiptModal(docId);
+  });
+  document.getElementById('closePreviewFirstBtn')?.addEventListener('click', closePreviewFirstModal);
+  document.getElementById('previewFirstYesBtn')?.addEventListener('click', () => {
+    rememberPreviewChoice();
+    const fn = pendingPreviewSend;
+    closePreviewFirstModal();
+    if (fn) fn(true);
+  });
+  document.getElementById('previewFirstNoBtn')?.addEventListener('click', () => {
+    rememberPreviewChoice();
+    const fn = pendingPreviewSend;
+    closePreviewFirstModal();
+    if (fn) fn(false);
+  });
+  document.getElementById('closeBankDetailsBtn')?.addEventListener('click', () => document.getElementById('bankDetailsModal').style.display = 'none');
+  document.getElementById('copyBankDetailsBtn')?.addEventListener('click', copyBankDetails);
+  document.getElementById('shareBankDetailsBtn')?.addEventListener('click', shareBankDetails);
+  document.getElementById('closeCustomerDashboardBtn')?.addEventListener('click', () => document.getElementById('customerDashboardModal').style.display = 'none');
+  document.getElementById('clientPickerNewCustomerBtn')?.addEventListener('click', createNewCustomerFromPicker);
+  document.getElementById('editChoiceMoneyBtn')?.addEventListener('click', () => {
+    const docId = activeEditChoiceDocId;
+    document.getElementById('editChoiceModal').style.display = 'none';
+    if (docId) openEditPayments(docId);
+  });
+  document.getElementById('editChoiceJobBtn')?.addEventListener('click', () => {
+    const docId = activeEditChoiceDocId;
+    document.getElementById('editChoiceModal').style.display = 'none';
+    if (docId) editDoc(docId);
+  });
+  document.getElementById('beforePhotosInput')?.addEventListener('change', e => handlePhotoUpload(e, 'before'));
+  document.getElementById('afterPhotosInput')?.addEventListener('change', e => handlePhotoUpload(e, 'after'));
 
   // Close on overlay click
   [document.getElementById('previewModal'),
+   document.getElementById('quoteModal'),
    document.getElementById('invoiceModal'),
    document.getElementById('receiptModal'),
    document.getElementById('markPaidModal'),
    document.getElementById('editPaymentsModal'),
-   document.getElementById('clientPickerModal')].forEach(m => {
+   document.getElementById('clientPickerModal'),
+   document.getElementById('editChoiceModal'),
+   document.getElementById('photosModal'),
+   document.getElementById('receiptOutstandingModal'),
+   document.getElementById('previewFirstModal'),
+   document.getElementById('bankDetailsModal'),
+   document.getElementById('customerDashboardModal')].forEach(m => {
     m?.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
 
@@ -1699,18 +1831,66 @@ function setupModals() {
     sendDocRaw(wrapped, 'document.html');
   });
 
+  // Quote modal
+  document.getElementById('quotePreviewBtn').addEventListener('click', () => {
+    const doc = getActiveQuoteDoc();
+    if (!doc) return;
+    const quoteData = collectQuoteSendForm();
+    quotePreviewed = true;
+    openPreview(buildDocHtml(applyDocEdits(doc, quoteData), 'quote', quoteData), 'quote', doc.id || null);
+  });
+  document.getElementById('quoteSendBtn').addEventListener('click', () => {
+    if (!quotePreviewed && !localStorage.getItem(KEY_PREVIEW_FIRST_SUPPRESSED)) {
+      pendingPreviewSend = previewFirst => {
+        if (previewFirst) {
+          document.getElementById('quotePreviewBtn').click();
+        } else {
+          sendQuoteFromModal();
+        }
+      };
+      document.getElementById('previewFirstModal').style.display = 'flex';
+      return;
+    }
+    sendQuoteFromModal();
+  });
+
+  function sendQuoteFromModal() {
+    const doc = getActiveQuoteDoc();
+    if (!doc) return;
+    const quoteData = collectQuoteSendForm();
+    const editedDoc = applyDocEdits(doc, quoteData);
+    const html = buildDocHtml(editedDoc, 'quote', quoteData);
+    if (activeDocId) {
+      const savedDoc = state.saved.find(d => d.id === activeDocId);
+      if (savedDoc) {
+        Object.assign(savedDoc, editedDoc);
+        save();
+        refreshSavedDocs();
+      }
+    }
+    document.getElementById('quoteModal').style.display = 'none';
+    sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'));
+    toast('Quote sent!', 'success');
+  }
+
   // Invoice modal
   document.getElementById('invPreviewBtn').addEventListener('click', () => {
     const doc = state.saved.find(d => d.id === activeDocId);
     if (!doc) return;
     const invData = collectInvoiceForm();
-    openPreview(buildDocHtml(doc, 'invoice', invData), 'invoice');
+    openPreview(buildDocHtml(applyDocEdits(doc, invData), 'invoice', invData), 'invoice');
   });
   document.getElementById('invSendBtn').addEventListener('click', () => {
+    sendInvoiceFromModal();
+  });
+
+  function sendInvoiceFromModal() {
     const doc = state.saved.find(d => d.id === activeDocId);
     if (!doc) return;
     const invData = collectInvoiceForm();
-    const html = buildDocHtml(doc, 'invoice', invData);
+    const editedDoc = applyDocEdits(doc, invData);
+    const html = buildDocHtml(editedDoc, 'invoice', invData);
+    Object.assign(doc, editedDoc);
     doc.invoiceSent = true;
     doc.invoiceRef  = invData.invRef;
     save();
@@ -1718,24 +1898,45 @@ function setupModals() {
     document.getElementById('invoiceModal').style.display = 'none';
     sendDoc(html, getDocFilenameFromRef(invData.invRef || 'invoice'));
     toast('Invoice sent!', 'success');
-  });
+  }
 
   // Receipt modal
   document.getElementById('recPreviewBtn').addEventListener('click', () => {
     const doc = state.saved.find(d => d.id === activeDocId);
     if (!doc) return;
     const recData = collectReceiptForm();
-    openPreview(buildDocHtml(doc, 'receipt', recData), 'receipt');
+    receiptPreviewed = true;
+    openPreview(buildDocHtml(applyDocEdits(doc, recData), 'receipt', recData), 'receipt');
   });
   document.getElementById('recSendBtn').addEventListener('click', () => {
+    if (!receiptPreviewed && !localStorage.getItem(KEY_PREVIEW_FIRST_SUPPRESSED)) {
+      pendingPreviewSend = previewFirst => {
+        if (previewFirst) {
+          document.getElementById('recPreviewBtn').click();
+        } else {
+          sendReceiptFromModal();
+        }
+      };
+      document.getElementById('previewFirstModal').style.display = 'flex';
+      return;
+    }
+    sendReceiptFromModal();
+  });
+
+  function sendReceiptFromModal() {
     const doc = state.saved.find(d => d.id === activeDocId);
     if (!doc) return;
     const recData = collectReceiptForm();
+    const editedDoc = applyDocEdits(doc, recData);
+    Object.assign(doc, editedDoc);
+    recordReceiptPayment(doc, recData);
     const html = buildDocHtml(doc, 'receipt', recData);
+    save();
+    refreshSavedDocs();
     sendDoc(html, 'receipt.html');
     document.getElementById('receiptModal').style.display = 'none';
     toast('Receipt sent!', 'success');
-  });
+  }
 
   // Money In — push new payment to payments array
   document.getElementById('confirmMarkPaidBtn').addEventListener('click', () => {
@@ -1751,7 +1952,7 @@ function setupModals() {
     save();
     refreshSavedDocs();
     document.getElementById('markPaidModal').style.display = 'none';
-    showSavedPopup(doc.paid ? 'Fully Paid!' : 'Payment Saved');
+    showSavedPopup(doc.paid ? 'Brilliant, that one is now paid in full.' : "I've saved that payment.");
   });
 }
 
@@ -1760,11 +1961,15 @@ let previewContext = { type: 'quote', docId: null };
 function openPreview(html, type, docId = null) {
   previewContext = { type, docId };
   document.getElementById('previewContent').innerHTML = html;
-  document.getElementById('previewModal').style.display = 'flex';
+  const modal = document.getElementById('previewModal');
+  modal.classList.add('modal-front');
+  modal.style.display = 'flex';
 }
 
 function closePreview() {
-  document.getElementById('previewModal').style.display = 'none';
+  const modal = document.getElementById('previewModal');
+  modal.style.display = 'none';
+  modal.classList.remove('modal-front');
 }
 
 /* ===== CLIENT PICKER (New Invoice / New Receipt from menu) ===== */
@@ -1774,12 +1979,18 @@ function openClientPicker(mode) {
   const warningEl = document.getElementById('clientPickerWarning');
 
   titleEl.textContent = mode === 'invoice'
-    ? 'Who would you like to invoice?'
-    : 'Who is this receipt for?';
+    ? `Who would you like to invoice ${traderFirstName()}?`
+    : `Who is this receipt for ${traderFirstName()}?`;
+  listEl.dataset.mode = mode;
   warningEl.style.display = 'none';
   warningEl.innerHTML = '';
 
-  const docs = [...state.saved].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const docs = [...state.saved].sort((a, b) => {
+    const aq = a.quote || {};
+    const bq = b.quote || {};
+    return (aq.custLastName || '').localeCompare(bq.custLastName || '') ||
+      (aq.custFirstName || '').localeCompare(bq.custFirstName || '');
+  });
 
   if (!docs.length) {
     listEl.innerHTML = '<p class="cp-empty">No saved jobs yet — create an estimate or quote first.</p>';
@@ -1855,25 +2066,106 @@ function showPickerWarning(docId, message) {
   warningEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+function handleReceiptRequest(docId) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  if (doc.paid) {
+    openReceiptModal(docId);
+    return;
+  }
+  pendingReceiptDocId = docId;
+  document.getElementById('receiptOutstandingModal').style.display = 'flex';
+}
+
+function closeOutstandingReceipt() {
+  pendingReceiptDocId = null;
+  document.getElementById('receiptOutstandingModal').style.display = 'none';
+}
+
+function openQuoteModalFromCurrentForm() {
+  const q = collectQuoteState();
+  q.items = [...state.quote.items];
+  if (!q.custLastName && !q.custFirstName) {
+    toast('Please add a customer name.', 'error');
+    document.getElementById('custFirstName').focus();
+    return;
+  }
+  activeDocId = null;
+  activeQuoteDraftDoc = {
+    id: null,
+    quote: q,
+    company: { ...state.company },
+    custName: buildCustName(q),
+    total: calcTotal(q),
+    type: q.type,
+    date: q.date,
+    ref: q.ref,
+    photos: { before: [], after: [] }
+  };
+  populateQuoteSendModal(activeQuoteDraftDoc);
+}
+
+function openQuoteModal(docId) {
+  activeDocId = docId;
+  activeQuoteDraftDoc = null;
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  populateQuoteSendModal(doc);
+}
+
+function populateQuoteSendModal(doc) {
+  quotePreviewed = false;
+  const q = doc.quote || {};
+  const label = q.type || doc.type || 'Quote';
+  document.getElementById('quoteModalTitle').textContent = `Send ${label}`;
+  setVal('quoteCustFirst', q.custFirstName || '');
+  setVal('quoteCustLast', q.custLastName || '');
+  setVal('quoteRef', q.ref || doc.ref || '');
+  setVal('quoteSendDate', q.date || doc.date || todayStr());
+  setVal('quoteItemsText', (q.items || []).map(i => `${i.name}, ${Number(i.unitPrice || 0).toFixed(2)}`).join('\n'));
+  setVal('quoteTotalOverride', (doc.total || calcTotal(q) || 0).toFixed(2));
+  setVal('quoteSendNotes', q.notes || '');
+  document.getElementById('quoteIncludePhotos').checked = false;
+  document.getElementById('quoteModal').style.display = 'flex';
+}
+
+function getActiveQuoteDoc() {
+  return activeDocId ? state.saved.find(d => d.id === activeDocId) : activeQuoteDraftDoc;
+}
+
 function openInvoiceModal(docId) {
   activeDocId = docId;
-  const invRef = nextRef('INV', KEY_INV);
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  const invRef = doc.invoiceRef || doc.ref || nextRef('INV', KEY_INV);
+  const q = doc.quote || {};
   setVal('invRef',     invRef);
   setVal('invDate',    todayStr());
   setVal('invDueDate', addDays(todayStr(), 30));
+  setVal('invCustFirst', q.custFirstName || '');
+  setVal('invCustLast', q.custLastName || '');
+  setVal('invItemsText', (q.items || []).map(i => `${i.name}, ${Number(i.unitPrice || 0).toFixed(2)}`).join('\n'));
+  setVal('invTotalOverride', (doc.total || 0).toFixed(2));
+  setVal('invPayMethod', '');
+  document.getElementById('invIncludePhotos').checked = false;
   setVal('invNotes',   '');
   document.getElementById('invoiceModal').style.display = 'flex';
 }
 
 function openReceiptModal(docId) {
   activeDocId = docId;
+  receiptPreviewed = false;
   const doc = state.saved.find(d => d.id === docId);
   if (!doc) return;
   const payments  = getDocPayments(doc);
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const q = doc.quote || {};
+  setVal('recCustFirst', q.custFirstName || '');
+  setVal('recCustLast', q.custLastName || '');
   setVal('recAmount', (totalPaid > 0 ? totalPaid : (doc.total || 0)).toFixed(2));
   setVal('recDate',   todayStr());
   setVal('recMethod', 'Bank Transfer');
+  document.getElementById('recIncludePhotos').checked = false;
   setVal('recNotes',  '');
   document.getElementById('receiptModal').style.display = 'flex';
 }
@@ -1969,17 +2261,348 @@ function collectInvoiceForm() {
     invRef:    getVal('invRef'),
     invDate:   getVal('invDate'),
     dueDate:   getVal('invDueDate'),
+    custFirstName: getVal('invCustFirst'),
+    custLastName:  getVal('invCustLast'),
+    itemsText: getVal('invItemsText'),
+    totalOverride: getVal('invTotalOverride'),
+    payMethod: getVal('invPayMethod'),
+    includePhotos: document.getElementById('invIncludePhotos')?.checked || false,
     notes:     getVal('invNotes')
+  };
+}
+
+function collectQuoteSendForm() {
+  return {
+    custFirstName: getVal('quoteCustFirst'),
+    custLastName:  getVal('quoteCustLast'),
+    ref: getVal('quoteRef'),
+    date: getVal('quoteSendDate'),
+    itemsText: getVal('quoteItemsText'),
+    totalOverride: getVal('quoteTotalOverride'),
+    quoteNotes: getVal('quoteSendNotes'),
+    includePhotos: document.getElementById('quoteIncludePhotos')?.checked || false
   };
 }
 
 function collectReceiptForm() {
   return {
+    custFirstName: getVal('recCustFirst'),
+    custLastName:  getVal('recCustLast'),
     amount:  getVal('recAmount'),
     date:    getVal('recDate'),
     method:  getVal('recMethod'),
+    includePhotos: document.getElementById('recIncludePhotos')?.checked || false,
     notes:   getVal('recNotes')
   };
+}
+
+function applyDocEdits(doc, data = {}) {
+  const edited = {
+    ...doc,
+    quote: {
+      ...(doc.quote || {}),
+      items: ((doc.quote || {}).items || []).map(i => ({ ...i }))
+    }
+  };
+  const q = edited.quote;
+  if ('custFirstName' in data) q.custFirstName = data.custFirstName || '';
+  if ('custLastName' in data) q.custLastName = data.custLastName || '';
+  if ('ref' in data) {
+    q.ref = data.ref || '';
+    edited.ref = q.ref;
+  }
+  if ('date' in data) {
+    q.date = data.date || '';
+    edited.date = q.date;
+  }
+  if ('quoteNotes' in data) q.notes = data.quoteNotes || '';
+  edited.custName = buildCustName(q);
+
+  if (data.itemsText != null) {
+    const parsed = parseEditableItems(data.itemsText);
+    if (parsed.length) q.items = parsed;
+  }
+  if (data.totalOverride !== undefined && data.totalOverride !== '') {
+    const total = parseFloat(data.totalOverride);
+    if (!isNaN(total)) edited.total = total;
+  } else {
+    edited.total = calcTotal(q);
+  }
+  return edited;
+}
+
+function parseEditableItems(text) {
+  return String(text || '').split(/\r?\n/).map(line => {
+    const parts = line.split(',');
+    const name = (parts[0] || '').trim();
+    const price = parseFloat((parts[1] || '').replace(/[£,]/g, '').trim());
+    if (!name) return null;
+    return { id: uid(), name, unitPrice: isNaN(price) ? 0 : price, unit: '', qty: 1 };
+  }).filter(Boolean);
+}
+
+function recordReceiptPayment(doc, recData) {
+  const amount = parseFloat(recData.amount) || 0;
+  if (amount <= 0) return;
+  if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
+  if (doc.total && amount >= doc.total) {
+    doc.payments = [{ amount: doc.total, date: recData.date || todayStr(), method: recData.method || '' }];
+    recalcDocPayments(doc);
+    return;
+  }
+  const exists = doc.payments.some(p =>
+    Math.abs((p.amount || 0) - amount) < 0.01 &&
+    (p.date || '') === (recData.date || todayStr()) &&
+    (p.method || '') === (recData.method || '')
+  );
+  if (!exists) doc.payments.push({ amount, date: recData.date || todayStr(), method: recData.method || '' });
+  recalcDocPayments(doc);
+}
+
+function openEditChoice(docId) {
+  activeEditChoiceDocId = docId;
+  document.getElementById('editChoiceModal').style.display = 'flex';
+}
+
+function openPhotosModal(docId) {
+  activePhotoDocId = docId;
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  if (!doc.photos) doc.photos = { before: [], after: [] };
+  document.getElementById('beforePhotosInput').value = '';
+  document.getElementById('afterPhotosInput').value = '';
+  renderPhotosPreview(doc);
+  document.getElementById('photosModal').style.display = 'flex';
+}
+
+function handlePhotoUpload(e, which) {
+  const doc = state.saved.find(d => d.id === activePhotoDocId);
+  if (!doc) return;
+  if (!doc.photos) doc.photos = { before: [], after: [] };
+  const files = [...(e.target.files || [])].slice(0, 3);
+  Promise.all(files.map(fileToDataUrl)).then(urls => {
+    doc.photos[which] = urls.slice(0, 3);
+    save();
+    renderPhotosPreview(doc);
+  });
+}
+
+function fileToDataUrl(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = ev => resolve(ev.target.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPhotosPreview(doc) {
+  const render = (id, list) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = (list || []).map(src => `<img src="${src}" alt="Job photo">`).join('') ||
+      '<p class="photo-empty">No photos added yet.</p>';
+  };
+  render('beforePhotosPreview', doc.photos?.before || []);
+  render('afterPhotosPreview', doc.photos?.after || []);
+}
+
+function rememberPreviewChoice() {
+  if (document.getElementById('dontShowPreviewFirst')?.checked) {
+    localStorage.setItem(KEY_PREVIEW_FIRST_SUPPRESSED, '1');
+  }
+}
+
+function closePreviewFirstModal() {
+  pendingPreviewSend = null;
+  document.getElementById('previewFirstModal').style.display = 'none';
+}
+
+function createNewCustomerFromPicker() {
+  const mode = document.getElementById('clientPickerList')?.dataset.mode || 'invoice';
+  document.getElementById('clientPickerModal').style.display = 'none';
+  const q = {
+    type: mode === 'invoice' ? 'Invoice' : 'Receipt',
+    custTitle: '', custFirstName: '', custLastName: '',
+    custAddr: '', custPostcode: '', custPhone: '', custEmail: '',
+    date: todayStr(), validFor: '14', validCustom: '',
+    ref: buildRef((parseInt(localStorage.getItem(KEY_REF) || '100') || 100) + 1),
+    items: [{ id: uid(), name: 'Job', unitPrice: 0, unit: '', qty: 1 }],
+    vatRate: '0', vatCustom: '', discount: '0',
+    notes: '', privateNotes: '', selectedTerms: [], customTerms: '',
+    authSig: '', custSig: '', sigDate: ''
+  };
+  const doc = {
+    id: uid(),
+    quote: q,
+    company: { ...state.company },
+    custName: '',
+    total: 0,
+    type: q.type,
+    date: q.date,
+    ref: q.ref,
+    invoiceSent: false,
+    paid: false,
+    paidAmount: 0,
+    paidDate: '',
+    payments: [],
+    photos: { before: [], after: [] }
+  };
+  state.saved.unshift(doc);
+  save();
+  updateSavedBadge();
+  refreshSavedDocs();
+  if (mode === 'receipt') openReceiptModal(doc.id);
+  else openInvoiceModal(doc.id);
+}
+
+function buildPaymentShareText() {
+  const c = state.company;
+  const lines = [];
+  if ((c.payMethods || []).includes('bank')) {
+    lines.push(`Bank Transfer`);
+    if (c.bankAccHolder) lines.push(`Account name: ${c.bankAccHolder}`);
+    if (c.bankName) lines.push(`Bank: ${c.bankName}`);
+    if (c.bankSort) lines.push(`Sort code: ${c.bankSort}`);
+    if (c.bankAcc) lines.push(`Account number: ${c.bankAcc}`);
+  }
+  if ((c.payMethods || []).includes('cash')) lines.push('Cash on completion');
+  if ((c.payMethods || []).includes('paypal') && c.paypalRef) lines.push(`PayPal: ${c.paypalRef}`);
+  if ((c.payMethods || []).includes('other') && c.payOther) lines.push(c.payOther);
+  return lines.join('\n') || 'No payment details saved yet.';
+}
+
+function openBankDetailsModal() {
+  setVal('bankDetailsShareText', buildPaymentShareText());
+  document.getElementById('bankDetailsModal').style.display = 'flex';
+}
+
+async function copyBankDetails() {
+  const text = getVal('bankDetailsShareText');
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Payment details copied.', 'success');
+  } catch {
+    toast('Select the details and copy them.', 'info');
+  }
+}
+
+async function shareBankDetails() {
+  const text = getVal('bankDetailsShareText');
+  if (navigator.share) {
+    try { await navigator.share({ text, title: 'Payment details' }); return; } catch(e) {}
+  }
+  copyBankDetails();
+}
+
+async function shareLexiApp() {
+  const text = 'I use Lexi Handles It to make quotes, invoices and receipts quicker. Its easy to use, fast and professional. Take a look.';
+  const url = location.href;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Lexi Handles It', text, url }); return; } catch(e) {}
+  }
+  try {
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    toast('Lexi share link copied.', 'success');
+  } catch {
+    toast('Share is not available on this device.', 'error');
+  }
+}
+
+function openCustomerDashboard() {
+  const body = document.getElementById('customerDashboardBody');
+  if (!state.saved.length) {
+    body.innerHTML = '<p class="cp-empty">No saved customers yet.</p>';
+  } else {
+    renderCustomerSelector(buildCustomerGroups());
+  }
+  document.getElementById('customerDashboardModal').style.display = 'flex';
+}
+
+function getCustomerDisplayName(doc) {
+  const q = doc.quote || {};
+  const built = buildCustName(q).trim();
+  return built || (doc.custName || '').trim() || 'Customer details missing';
+}
+
+function buildCustomerGroups() {
+  const groups = new Map();
+  state.saved.forEach(doc => {
+    const q = doc.quote || {};
+    const name = getCustomerDisplayName(doc);
+    const contact = (q.custEmail || q.custPhone || q.custPostcode || '').trim().toLowerCase();
+    const nameKey = name.toLowerCase();
+    const hasRealName = name !== 'Customer details missing';
+    const key = hasRealName ? `${nameKey}|${contact}` : `missing|${doc.ref || doc.id}`;
+    if (!groups.has(key)) groups.set(key, { name, contact, docs: [] });
+    groups.get(key).docs.push(doc);
+  });
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getCustomerTotals(docs) {
+  const paid = docs.reduce((s, d) => s + getDocPayments(d).reduce((p, x) => p + (x.amount || 0), 0), 0);
+  const total = docs.reduce((s, d) => s + (d.total || 0), 0);
+  const refs = docs.map(d => d.invoiceRef || d.ref || d.quote?.ref || 'No ref').filter(Boolean).join(', ');
+  return { paid, total, outstanding: Math.max(0, total - paid), refs };
+}
+
+function renderCustomerSelector(groups) {
+  const body = document.getElementById('customerDashboardBody');
+  body.innerHTML = `
+    <div class="customer-selector-list">
+      ${groups.map((group, idx) => {
+        const totals = getCustomerTotals(group.docs);
+        return `
+          <button type="button" class="customer-selector-row" data-idx="${idx}">
+            <span class="customer-selector-name">${esc(group.name)}</span>
+            <span class="customer-selector-ref">${esc(totals.refs)}</span>
+            <span class="customer-selector-paid">Paid ${fmtPrice(totals.paid)}</span>
+            <span class="customer-selector-outstanding">Outstanding ${fmtPrice(totals.outstanding)}</span>
+          </button>`;
+      }).join('')}
+    </div>`;
+  body.querySelectorAll('.customer-selector-row').forEach(btn => {
+    btn.addEventListener('click', () => renderSingleCustomerDashboard(groups[parseInt(btn.dataset.idx, 10)], groups));
+  });
+}
+
+function renderSingleCustomerDashboard(group, groups) {
+  const body = document.getElementById('customerDashboardBody');
+  const firstDoc = group.docs[0];
+  const q = firstDoc.quote || {};
+  const totals = getCustomerTotals(group.docs);
+  const detailHtml = `
+    <div class="customer-dashboard-card printable-customer-dashboard">
+      <h3>${esc(group.name)}</h3>
+      <p>${esc([q.custAddr, q.custPostcode, q.custPhone, q.custEmail].filter(Boolean).join('\n'))}</p>
+      <div class="customer-dashboard-totals">
+        <span>Jobs: <strong>${group.docs.length}</strong></span>
+        <span>Paid: <strong>${fmtPrice(totals.paid)}</strong></span>
+        <span>Outstanding: <strong>${fmtPrice(totals.outstanding)}</strong></span>
+      </div>
+      <div class="customer-dashboard-jobs">
+        ${group.docs.map(d => `<button type="button" class="cp-row customer-edit-row" data-id="${d.id}">
+          <span>${esc(d.invoiceRef || d.ref || d.quote?.ref || 'No ref')}</span>
+          <span>${esc(d.quote?.items?.map(i => i.name).join(', ') || 'Job')}</span>
+          <span>${fmtPrice(getDocPayments(d).reduce((s, p) => s + (p.amount || 0), 0))} paid</span>
+          <span>${fmtPrice(Math.max(0, (d.total || 0) - getDocPayments(d).reduce((s, p) => s + (p.amount || 0), 0)))} outstanding</span>
+        </button>`).join('')}
+      </div>
+    </div>`;
+  body.innerHTML = `
+    <div class="customer-dashboard-actions">
+      <button type="button" class="btn btn-outline btn-sm" id="customerDashboardBackBtn">Back</button>
+      <button type="button" class="btn btn-primary btn-sm" id="customerDashboardPrintBtn">Print Dashboard</button>
+    </div>
+    ${detailHtml}`;
+  document.getElementById('customerDashboardBackBtn').addEventListener('click', () => renderCustomerSelector(groups));
+  document.getElementById('customerDashboardPrintBtn').addEventListener('click', () => printRaw(detailHtml));
+  body.querySelectorAll('.customer-edit-row').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('customerDashboardModal').style.display = 'none';
+      editDoc(btn.dataset.id);
+    });
+  });
 }
 
 /* ===== DOCUMENT GENERATION ===== */
@@ -2015,6 +2638,10 @@ const DOC_CSS = `
   .sig-img{max-height:60px;max-width:200px}
   .sig-typed{font-family:'Dancing Script',cursive;font-size:1.5rem;color:#2C2C2C}
   .doc-footer{margin-top:32px;padding-top:16px;border-top:1px solid #ddd5c5;font-size:0.75rem;color:#aaa;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
+  .photo-doc-page{page-break-before:always}
+  .photo-doc-group{margin-top:16px}
+  .photo-doc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
+  .photo-doc-grid img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;border:1px solid #ddd5c5}
   @media print{body{padding:0}.doc-wrap{max-width:100%;padding:16px}}
 `;
 
@@ -2044,7 +2671,7 @@ function buildDocHtml(doc, docType, extra = {}) {
   const disc   = parseFloat(q.discount) || 0;
   const afterDisc = sub - sub * disc / 100;
   const vatAmt = afterDisc * vatRate / 100;
-  const total  = afterDisc + vatAmt;
+  const total  = doc.total != null ? doc.total : afterDisc + vatAmt;
 
   let docLabel = q.type || 'Estimate';
   let refLabel = q.ref || '';
@@ -2098,9 +2725,10 @@ function buildDocHtml(doc, docType, extra = {}) {
     </tr>
   `).join('') || `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:12px 0;font-style:italic">No jobs added — go back and add jobs in Step 2</td></tr>`;
 
-  const paymentSection = buildPaymentSection(co, docType);
+  const paymentSection = buildPaymentSection(co, docType, extra.payMethod);
   const termsSection   = buildTermsSection(q);
   const sigSection     = buildSigSection(q, co, docType);
+  const photosSection  = extra.includePhotos ? buildPhotosSection(doc) : '';
 
   const validLine = (() => {
     if (!q.validFor || docType !== 'quote') return '';
@@ -2166,6 +2794,7 @@ function buildDocHtml(doc, docType, extra = {}) {
       ${paymentSection}
       ${termsSection}
       ${sigSection}
+      ${photosSection}
       <div class="doc-footer">
         <span>Generated by Lexi Handles It</span>
         <span>${new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' })}</span>
@@ -2174,7 +2803,7 @@ function buildDocHtml(doc, docType, extra = {}) {
   `;
 }
 
-function buildPaymentSection(co, docType) {
+function buildPaymentSection(co, docType, preferredMethod = '') {
   if (docType !== 'invoice') return '';   // only show on invoices
   const methods = co.payMethods || [];
   let lines = [];
@@ -2185,9 +2814,28 @@ function buildPaymentSection(co, docType) {
   if (methods.includes('cash')) lines.push('Cash on Completion');
   if (methods.includes('paypal') && co.paypalRef) lines.push(`PayPal: ${co.paypalRef}`);
   if (methods.includes('other') && co.payOther)    lines.push(co.payOther);
+  if (preferredMethod) lines.unshift(`Preferred method: ${preferredMethod}`);
 
   if (!lines.length) return '';
   return `<div class="section"><h3>Payment Details</h3><p>${esc(lines.join('\n\n'))}</p></div>`;
+}
+
+function buildPhotosSection(doc) {
+  const photos = doc.photos || {};
+  const before = (photos.before || []).slice(0, 3);
+  const after = (photos.after || []).slice(0, 3);
+  if (!before.length && !after.length) return '';
+  const group = (title, list) => !list.length ? '' : `
+    <div class="photo-doc-group">
+      <h3>${title}</h3>
+      <div class="photo-doc-grid">${list.map(src => `<img src="${src}" alt="${title} photo">`).join('')}</div>
+    </div>`;
+  return `
+    <div class="section photo-doc-page">
+      <h3>Before and After Photos</h3>
+      ${group('Before', before)}
+      ${group('After', after)}
+    </div>`;
 }
 
 function buildTermsSection(q) {
@@ -2295,7 +2943,7 @@ function exportData() {
   a.download = `lexi-backup-${todayStr()}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
-  toast('Backup exported!', 'success');
+  toast("I've exported your backup.", 'success');
 }
 
 function importData(e) {
@@ -2317,7 +2965,7 @@ function importData(e) {
       refreshPriceList();
       refreshSavedDocs();
       updateSavedBadge();
-      toast('Backup restored!', 'success');
+      toast("I've restored your backup.", 'success');
     } catch(err) {
       toast('Invalid backup file. Please check and try again.', 'error');
     }
