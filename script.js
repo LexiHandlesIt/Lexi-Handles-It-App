@@ -672,7 +672,14 @@ function setupColourPicker(name, hexId, defaultVal) {
   if (!hex) return;
   hex.addEventListener('input', updateColourPreview);
   hex.addEventListener('change', updateColourPreview);
+  hex.addEventListener('pointerdown', e => {
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      e.preventDefault();
+      openMobileRgbPicker(hex);
+    }
+  });
   hex.addEventListener('click', () => {
+    if (window.matchMedia('(pointer: coarse)').matches) return;
     if (typeof hex.showPicker === 'function') {
       try { hex.showPicker(); } catch {}
     }
@@ -683,6 +690,76 @@ function setupColourPicker(name, hexId, defaultVal) {
       try { hex.showPicker(); } catch {}
     }
   });
+}
+
+function openMobileRgbPicker(input) {
+  document.querySelector('.mobile-rgb-picker')?.remove();
+  const current = hexToRgb(input.value || '#000000');
+  const picker = document.createElement('div');
+  picker.className = 'mobile-rgb-picker';
+  picker.innerHTML = `
+    <div class="mobile-rgb-panel">
+      <div class="mobile-rgb-head">
+        <strong>Pick your colour</strong>
+        <button type="button" class="mobile-rgb-close" aria-label="Close">×</button>
+      </div>
+      <input type="color" class="mobile-rgb-native" value="${input.value || '#000000'}">
+      <div class="mobile-rgb-fields">
+        <label><input type="number" min="0" max="255" value="${current.r}" data-rgb="r"><span>R</span></label>
+        <label><input type="number" min="0" max="255" value="${current.g}" data-rgb="g"><span>G</span></label>
+        <label><input type="number" min="0" max="255" value="${current.b}" data-rgb="b"><span>B</span></label>
+      </div>
+      <div class="mobile-rgb-preview" style="background:${input.value || '#000000'}"></div>
+      <button type="button" class="btn btn-primary btn-full mobile-rgb-apply">Use this colour</button>
+    </div>`;
+  document.body.appendChild(picker);
+
+  const native = picker.querySelector('.mobile-rgb-native');
+  const preview = picker.querySelector('.mobile-rgb-preview');
+  const fields = [...picker.querySelectorAll('[data-rgb]')];
+
+  const syncFromRgb = () => {
+    const rgb = {
+      r: clampRgb(fields.find(f => f.dataset.rgb === 'r').value),
+      g: clampRgb(fields.find(f => f.dataset.rgb === 'g').value),
+      b: clampRgb(fields.find(f => f.dataset.rgb === 'b').value)
+    };
+    const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+    native.value = hex;
+    preview.style.background = hex;
+    input.value = hex;
+    updateColourPreview();
+  };
+
+  const syncFromNative = () => {
+    const rgb = hexToRgb(native.value);
+    fields.find(f => f.dataset.rgb === 'r').value = rgb.r;
+    fields.find(f => f.dataset.rgb === 'g').value = rgb.g;
+    fields.find(f => f.dataset.rgb === 'b').value = rgb.b;
+    preview.style.background = native.value;
+    input.value = native.value;
+    updateColourPreview();
+  };
+
+  native.addEventListener('input', syncFromNative);
+  fields.forEach(field => field.addEventListener('input', syncFromRgb));
+  picker.querySelector('.mobile-rgb-close').addEventListener('click', () => picker.remove());
+  picker.querySelector('.mobile-rgb-apply').addEventListener('click', () => picker.remove());
+  picker.addEventListener('click', e => { if (e.target === picker) picker.remove(); });
+}
+
+function hexToRgb(hex) {
+  const clean = String(hex || '#000000').replace('#', '');
+  const n = parseInt(clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(v => clampRgb(v).toString(16).padStart(2, '0')).join('');
+}
+
+function clampRgb(v) {
+  return Math.max(0, Math.min(255, parseInt(v, 10) || 0));
 }
 
 function setColour(name, hex) {
@@ -1603,13 +1680,13 @@ function refreshSavedDocs() {
       </div>
       <div class="journey-btns">
         <button type="button" class="journey-btn btn-send-quote" data-id="${doc.id}">
-          <span class="jb-circle">A</span> Send ${esc(docType)}
+          <span class="jb-circle">A</span> ${esc(docType)}
         </button>
         <button type="button" class="journey-btn btn-send-invoice" data-id="${doc.id}">
-          <span class="jb-circle">B</span> Send Invoice
+          <span class="jb-circle">B</span> Invoice
         </button>
         <button type="button" class="journey-btn btn-send-receipt" data-id="${doc.id}">
-          <span class="jb-circle">C</span> Send Receipt
+          <span class="jb-circle">C</span> Receipt
         </button>
       </div>
       <div class="saved-doc-actions">

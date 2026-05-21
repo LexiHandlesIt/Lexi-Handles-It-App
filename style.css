@@ -935,6 +935,73 @@ input[type="text"].sig-text-input:focus {
   border-radius: 4px;
 }
 
+.mobile-rgb-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(44,44,44,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.mobile-rgb-panel {
+  width: min(360px, 100%);
+  background: var(--white);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  padding: 16px;
+}
+.mobile-rgb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--walnut);
+  margin-bottom: 12px;
+}
+.mobile-rgb-close {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: var(--cream);
+  font-size: 1.2rem;
+  color: var(--charcoal);
+}
+.mobile-rgb-native {
+  width: 100%;
+  height: 150px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0;
+  background: var(--white);
+}
+.mobile-rgb-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0;
+}
+.mobile-rgb-fields label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  color: var(--charcoal);
+}
+.mobile-rgb-fields input {
+  width: 100%;
+  text-align: center;
+}
+.mobile-rgb-preview {
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
 
 /* ===== COLOUR PREVIEW ===== */
 .colour-preview {
@@ -1791,7 +1858,7 @@ input[type="text"].sig-text-input:focus {
   align-items: center;
   gap: 10px;
   margin-bottom: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .export-group {
   display: flex;
@@ -1804,7 +1871,15 @@ input[type="text"].sig-text-input:focus {
   color: var(--walnut);
 }
 @media (max-width: 480px) {
-  .export-group { margin-left: 0; }
+  .saved-filter-bar { gap: 8px; }
+  .export-group { margin-left: 0; gap: 6px; }
+  .saved-filter-label { font-size: 0.82rem; }
+  .saved-filter-select {
+    min-width: 0;
+    width: 92px;
+    padding: 8px 8px;
+  }
+  .export-select { width: 112px; }
 }
 .saved-filter-label {
   font-size: 0.875rem;
