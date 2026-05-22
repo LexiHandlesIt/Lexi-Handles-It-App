@@ -393,6 +393,7 @@ input[type="text"].sig-text-input:focus {
 .btn-full { width: 100%; }
 
 .btn-next { background: var(--sage); color: var(--white); }
+.w-100 { width: 100%; }
 
 /* ===== PAGE FOOTER ===== */
 .page-footer {
@@ -1866,7 +1867,10 @@ input[type="text"].sig-text-input:focus {
   z-index: 1;
   line-height: 1;
 }
-.input-pfx input {
+.input-pfx input,
+.form-group .input-pfx input[type="number"],
+.form-group .input-pfx input[type="text"],
+.jde-item-row .input-pfx input[type="number"] {
   padding-left: 34px;
   width: 100%;
 }
@@ -1940,7 +1944,26 @@ input[type="text"].sig-text-input:focus {
   margin-bottom: 8px;
 }
 
-.saved-doc-name { font-weight: 600; font-size: 1rem; }
+.saved-doc-name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--walnut);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(125, 87, 48, 0.4);
+  transition: text-decoration-color 0.15s;
+  line-height: 1.3;
+}
+.saved-doc-name:hover {
+  text-decoration-style: solid;
+  text-decoration-color: var(--walnut);
+}
 .saved-doc-ref { font-size: 0.8rem; color: #888; }
 .saved-doc-date { font-size: 0.85rem; color: #888; }
 .saved-doc-total { font-weight: 700; color: var(--walnut); font-size: 1.05rem; }
@@ -2010,7 +2033,6 @@ input[type="text"].sig-text-input:focus {
   display: flex;
   gap: 8px;
   align-items: center;
-  justify-content: flex-end;
   padding-top: 10px;
   border-top: 1px solid var(--cream-d);
 }
@@ -2027,6 +2049,19 @@ input[type="text"].sig-text-input:focus {
   font-weight: 600;
   white-space: nowrap;
 }
+
+.saved-doc-payment-tally {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0 2px;
+  border-top: 1px solid var(--cream-d);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.sdpt-paid { color: var(--success); }
+.sdpt-outstanding { color: var(--walnut); font-weight: 500; }
+.sdpt-full { color: var(--success); font-weight: 500; }
 
 /* ===== EDIT-PAYMENT PENCIL BUTTON ===== */
 .btn-edit-payment {
@@ -2161,16 +2196,25 @@ input[type="text"].sig-text-input:focus {
 .btn-walnut:active { transform: scale(0.98); }
 
 /* Customer Edit Choice modal */
+.cec-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  padding: 16px;
+}
 .cec-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  font-size: 1rem;
-  padding: 14px 16px;
-  text-align: left;
-  justify-content: flex-start;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 14px 8px;
+  flex: 1;
+  text-align: center;
+  line-height: 1.2;
 }
-.cec-icon { font-size: 1.2rem; }
 
 /* Job picker inside edit choice modal */
 .cec-pick-label {
@@ -2232,11 +2276,145 @@ input[type="text"].sig-text-input:focus {
   padding-bottom: 12px;
   margin-bottom: 14px;
 }
-.cdv-header-actions {
+/* Brand SVG icons used in contact lines and section labels */
+.cdv-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  color: var(--sage);
+}
+.cdv-icon-label {
+  color: var(--walnut);
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+/* Per-job action bar inside customer dashboard */
+.cdv-job-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--cream);
+}
+.cdv-job-actions .btn {
+  font-size: 0.82rem;
+}
+.cdv-btn-camera,
+.cdv-btn-download {
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  color: var(--charcoal);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cdv-btn-camera:hover,
+.cdv-btn-download:hover { background: var(--cream-d); }
+
+/* ===== JOB DETAILS EDIT MODAL ===== */
+.jde-section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.jde-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 10px;
+}
+.jde-item-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 32px;
+  gap: 8px;
+  align-items: center;
+}
+.jde-item-row input[type="text"],
+.jde-item-row input[type="number"] {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+  background: var(--white);
+  color: var(--charcoal);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.jde-item-row input:focus {
+  outline: none;
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px rgba(var(--sage-rgb), .15);
+}
+.jde-item-row .input-pfx input[type="number"] {
+  padding-left: 28px;
+}
+.jde-item-remove {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: color var(--transition), background var(--transition);
+}
+.jde-item-remove:hover { color: var(--danger); background: rgba(200,60,60,.08); }
+.jde-picker-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+.jde-picker-list .pick-item {
+  padding: 9px 12px;
+}
+.jde-divider {
+  border: none;
+  border-top: 1.5px solid var(--border);
+  margin: 16px 0 12px;
+}
+.jde-total-hint {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.jde-item-headers {
+  display: grid;
+  grid-template-columns: 1fr 120px 32px;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.jde-item-headers span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.jde-empty-hint {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 12px 0;
+}
+
+/* Customer button on saved doc card */
+.btn-customer-dash {
+  width: 100%;
+  justify-content: center;
 }
 .cdv-name {
   font-size: 1.2rem;
@@ -2258,9 +2436,10 @@ input[type="text"].sig-text-input:focus {
   line-height: 1.4;
 }
 .cdv-contact-icon {
-  font-size: 0.85rem;
   flex-shrink: 0;
-  margin-top: 1px;
+  display: inline-flex;
+  align-items: flex-start;
+  padding-top: 2px;
 }
 .cdv-summary-bar {
   display: grid;

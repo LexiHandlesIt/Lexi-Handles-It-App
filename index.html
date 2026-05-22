@@ -155,10 +155,6 @@
       View Saved Jobs
       <span class="nav-menu-badge" id="savedBadge" style="display:none">0</span>
     </button>
-    <button class="nav-menu-item" id="menuCustomerDashboard">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Customer Dashboard
-    </button>
     <button class="nav-menu-item" id="menuBankDetails">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><line x1="7" y1="13" x2="17" y2="13"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
       Send Bank Details
@@ -573,6 +569,7 @@
             <input type="date" id="docDate">
           </div>
         </div>
+        <button type="button" class="btn btn-primary btn-lg w-100" id="saveCustomerGoToJobsBtn" style="margin-top:8px">Save &amp; Add Jobs →</button>
       </div>
 
       <!-- Step 2: Add Jobs -->
@@ -739,7 +736,6 @@
           <label for="exportSelect" class="saved-filter-label">Export:</label>
           <select id="exportSelect" class="saved-filter-select export-select">
             <option value="all" selected>All</option>
-            <option value="customer">Customer</option>
             <option value="Estimate">Estimates</option>
             <option value="Quote">Quotes</option>
             <option value="invoiced">Invoiced</option>
@@ -1149,15 +1145,18 @@
         <h2 class="modal-title">What would you like to edit?</h2>
         <button type="button" class="modal-close" id="closeCustEditChoiceBtn" aria-label="Close">✕</button>
       </div>
-      <div class="modal-body stacked-actions" id="custEditChoiceMain">
-        <button type="button" class="btn btn-outline btn-full cec-btn" id="custEditDetailsBtn">
-          <span class="cec-icon">👤</span> Customer Details
+      <div class="modal-body cec-row" id="custEditChoiceMain">
+        <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditDetailsBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Customer Details
         </button>
-        <button type="button" class="btn btn-primary btn-full cec-btn" id="custEditJobBtn">
-          <span class="cec-icon">📋</span> Job Details
+        <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditJobBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Job Details
         </button>
-        <button type="button" class="btn btn-success btn-full cec-btn" id="custEditMoneyBtn">
-          <span class="cec-icon">💰</span> Money In
+        <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditMoneyBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="bold" font-family="Arial,sans-serif" fill="currentColor" stroke="none">£</text></svg>
+          Money In
         </button>
       </div>
       <div id="custEditJobPicker" style="display:none" class="modal-body"></div>
@@ -1210,10 +1209,31 @@
           <label for="cdeCustEmail">Email</label>
           <input type="email" id="cdeCustEmail" autocomplete="email">
         </div>
+        <div class="form-group">
+          <label for="cdeCustPrivateNotes">Private Notes</label>
+          <textarea id="cdeCustPrivateNotes" rows="3" placeholder="Notes visible only to you — not shown on documents"></textarea>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" id="cancelCustDetailsEditBtn">Cancel</button>
         <button type="button" class="btn btn-primary" id="saveCustDetailsBtn">Save Details</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JOB DETAILS EDIT MODAL -->
+  <div id="jobDetailsEditModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Edit Job Details">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title" id="jobDetailsEditTitle">Job Details</h2>
+        <button type="button" class="modal-close" id="closeJobDetailsEditBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="jobDetailsEditBody">
+        <!-- rendered dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="cancelJobDetailsEditBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveJobDetailsBtn">Save Changes</button>
       </div>
     </div>
   </div>

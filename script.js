@@ -379,11 +379,6 @@ function setupNavigation() {
     openClientPicker('receipt');
   });
 
-  document.getElementById('menuCustomerDashboard')?.addEventListener('click', () => {
-    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
-    closeMenu();
-    openCustomerDashboard();
-  });
 
   document.getElementById('menuBankDetails')?.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
@@ -438,6 +433,20 @@ function setupNavigation() {
   });
   document.getElementById('goToQuoteBtn').addEventListener('click', () => {
     showPage('page3');
+  });
+  document.getElementById('saveCustomerGoToJobsBtn')?.addEventListener('click', () => {
+    const first = (getVal('custFirstName') || '').trim();
+    const last  = (getVal('custLastName')  || '').trim();
+    if (!first && !last) {
+      toast('Please enter the customer\'s first or last name.', 'error');
+      document.getElementById('custFirstName').focus();
+      return;
+    }
+    // Scroll smoothly to the Add Jobs card (Step 2 — second .card in page3)
+    const step2 = document.querySelectorAll('#page3 .card')[1];
+    if (step2) step2.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Focus the job search so they can start adding immediately
+    setTimeout(() => document.getElementById('jobPickerSearch')?.focus(), 400);
   });
   document.getElementById('backToSetupBtn').addEventListener('click', () => showPage('page1'));
   document.getElementById('createFirstQuoteBtn')?.addEventListener('click', () => {
@@ -1767,10 +1776,6 @@ function setupPage4() {
     expSel.addEventListener('change', () => {
       const val = expSel.value;
       if (!val) return;
-      if (val === 'customer') {
-        openCustomerDashboard();
-        return;
-      }
       exportDocsCSV(val);
     });
   }
@@ -1814,19 +1819,10 @@ function refreshSavedDocs() {
     const payments   = getDocPayments(doc);
     const totalPaid  = payments.reduce((s, p) => s + (p.amount || 0), 0);
 
-    const actionsLeftHtml = doc.paid
-      ? `<span class="type-badge paid">Paid ${doc.paidDate ? formatDate(doc.paidDate) : ''}</span>
-         <button type="button" class="btn-edit-payment" data-id="${doc.id}" title="View / edit payments" aria-label="Edit payments">✎</button>`
-      : payments.length > 0
-        ? `<span class="partial-paid-label">Paid ${fmtPrice(totalPaid)} of ${fmtPrice(doc.total || 0)}</span>
-           <button type="button" class="btn-edit-payment" data-id="${doc.id}" title="Edit payments" aria-label="Edit payments">✎</button>
-           <button type="button" class="btn btn-sm btn-outline btn-mark-paid" data-id="${doc.id}">+ Money In</button>`
-        : `<button type="button" class="btn btn-sm btn-outline btn-mark-paid" data-id="${doc.id}">✓ Money In</button>`;
-
     card.innerHTML = `
       <div class="saved-doc-header">
         <div>
-          <div class="saved-doc-name">${esc(doc.custName || 'Unknown Customer')}</div>
+          <button type="button" class="saved-doc-name btn-customer-dash" data-id="${doc.id}">${esc(doc.custName || 'Unknown Customer')}</button>
           <div class="saved-doc-ref">${esc(doc.ref || '')} &bull; ${formatDate(doc.date)}</div>
         </div>
         <div style="text-align:right">
@@ -1845,30 +1841,19 @@ function refreshSavedDocs() {
           <span class="jb-circle">C</span> Receipt
         </button>
       </div>
-      <div class="saved-doc-actions">
-        <div class="saved-doc-actions-left">
-          ${actionsLeftHtml}
-        </div>
-        <button type="button" class="btn-photo-doc" data-id="${doc.id}" title="Before and after photos" aria-label="Before and after photos">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </button>
-        <button type="button" class="btn btn-sm btn-outline btn-edit-doc" data-id="${doc.id}">Edit</button>
-        <button type="button" class="btn btn-sm btn-danger-outline btn-delete-doc" data-id="${doc.id}">Delete</button>
-      </div>
+      ${totalPaid > 0 ? `
+      <div class="saved-doc-payment-tally">
+        <span class="sdpt-paid">Paid ${fmtPrice(totalPaid)}</span>
+        ${totalPaid < (doc.total || 0) ? `<span class="sdpt-outstanding">&middot; ${fmtPrice(Math.max(0, (doc.total || 0) - totalPaid))} outstanding</span>` : '<span class="sdpt-full">&#10003; Paid in full</span>'}
+      </div>` : ''}
     `;
 
     container.appendChild(card);
 
-    card.querySelector('.btn-send-quote').addEventListener('click', () => {
-      openQuoteModal(doc.id);
-    });
+    card.querySelector('.btn-send-quote').addEventListener('click', () => openQuoteModal(doc.id));
     card.querySelector('.btn-send-invoice').addEventListener('click', () => openInvoiceModal(doc.id));
     card.querySelector('.btn-send-receipt').addEventListener('click', () => handleReceiptRequest(doc.id));
-    card.querySelector('.btn-mark-paid')?.addEventListener('click', () => openMarkPaid(doc.id));
-    card.querySelector('.btn-edit-payment')?.addEventListener('click', () => openEditPayments(doc.id));
-    card.querySelector('.btn-photo-doc')?.addEventListener('click', () => openPhotosModal(doc.id));
-    card.querySelector('.btn-edit-doc').addEventListener('click', () => openEditChoice(doc.id));
-    card.querySelector('.btn-delete-doc').addEventListener('click', () => deleteDoc(doc.id));
+    card.querySelector('.btn-customer-dash').addEventListener('click', () => openCustomerDashboardForDoc(doc.id));
   });
 }
 
@@ -1997,8 +1982,8 @@ function setupModals() {
   document.getElementById('doneEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
   document.getElementById('closeClientPickerBtn').addEventListener('click', () => document.getElementById('clientPickerModal').style.display = 'none');
   document.getElementById('closeEditChoiceBtn')?.addEventListener('click', () => document.getElementById('editChoiceModal').style.display = 'none');
-  document.getElementById('closePhotosBtn')?.addEventListener('click', () => document.getElementById('photosModal').style.display = 'none');
-  document.getElementById('savePhotosBtn')?.addEventListener('click', () => document.getElementById('photosModal').style.display = 'none');
+  document.getElementById('closePhotosBtn')?.addEventListener('click', closePhotosAndReturn);
+  document.getElementById('savePhotosBtn')?.addEventListener('click', closePhotosAndReturn);
   document.getElementById('closeOutstandingBtn')?.addEventListener('click', closeOutstandingReceipt);
   document.getElementById('outstandingNoBtn')?.addEventListener('click', closeOutstandingReceipt);
   document.getElementById('outstandingYesBtn')?.addEventListener('click', () => {
@@ -2033,6 +2018,9 @@ function setupModals() {
   document.getElementById('closeCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('cancelCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('saveCustDetailsBtn')?.addEventListener('click', saveCustomerDetails);
+  document.getElementById('closeJobDetailsEditBtn')?.addEventListener('click', () => document.getElementById('jobDetailsEditModal').style.display = 'none');
+  document.getElementById('cancelJobDetailsEditBtn')?.addEventListener('click', () => document.getElementById('jobDetailsEditModal').style.display = 'none');
+  document.getElementById('saveJobDetailsBtn')?.addEventListener('click', saveJobDetails);
   document.getElementById('clientPickerNewCustomerBtn')?.addEventListener('click', createNewCustomerFromPicker);
   document.getElementById('editChoiceMoneyBtn')?.addEventListener('click', () => {
     const docId = activeEditChoiceDocId;
@@ -2344,6 +2332,16 @@ function setupModals() {
     save();
     refreshSavedDocs();
     document.getElementById('markPaidModal').style.display = 'none';
+    // Return to customer dashboard if it was open when Money In was triggered
+    if (activeCustomerGroup) {
+      try {
+        const groups = buildCustomerGroups();
+        const updatedGroup = groups.find(g => g.docs.some(d => d.id === activeDocId)) || activeCustomerGroup;
+        activeCustomerGroup = updatedGroup;
+        document.getElementById('customerDashboardModal').style.display = 'flex';
+        renderSingleCustomerDashboard(updatedGroup, groups);
+      } catch(e) { console.error('Dashboard re-render error:', e); }
+    }
     showSavedPopup(doc.paid ? 'Brilliant, that one is now paid in full.' : "I've saved that payment.");
   });
 }
@@ -2762,6 +2760,18 @@ function openEditChoice(docId) {
   document.getElementById('editChoiceModal').style.display = 'flex';
 }
 
+function closePhotosAndReturn() {
+  document.getElementById('photosModal').style.display = 'none';
+  // If photos were opened from the customer dashboard, go back to it
+  if (activeCustomerGroup) {
+    const groups = buildCustomerGroups();
+    const group = groups.find(g => g.docs.some(d => d.id === activePhotoDocId)) || activeCustomerGroup;
+    activeCustomerGroup = group;
+    document.getElementById('customerDashboardModal').style.display = 'flex';
+    renderSingleCustomerDashboard(group, groups);
+  }
+}
+
 function openPhotosModal(docId) {
   activePhotoDocId = docId;
   const doc = state.saved.find(d => d.id === docId);
@@ -2894,16 +2904,24 @@ async function shareBankDetails() {
 
 async function shareLexiApp() {
   const text = 'I use Lexi Handles It to make quotes, invoices and receipts quicker. Its easy to use, fast and professional. Take a look.';
-  const url = location.href;
+  const url = 'https://www.lexihandlesit.com';
   if (navigator.share) {
     try { await navigator.share({ title: 'Lexi Handles It', text, url }); return; } catch(e) {}
   }
   try {
     await navigator.clipboard.writeText(`${text}\n${url}`);
-    toast('Lexi share link copied.', 'success');
+    toast('Link copied to clipboard.', 'success');
   } catch {
     toast('Share is not available on this device.', 'error');
   }
+}
+
+function openCustomerDashboardForDoc(docId) {
+  const groups = buildCustomerGroups();
+  const group = groups.find(g => g.docs.some(d => d.id === docId));
+  if (!group) return;
+  document.getElementById('customerDashboardModal').style.display = 'flex';
+  renderSingleCustomerDashboard(group, groups);
 }
 
 function openCustomerDashboard() {
@@ -2966,7 +2984,8 @@ function renderCustomerSelector(groups) {
 
 function buildCustomerJobSection(d) {
   const q = d.quote || {};
-  const items = q.items || [];
+  // items may live in q.items or (legacy) d.items
+  const items = (q.items && q.items.length ? q.items : null) || (d.items && d.items.length ? d.items : null) || [];
   const subtotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
   const discPct  = parseFloat(q.discount) || 0;
   const discount = subtotal * discPct / 100;
@@ -3003,7 +3022,7 @@ function buildCustomerJobSection(d) {
 
   const paymentsHtml = payments.length ? `
     <div class="cdv-section">
-      <div class="cdv-section-label">💳 Payments</div>
+      <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</div>
       ${payments.map((p, i) => `
         <div class="cdv-payment-row">
           <span class="cdv-pay-num">Payment ${i + 1}</span>
@@ -3015,7 +3034,7 @@ function buildCustomerJobSection(d) {
         : `<div class="cdv-paid-stamp">✓ Paid in full</div>`}
     </div>` : `
     <div class="cdv-section">
-      <div class="cdv-section-label">💳 Payments</div>
+      <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</div>
       <p class="cdv-empty">No payments recorded yet.</p>
     </div>`;
 
@@ -3058,6 +3077,16 @@ function buildCustomerJobSection(d) {
       ${notesHtml}
       ${privateHtml}
       ${photosHtml}
+      <div class="cdv-job-actions">
+        <button type="button" class="btn btn-sm btn-walnut cdv-btn-edit" data-id="${d.id}">✎ Edit</button>
+        <button type="button" class="btn-photo-doc cdv-btn-camera" data-id="${d.id}" title="Before and after photos">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+        <button type="button" class="btn-photo-doc cdv-btn-download" title="Download customer dashboard">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button type="button" class="btn btn-sm btn-danger-outline cdv-btn-delete" data-id="${d.id}">Delete</button>
+      </div>
     </div>`;
 }
 
@@ -3069,31 +3098,26 @@ function renderSingleCustomerDashboard(group, groups) {
   const totals = getCustomerTotals(group.docs);
 
   // Contact details
+  const iconPin  = `<svg class="cdv-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+  const iconPhone = `<svg class="cdv-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.44 2 2 0 0 1 3.57 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.29 6.29l1.12-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+  const iconMail  = `<svg class="cdv-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
   const contactLines = [
-    q.custAddr    ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">📍</span>${esc(q.custAddr)}${q.custPostcode ? ', ' + esc(q.custPostcode) : ''}</span>` : '',
-    q.custPhone   ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">📞</span>${esc(q.custPhone)}</span>` : '',
-    q.custEmail   ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">✉</span>${esc(q.custEmail)}</span>` : '',
+    q.custAddr    ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">${iconPin}</span>${esc(q.custAddr)}${q.custPostcode ? ', ' + esc(q.custPostcode) : ''}</span>` : '',
+    q.custPhone   ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">${iconPhone}</span>${esc(q.custPhone)}</span>` : '',
+    q.custEmail   ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">${iconMail}</span>${esc(q.custEmail)}</span>` : '',
   ].filter(Boolean).join('');
 
   // Put customer name in modal title
   const titleEl = document.getElementById('customerDashboardTitle');
   if (titleEl) titleEl.textContent = group.name;
 
-  const detailHtml = `
+  // contentHtml = pure dashboard content (used for download — no buttons)
+  const contentHtml = `
     <div class="customer-dashboard-card printable-customer-dashboard">
       <div class="cdv-header">
-        <div class="cdv-header-actions">
-          <button type="button" class="btn btn-outline btn-sm" id="customerDashboardBackBtn">Back</button>
-          <button type="button" class="btn btn-walnut btn-sm" id="customerDashboardEditBtn">✎ Edit</button>
-          <button type="button" class="btn btn-primary btn-sm" id="customerDashboardPrintBtn">Print Dashboard</button>
-        </div>
         ${contactLines ? `<div class="cdv-contact">${contactLines}</div>` : ''}
       </div>
       <div class="cdv-summary-bar">
-        <div class="cdv-summary-item">
-          <span class="cdv-summary-label">Jobs</span>
-          <span class="cdv-summary-value">${group.docs.length}</span>
-        </div>
         <div class="cdv-summary-item">
           <span class="cdv-summary-label">Total Charged</span>
           <span class="cdv-summary-value">${fmtPrice(totals.total)}</span>
@@ -3112,29 +3136,56 @@ function renderSingleCustomerDashboard(group, groups) {
       </div>
     </div>`;
 
-  body.innerHTML = detailHtml;
+  body.innerHTML = contentHtml;
 
-  document.getElementById('customerDashboardBackBtn').addEventListener('click', () => {
-    activeCustomerGroup = null;
-    renderCustomerSelector(groups);
+  // Per-job download buttons (each opens full customer dashboard download)
+  body.querySelectorAll('.cdv-btn-download').forEach(btn => {
+    btn.addEventListener('click', () => downloadCustomerDashboard(group.name, contentHtml));
   });
-  document.getElementById('customerDashboardEditBtn').addEventListener('click', () => openCustomerEditChoice());
-  document.getElementById('customerDashboardPrintBtn').addEventListener('click', () => printRaw(detailHtml));
+
+  // Per-job action buttons
+  body.querySelectorAll('.cdv-btn-edit').forEach(btn => {
+    btn.addEventListener('click', () => openCustomerEditChoice(btn.dataset.id));
+  });
+  body.querySelectorAll('.cdv-btn-camera').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('customerDashboardModal').style.display = 'none';
+      openPhotosModal(btn.dataset.id);
+    });
+  });
+  body.querySelectorAll('.cdv-btn-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('customerDashboardModal').style.display = 'none';
+      deleteDoc(btn.dataset.id);
+    });
+  });
 }
 
 /* ===== CUSTOMER EDIT CHOICE ===== */
-function openCustomerEditChoice() {
-  const modal = document.getElementById('customerEditChoiceModal');
-  const jobList = document.getElementById('custEditJobPicker');
-  // Reset to main choice view
+let activeEditDocId = null; // docId pre-selected when Edit is clicked on a specific job card
+
+function openCustomerEditChoice(docId) {
+  activeEditDocId = docId || null;
+  // Personalise the title with customer first name if available
+  try {
+    const first = (activeCustomerGroup?.docs[0]?.quote?.custFirstName || '').trim();
+    const titleEl = document.getElementById('customerEditChoiceModal')?.querySelector('.modal-title');
+    if (titleEl) titleEl.textContent = first ? `What would you like to edit, ${first}?` : 'What would you like to edit?';
+  } catch(e) {}
+  // Reset to main choice view and show
   document.getElementById('custEditChoiceMain').style.display = '';
-  jobList.style.display = 'none';
-  modal.style.display = 'flex';
+  document.getElementById('custEditJobPicker').style.display = 'none';
+  document.getElementById('customerEditChoiceModal').style.display = 'flex';
 }
 
 function customerEditPickDoc(editType) {
   const group = activeCustomerGroup;
   if (!group) return;
+  // If we already know the specific doc (clicked from a job card), use it directly
+  if (activeEditDocId) {
+    executeCustomerEdit(editType, activeEditDocId);
+    return;
+  }
   if (group.docs.length === 1) {
     executeCustomerEdit(editType, group.docs[0].id);
   } else {
@@ -3159,34 +3210,37 @@ function customerEditPickDoc(editType) {
 function executeCustomerEdit(editType, docId) {
   document.getElementById('customerEditChoiceModal').style.display = 'none';
   if (editType === 'details') {
-    openCustomerDetailsEdit();
+    openCustomerDetailsEdit(docId);
   } else if (editType === 'job') {
-    document.getElementById('customerDashboardModal').style.display = 'none';
-    openQuoteModal(docId);
+    openJobDetailsEdit(docId);
   } else if (editType === 'money') {
     document.getElementById('customerDashboardModal').style.display = 'none';
-    openEditPayments(docId);
+    openMarkPaid(docId);
   }
 }
 
-function openCustomerDetailsEdit() {
+function openCustomerDetailsEdit(docId) {
   const group = activeCustomerGroup;
   if (!group) return;
-  const q = group.docs[0].quote || {};
-  setVal('cdeCustTitle',    q.custTitle    || '');
-  setVal('cdeCustFirst',    q.custFirstName || '');
-  setVal('cdeCustLast',     q.custLastName  || '');
-  setVal('cdeCustAddr',     q.custAddr      || '');
-  setVal('cdeCustPostcode', q.custPostcode  || '');
-  setVal('cdeCustPhone',    q.custPhone     || '');
-  setVal('cdeCustEmail',    q.custEmail     || '');
+  // Use the specific doc if we know which job was clicked, otherwise fall back to first doc in group
+  const targetDoc = (docId && state.saved.find(d => d.id === docId)) || group.docs[0];
+  const q = (targetDoc && targetDoc.quote) || {};
+  setVal('cdeCustTitle',        q.custTitle        || '');
+  setVal('cdeCustFirst',        q.custFirstName    || '');
+  setVal('cdeCustLast',         q.custLastName     || '');
+  setVal('cdeCustAddr',         q.custAddr         || '');
+  setVal('cdeCustPostcode',     q.custPostcode     || '');
+  setVal('cdeCustPhone',        q.custPhone        || '');
+  setVal('cdeCustEmail',        q.custEmail        || '');
+  setVal('cdeCustPrivateNotes', q.privateNotes     || '');
   document.getElementById('customerDetailsEditModal').style.display = 'flex';
 }
 
 function saveCustomerDetails() {
   const group = activeCustomerGroup;
   if (!group) return;
-  const updates = {
+  // Customer-level fields — applied to every doc in the group
+  const sharedUpdates = {
     custTitle:     getVal('cdeCustTitle'),
     custFirstName: getVal('cdeCustFirst'),
     custLastName:  getVal('cdeCustLast'),
@@ -3195,11 +3249,17 @@ function saveCustomerDetails() {
     custPhone:     getVal('cdeCustPhone'),
     custEmail:     getVal('cdeCustEmail'),
   };
-  // Apply to all docs belonging to this customer
+  // Private notes are per-job — only save to the specific doc that was edited
+  const privateNotes = getVal('cdeCustPrivateNotes');
+  const targetDocId = activeEditDocId || (group.docs[0] && group.docs[0].id);
+
   group.docs.forEach(doc => {
     if (!doc.quote) doc.quote = {};
-    Object.assign(doc.quote, updates);
-    // Refresh computed custName on the doc
+    Object.assign(doc.quote, sharedUpdates);
+    // Only update private notes on the specific job that was clicked
+    if (doc.id === targetDocId) {
+      doc.quote.privateNotes = privateNotes;
+    }
     doc.custName = buildCustName(doc.quote);
   });
   // Update in-memory group name for re-render
@@ -3211,6 +3271,234 @@ function saveCustomerDetails() {
   // Re-render the dashboard with updated info
   renderSingleCustomerDashboard(group, buildCustomerGroups());
   showSavedPopup("Customer details updated.");
+}
+
+/* ===== JOB DETAILS EDIT ===== */
+let activeJobDetailsDocId = null;
+
+function openJobDetailsEdit(docId) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  activeJobDetailsDocId = docId;
+  const q = doc.quote || {};
+  const ref = q.ref || doc.ref || doc.invoiceRef || '';
+  const titleEl = document.getElementById('jobDetailsEditTitle');
+  if (titleEl) titleEl.textContent = ref ? `Job: ${ref}` : 'Job Details';
+  renderJobDetailsForm(doc);
+  document.getElementById('jobDetailsEditModal').style.display = 'flex';
+}
+
+function jdeItemRowHtml(item) {
+  return `
+    <div class="jde-item-row">
+      <input type="text" class="jde-item-name" placeholder="Description" value="${esc(item.name || '')}">
+      <div class="input-pfx" style="margin:0">
+        <span class="pfx-symbol">£</span>
+        <input type="number" class="jde-item-price" min="0" step="any" placeholder="0.00" value="${item.unitPrice != null ? item.unitPrice : ''}">
+      </div>
+      <button type="button" class="jde-item-remove" aria-label="Remove item">✕</button>
+    </div>`;
+}
+
+function renderJobDetailsForm(doc) {
+  const q = doc.quote || {};
+  // Match same fallback logic as buildCustomerJobSection — quote.items first, then legacy doc.items
+  const items = (q.items && q.items.length) ? q.items : ((doc.items && doc.items.length) ? doc.items : []);
+  // Calculate total from items; fall back to doc.total for total-override docs
+  const calcedTotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
+  const displayTotal = items.length ? calcedTotal : (doc.total || 0);
+  const body = document.getElementById('jobDetailsEditBody');
+  const hasPriceList = state.priceList && state.priceList.length > 0;
+  body.innerHTML = `
+    ${hasPriceList ? `
+    <p class="jde-section-label">Add from Price List</p>
+    <input type="text" id="jdePickerSearch" class="search-input" placeholder="Search your price list..." style="margin-bottom:6px">
+    <div id="jdePickerList" class="jde-picker-list picker-list"></div>
+    <div class="jde-divider"></div>` : ''}
+    <p class="jde-section-label">Job Items</p>
+    <div class="jde-item-headers">
+      <span>Description</span><span>Price</span><span></span>
+    </div>
+    <div id="jdeItemsList" class="jde-items-list">
+      ${items.length ? items.map(item => jdeItemRowHtml(item)).join('') : `<p class="jde-empty-hint">No items yet — add from your price list above or use the button below.</p>`}
+    </div>
+    <button type="button" class="btn btn-sage btn-sm" id="jdeAddItemBtn">+ One-off Item</button>
+    <div class="form-group" style="margin-top:16px">
+      <label for="jdeTotalOverride">Total <span class="jde-total-hint">(auto-calculated from items above, or set manually)</span></label>
+      <div class="input-pfx form-group" style="margin:0">
+        <span class="pfx-symbol">£</span>
+        <input type="number" id="jdeTotalOverride" min="0" step="any" placeholder="0.00" value="${displayTotal > 0 ? displayTotal : ''}">
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:4px">
+      <label for="jdeNotes">Notes</label>
+      <textarea id="jdeNotes" rows="3" placeholder="Any notes for this job...">${esc(q.notes || '')}</textarea>
+    </div>`;
+
+  wireJdeRemoveButtons();
+  document.getElementById('jdeAddItemBtn').addEventListener('click', jdeAddItem);
+
+  // Auto-update total field as items are edited
+  body.addEventListener('input', e => {
+    if (e.target.classList.contains('jde-item-price')) jdeUpdateTotal();
+  });
+
+  // Wire price list picker if present
+  if (hasPriceList) {
+    jdeRenderPicker('');
+    document.getElementById('jdePickerSearch').addEventListener('input', e => jdeRenderPicker(e.target.value));
+    document.getElementById('jdePickerList').addEventListener('click', e => {
+      const item = e.target.closest('.pick-item');
+      if (item) jdeAddFromPriceList(item.dataset.jobId);
+    });
+  }
+}
+
+function jdeRenderPicker(searchVal) {
+  const q = (searchVal || '').toLowerCase();
+  const filtered = state.priceList.filter(j => j.name.toLowerCase().includes(q));
+  const container = document.getElementById('jdePickerList');
+  if (!container) return;
+  if (!filtered.length) {
+    container.innerHTML = '<p style="color:#888;font-size:0.85rem;padding:6px 0">No jobs match your search.</p>';
+    return;
+  }
+  // Get names already in the items list to show as "added"
+  const addedNames = new Set(
+    [...document.querySelectorAll('#jdeItemsList .jde-item-name')].map(el => el.value.trim().toLowerCase())
+  );
+  container.innerHTML = filtered.map(item => {
+    const isAdded = addedNames.has(item.name.toLowerCase());
+    return `
+      <div class="pick-item${isAdded ? ' added' : ''}" data-job-id="${esc(item.id)}" role="button" tabindex="0"
+           aria-label="Add ${esc(item.name)}">
+        <div class="pick-name">${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}</div>
+        <span class="pick-price">${fmtPrice(item.price)}</span>
+        <span class="pick-add-btn">${isAdded ? '✓' : '+'}</span>
+      </div>`;
+  }).join('');
+}
+
+function jdeAddFromPriceList(jobId) {
+  const job = state.priceList.find(j => j.id === jobId);
+  if (!job) return;
+  const list = document.getElementById('jdeItemsList');
+  // Remove empty hint if present
+  const hint = list.querySelector('.jde-empty-hint');
+  if (hint) hint.remove();
+  // Add a new editable row pre-filled with price list item
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = jdeItemRowHtml({ name: job.name, unitPrice: job.price });
+  const row = wrapper.firstElementChild;
+  list.appendChild(row);
+  row.querySelector('.jde-item-remove').addEventListener('click', () => {
+    row.remove();
+    if (!list.querySelector('.jde-item-row')) {
+      list.innerHTML = '<p class="jde-empty-hint">No items yet — add from your price list above or use the button below.</p>';
+    }
+    jdeUpdateTotal();
+    jdeRenderPicker(document.getElementById('jdePickerSearch')?.value || '');
+  });
+  jdeUpdateTotal();
+  // Refresh picker to show item as added
+  jdeRenderPicker(document.getElementById('jdePickerSearch')?.value || '');
+  // Scroll new row into view
+  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function jdeUpdateTotal() {
+  const prices = [...document.querySelectorAll('#jdeItemsList .jde-item-price')]
+    .map(el => parseFloat(el.value) || 0);
+  if (prices.length > 0) {
+    const total = prices.reduce((s, p) => s + p, 0);
+    const totalEl = document.getElementById('jdeTotalOverride');
+    if (totalEl) totalEl.value = total.toFixed(2);
+  }
+}
+
+function wireJdeRemoveButtons() {
+  document.querySelectorAll('#jdeItemsList .jde-item-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('.jde-item-row');
+      if (row) row.remove();
+      // Show empty hint if no rows left
+      const list = document.getElementById('jdeItemsList');
+      if (list && !list.querySelector('.jde-item-row')) {
+        list.innerHTML = '<p class="jde-empty-hint">No items yet — add one below.</p>';
+      }
+    });
+  });
+}
+
+function jdeAddItem() {
+  const list = document.getElementById('jdeItemsList');
+  // Remove empty hint if present
+  const hint = list.querySelector('.jde-empty-hint');
+  if (hint) hint.remove();
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = jdeItemRowHtml({ name: '', unitPrice: '' });
+  const row = wrapper.firstElementChild;
+  list.appendChild(row);
+  row.querySelector('.jde-item-remove').addEventListener('click', () => {
+    row.remove();
+    if (!list.querySelector('.jde-item-row')) {
+      list.innerHTML = '<p class="jde-empty-hint">No items yet — add one below.</p>';
+    }
+  });
+  row.querySelector('.jde-item-name').focus();
+}
+
+function saveJobDetails() {
+  const docId = activeJobDetailsDocId;
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+
+  // Collect items
+  const items = [];
+  document.querySelectorAll('#jdeItemsList .jde-item-row').forEach(row => {
+    const name = (row.querySelector('.jde-item-name')?.value || '').trim();
+    const price = parseFloat(row.querySelector('.jde-item-price')?.value) || 0;
+    if (name || price) {
+      items.push({ id: uid(), name, unitPrice: price, unit: '', qty: 1 });
+    }
+  });
+
+  const notes = document.getElementById('jdeNotes')?.value || '';
+  const totalOverride = parseFloat(document.getElementById('jdeTotalOverride')?.value) || 0;
+
+  if (!doc.quote) doc.quote = {};
+  doc.quote.items = items;
+  doc.quote.notes = notes;
+
+  // Use item totals if items present; otherwise use the manual total override
+  if (items.length > 0) {
+    const subtotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
+    const discPct = parseFloat(doc.quote.discount) || 0;
+    const afterDisc = subtotal * (1 - discPct / 100);
+    const vatPct = parseFloat(doc.quote.vatRate) || 0;
+    doc.total = afterDisc * (1 + vatPct / 100);
+  } else if (totalOverride > 0) {
+    doc.total = totalOverride;
+  }
+  doc.custName = buildCustName(doc.quote);
+
+  save();
+  refreshSavedDocs();
+  document.getElementById('jobDetailsEditModal').style.display = 'none';
+
+  // Re-render customer dashboard with updated totals
+  try {
+    const groups = buildCustomerGroups();
+    const updatedGroup = groups.find(g => g.docs.some(d => d.id === docId)) || activeCustomerGroup;
+    if (updatedGroup) {
+      activeCustomerGroup = updatedGroup;
+      document.getElementById('customerDashboardModal').style.display = 'flex';
+      renderSingleCustomerDashboard(updatedGroup, groups);
+    }
+  } catch (e) {
+    console.error('Dashboard re-render error:', e);
+  }
+  showSavedPopup('Job details saved.');
 }
 
 /* ===== DOCUMENT GENERATION ===== */
@@ -3500,6 +3788,63 @@ function wrapDoc(inner) {
 
 function printDoc(html) {
   printRaw(html);
+}
+
+function downloadCustomerDashboard(groupName, html) {
+  const safeName = (groupName || 'Customer').replace(/[^a-zA-Z0-9 \-_.]/g, '').trim().replace(/\s+/g, '-');
+  const filename = `${safeName}-Dashboard.html`;
+  const css = `
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;color:#2C2C2C;background:#fff;padding:24px;max-width:700px;margin:0 auto}
+    .customer-dashboard-card{border:1px solid #DDD5C8;border-radius:8px;overflow:hidden;padding:16px}
+    .cdv-header{border-bottom:1.5px solid #DDD5C8;padding-bottom:12px;margin-bottom:14px}
+    .cdv-contact{display:flex;flex-direction:column;gap:4px}
+    .cdv-contact-line{display:flex;align-items:flex-start;gap:6px;font-size:0.88rem;color:#2C2C2C;line-height:1.4}
+    .cdv-summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#F5F0E8;border-radius:8px;padding:12px;margin-bottom:16px}
+    .cdv-summary-item{display:flex;flex-direction:column;gap:2px;text-align:center}
+    .cdv-summary-label{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:2px}
+    .cdv-summary-value{font-size:1rem;font-weight:700;color:#2C2C2C}
+    .cdv-paid{color:#4A7C59}.cdv-outstanding{color:#C0392B}
+    .cdv-jobs-list{display:flex;flex-direction:column;gap:12px}
+    .cdv-job-card{border:1.5px solid #DDD5C8;border-radius:10px;overflow:hidden}
+    .cdv-job-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#F5F0E8;border-bottom:1px solid #DDD5C8}
+    .cdv-job-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .cdv-job-ref{font-weight:700;font-size:0.95rem;color:#7D5730}
+    .cdv-job-date{font-size:0.82rem;color:#888}
+    .cdv-items{padding:10px 14px 6px}
+    .cdv-item-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0ebe3;font-size:0.9rem}
+    .cdv-item-row:last-child{border-bottom:none}
+    .cdv-item-name{flex:1;color:#2C2C2C}.cdv-item-qty{font-size:0.78rem;color:#999;margin-left:4px}.cdv-item-price{font-weight:600;white-space:nowrap}
+    .cdv-totals{padding:8px 14px 10px;border-top:1px solid #DDD5C8;background:#F5F0E8}
+    .cdv-total-row{display:flex;justify-content:space-between;padding:2px 0;font-size:0.92rem;color:#2C2C2C}
+    .cdv-discount-row{color:#4A7C59}.cdv-vat-row{opacity:0.75}
+    .cdv-grand-total{font-weight:700;font-size:1rem;margin-top:4px;border-top:1px solid #DDD5C8;padding-top:4px}
+    .cdv-section{padding:10px 14px;border-top:1px solid #DDD5C8}
+    .cdv-section-label{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:#888;font-weight:600;margin-bottom:6px}
+    .cdv-payment-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #DDD5C8;font-size:0.88rem}
+    .cdv-payment-row:last-child{border-bottom:none}
+    .cdv-pay-num{min-width:82px;color:#888;font-size:0.82rem;flex-shrink:0}.cdv-pay-date{flex:1;color:#2C2C2C}.cdv-pay-amount{font-weight:700;white-space:nowrap}
+    .cdv-outstanding-row .cdv-pay-amount{color:#C0392B}
+    .cdv-paid-stamp{font-size:0.82rem;color:#4A7C59;font-weight:600}
+    .cdv-note-text{font-size:0.88rem;line-height:1.55;color:#2C2C2C;white-space:pre-wrap}
+    .cdv-private{background:#fffbf0;border-left:3px solid #e6b800}
+    .cdv-photo-group{margin-bottom:8px}.cdv-photo-label{font-size:0.78rem;font-weight:600;color:#888;margin-bottom:4px}
+    .cdv-photo-grid{display:flex;gap:8px;flex-wrap:wrap}.cdv-photo-thumb{width:80px;height:80px;object-fit:cover;border-radius:6px;border:1.5px solid #DDD5C8}
+    .cdv-job-actions{display:none}
+    .type-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:12px;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+    .type-badge.estimate{background:#e3f0d4;color:#6B7C5C}.type-badge.quote{background:#7D5730;color:#fff}
+    .type-badge.invoiced{background:#dbeafe;color:#1d4ed8}.type-badge.paid{background:#dcfce7;color:#166534}
+    .type-badge.overdue{background:#fecaca;color:#C0392B}`;
+  const fullHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${esc(groupName)} - Dashboard</title><style>${css}</style></head><body>${html}</body></html>`;
+  const blob = new Blob([fullHtml], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function printRaw(inner) {
