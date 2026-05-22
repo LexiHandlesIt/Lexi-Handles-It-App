@@ -307,7 +307,7 @@ input[type="text"].sig-text-input:focus {
 
 .form-grid-3 {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr 100px 80px;
   gap: 12px;
   align-items: end;
 }
@@ -1673,6 +1673,11 @@ input[type="text"].sig-text-input:focus {
   padding-top: 16px;
   border-top: 1px solid var(--cream-d);
 }
+.custom-item-add .input-pfx,
+.custom-item-add .form-group input {
+  width: 100%;
+  min-width: 0;
+}
 
 /* ===== TOTALS ===== */
 .totals-block {
@@ -1862,7 +1867,7 @@ input[type="text"].sig-text-input:focus {
   line-height: 1;
 }
 .input-pfx input {
-  padding-left: 30px;
+  padding-left: 34px;
   width: 100%;
 }
 
@@ -2142,6 +2147,7 @@ input[type="text"].sig-text-input:focus {
   gap: 8px;
   justify-content: flex-end;
   margin-bottom: 12px;
+  /* kept for any legacy references */
   flex-wrap: wrap;
 }
 
@@ -2225,6 +2231,12 @@ input[type="text"].sig-text-input:focus {
   border-bottom: 1.5px solid var(--border);
   padding-bottom: 12px;
   margin-bottom: 14px;
+}
+.cdv-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
 }
 .cdv-name {
   font-size: 1.2rem;
@@ -3088,5 +3100,160 @@ input[type="text"].sig-text-input:focus {
   height: 22px;
   font-size: 0.85em;
   font-weight: 800;
+  flex-shrink: 0;
+}
+
+/* ===== CUSTOM COLOUR PICKER ===== */
+.ccp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 44, 44, 0.55);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.ccp-panel {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(44, 44, 44, 0.28);
+  width: 100%;
+  max-width: 296px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ccp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ccp-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.ccp-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--charcoal);
+  opacity: 0.55;
+  padding: 2px 6px;
+  border-radius: 6px;
+  line-height: 1;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+.ccp-close:hover { opacity: 1; }
+
+/* Saturation–Value gradient square */
+.ccp-sv-wrap {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.ccp-sv-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ccp-sv-thumb {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  top: 0;
+  left: 0;
+}
+
+/* Hue rainbow strip */
+.ccp-hue-wrap {
+  position: relative;
+  width: 100%;
+  height: 20px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ccp-hue-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ccp-hue-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+/* Bottom row: swatch + # + hex input + Done */
+.ccp-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ccp-swatch {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+}
+
+.ccp-hash {
+  font-size: 0.95rem;
+  color: var(--charcoal);
+  opacity: 0.5;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ccp-hex-input {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9rem;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--cream);
+  color: var(--charcoal);
+  text-transform: uppercase;
+  outline: none;
+  min-width: 0;
+}
+.ccp-hex-input:focus {
+  border-color: var(--walnut);
+  background: var(--white);
+}
+
+.ccp-done {
   flex-shrink: 0;
 }

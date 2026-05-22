@@ -21,6 +21,7 @@ const DEFAULT_COLOURS = { primary: '#7D5730', accent: '#6B7C5C', bg: '#F5F0E8' }
 let state = {
   company: {
     firstName: '', lastName: '', businessName: '',
+    trade: '',
     phone: '', email: '', website: '', address: '', postcode: '',
     logo: '',
     payMethods: [],
@@ -95,14 +96,28 @@ function traderFirstName() {
   return (state.company.firstName || '').trim() || 'there';
 }
 
+function hasRequiredSetup() {
+  return (state.company.firstName || '').trim() !== '' &&
+         (state.company.lastName  || '').trim() !== '';
+}
+
+function requireSetupGuard() {
+  toast('Please enter your first and last name to continue.', 'error');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page1')?.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const el = document.getElementById('p1FirstName');
+  if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('error'); }
+}
+
 function personaliseText() {
   const first = traderFirstName();
   const p1Sub = document.getElementById('page1Sub');
   if (p1Sub && document.getElementById('page1')?.classList.contains('active')) {
     const hasSetUp = (state.company.lastName || '').trim() !== '';
     p1Sub.textContent = hasSetUp
-      ? `Brilliant ${first}, your business is progressing. Let us get your details up to date.`
-      : `Brilliant ${first}, let us get your business details set up.`;
+      ? `Brilliant ${first}, your business is progressing. Let's get your details up to date.`
+      : `So what's your trade? Tell me about your business so I can customise your documents.`;
   }
   const p3Sub = document.getElementById('page3Sub');
   if (p3Sub) {
@@ -228,6 +243,10 @@ function setupNavHint() {
 
 /* ===== PAGE NAVIGATION ===== */
 function showPage(pageId) {
+  if (pageId !== 'page1' && !hasRequiredSetup()) {
+    requireSetupGuard();
+    return;
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const pg = document.getElementById(pageId);
   if (pg) {
@@ -249,11 +268,11 @@ function showPage(pageId) {
     }
     if (p1Sub) {
       if (hasSetUp) {
-        p1Sub.textContent = `Brilliant ${traderFirstName()}, your business is progressing. Let us get your details up to date.`;
+        p1Sub.textContent = `Brilliant ${traderFirstName()}, your business is progressing. Let's get your details up to date.`;
         p1Sub.style.display = '';
         p1Sub.style.textAlign = 'left';
       } else {
-        p1Sub.textContent = 'This takes a few minutes and only needs doing once.';
+        p1Sub.textContent = `So what's your trade? Tell me about your business so I can customise your documents.`;
         p1Sub.style.display = '';
         p1Sub.style.textAlign = '';
       }
@@ -331,6 +350,7 @@ function setupNavigation() {
   }
 
   hamburger.addEventListener('click', () => {
+    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
     navMenu.classList.contains('open') ? closeMenu() : openMenu();
   });
   overlay.addEventListener('click', closeMenu);
@@ -347,27 +367,32 @@ function setupNavigation() {
 
   // New Invoice from menu
   document.getElementById('menuNewInvoice')?.addEventListener('click', () => {
+    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
     closeMenu();
     openClientPicker('invoice');
   });
 
   // New Receipt from menu
   document.getElementById('menuNewReceipt')?.addEventListener('click', () => {
+    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
     closeMenu();
     openClientPicker('receipt');
   });
 
   document.getElementById('menuCustomerDashboard')?.addEventListener('click', () => {
+    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
     closeMenu();
     openCustomerDashboard();
   });
 
   document.getElementById('menuBankDetails')?.addEventListener('click', () => {
+    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
     closeMenu();
     openBankDetailsModal();
   });
 
   document.getElementById('menuShareLexi')?.addEventListener('click', () => {
+    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
     closeMenu();
     shareLexiApp();
   });
@@ -376,6 +401,7 @@ function setupNavigation() {
   const backupBtn = document.getElementById('menuBackupRestore');
   if (backupBtn) {
     backupBtn.addEventListener('click', () => {
+      if (!hasRequiredSetup()) { requireSetupGuard(); return; }
       closeMenu();
       document.getElementById('backupRestoreModal').style.display = 'flex';
     });
@@ -396,7 +422,7 @@ function setupNavigation() {
 
   // Page footer nav buttons
   document.getElementById('goToPriceListBtn').addEventListener('click', () => {
-    saveBusinessDetails(false);
+    if (!saveBusinessDetails(false)) return;
     // Skip onboarding if they already have prices OR have seen it before
     if (!localStorage.getItem(KEY_PL_ONBOARDED) && state.priceList.length === 0) {
       document.getElementById('plOnboardingModal').style.display = 'flex';
@@ -572,11 +598,12 @@ function populatePage1Fields() {
   setVal('p1FirstName',    c.firstName);
   setVal('p1LastName',     c.lastName);
   setVal('p1BusinessName', c.businessName);
+  setVal('p1Address',      c.address);
+  setVal('p1Postcode',     c.postcode);
   setVal('p1Phone',        c.phone);
   setVal('p1Email',        c.email);
   setVal('p1Website',      c.website);
-  setVal('p1Address',      c.address);
-  setVal('p1Postcode',     c.postcode);
+  setVal('p1Trade',        c.trade || '');
 
   showLogoState();
 
@@ -660,11 +687,12 @@ function saveBusinessDetails(showToast = true) {
     firstName:    firstName,
     lastName:     lastName,
     businessName: getVal('p1BusinessName'),
+    trade:        getVal('p1Trade'),
+    address:      getVal('p1Address'),
+    postcode:     getVal('p1Postcode'),
     phone:        getVal('p1Phone'),
     email:        getVal('p1Email'),
     website:      getVal('p1Website'),
-    address:      getVal('p1Address'),
-    postcode:     getVal('p1Postcode'),
     payMethods:   methods,
     bankAccHolder: getVal('bankAccHolder'),
     bankName:     getVal('bankName'),
@@ -680,94 +708,199 @@ function saveBusinessDetails(showToast = true) {
   updateColourPreview();
   personaliseText();
   if (showToast) showSavedPopup(
-    colourChanged ? "Loving the brand colours — that's a look people will remember." : businessNameCompliment(getVal('p1BusinessName') || (firstName + ' ' + lastName)),
+    businessNameCompliment(getVal('p1BusinessName') || (firstName + ' ' + lastName)),
     null,
-    colourChanged ? 5000 : 2500
+    2500
   );
   return true;
 }
 
 /* ===== COLOUR PICKER ===== */
-// Native <input type="color"> handles the popup picker — just wire up the preview update
+// HSV helpers
+function hsvToRgb(h, s, v) {
+  const i = Math.floor(h / 60) % 6;
+  const f = h / 60 - Math.floor(h / 60);
+  const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i];
+  return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+}
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return { h: h * 360, s: max ? d / max : 0, v: max };
+}
+
 function setupColourPicker(name, hexId, defaultVal) {
-  const hex = document.getElementById(hexId);
-  if (!hex) return;
-  hex.addEventListener('input', updateColourPreview);
-  hex.addEventListener('change', updateColourPreview);
-  hex.addEventListener('pointerdown', e => {
-    if (window.matchMedia('(pointer: coarse)').matches) {
-      e.preventDefault();
-      openMobileRgbPicker(hex);
-    }
-  });
-  hex.addEventListener('click', () => {
-    if (window.matchMedia('(pointer: coarse)').matches) return;
-    if (typeof hex.showPicker === 'function') {
-      try { hex.showPicker(); } catch {}
-    }
-  });
-  hex.addEventListener('keydown', e => {
-    if ((e.key === 'Enter' || e.key === ' ') && typeof hex.showPicker === 'function') {
-      e.preventDefault();
-      try { hex.showPicker(); } catch {}
-    }
+  const hexEl = document.getElementById(hexId);
+  if (!hexEl) return;
+  // Always use our custom picker — same UI on every device
+  hexEl.addEventListener('pointerdown', e => { e.preventDefault(); openCustomColorPicker(hexEl); });
+  hexEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCustomColorPicker(hexEl); }
   });
 }
 
-function openMobileRgbPicker(input) {
-  document.querySelector('.mobile-rgb-picker')?.remove();
-  const current = hexToRgb(input.value || '#000000');
-  const picker = document.createElement('div');
-  picker.className = 'mobile-rgb-picker';
-  picker.innerHTML = `
-    <div class="mobile-rgb-panel">
-      <div class="mobile-rgb-head">
-        <strong>Pick your colour</strong>
-        <button type="button" class="mobile-rgb-close" aria-label="Close">×</button>
+function openCustomColorPicker(inputEl) {
+  document.querySelector('.ccp-overlay')?.remove();
+
+  const startHex = inputEl.value || '#000000';
+  const rgb0 = hexToRgb(startHex);
+  const hsv0 = rgbToHsv(rgb0.r, rgb0.g, rgb0.b);
+  let H = hsv0.h, S = hsv0.s, V = hsv0.v;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'ccp-overlay';
+  overlay.innerHTML = `
+    <div class="ccp-panel" role="dialog" aria-label="Colour picker">
+      <div class="ccp-header">
+        <span class="ccp-title">Pick a colour</span>
+        <button type="button" class="ccp-close" aria-label="Cancel">✕</button>
       </div>
-      <input type="color" class="mobile-rgb-native" value="${input.value || '#000000'}">
-      <div class="mobile-rgb-fields">
-        <label><input type="number" min="0" max="255" value="${current.r}" data-rgb="r"><span>R</span></label>
-        <label><input type="number" min="0" max="255" value="${current.g}" data-rgb="g"><span>G</span></label>
-        <label><input type="number" min="0" max="255" value="${current.b}" data-rgb="b"><span>B</span></label>
+      <div class="ccp-sv-wrap">
+        <canvas class="ccp-sv-canvas"></canvas>
+        <div class="ccp-sv-thumb"></div>
       </div>
-      <div class="mobile-rgb-preview" style="background:${input.value || '#000000'}"></div>
-      <button type="button" class="btn btn-primary btn-full mobile-rgb-apply">Use this colour</button>
+      <div class="ccp-hue-wrap">
+        <canvas class="ccp-hue-canvas"></canvas>
+        <div class="ccp-hue-thumb"></div>
+      </div>
+      <div class="ccp-bottom">
+        <div class="ccp-swatch"></div>
+        <span class="ccp-hash">#</span>
+        <input class="ccp-hex-input" type="text" maxlength="6" spellcheck="false">
+        <button type="button" class="btn btn-primary ccp-done">Done</button>
+      </div>
     </div>`;
-  document.body.appendChild(picker);
+  document.body.appendChild(overlay);
 
-  const native = picker.querySelector('.mobile-rgb-native');
-  const preview = picker.querySelector('.mobile-rgb-preview');
-  const fields = [...picker.querySelectorAll('[data-rgb]')];
+  const panel    = overlay.querySelector('.ccp-panel');
+  const svCanvas = overlay.querySelector('.ccp-sv-canvas');
+  const hueCanvas= overlay.querySelector('.ccp-hue-canvas');
+  const svThumb  = overlay.querySelector('.ccp-sv-thumb');
+  const hueThumb = overlay.querySelector('.ccp-hue-thumb');
+  const swatch   = overlay.querySelector('.ccp-swatch');
+  const hexInput = overlay.querySelector('.ccp-hex-input');
 
-  const syncFromRgb = () => {
-    const rgb = {
-      r: clampRgb(fields.find(f => f.dataset.rgb === 'r').value),
-      g: clampRgb(fields.find(f => f.dataset.rgb === 'g').value),
-      b: clampRgb(fields.find(f => f.dataset.rgb === 'b').value)
+  // Size canvases to match CSS layout
+  function sizeCanvases() {
+    const svW = svCanvas.offsetWidth   || 264;
+    const svH = svCanvas.offsetHeight  || 160;
+    const huW = hueCanvas.offsetWidth  || 264;
+    const huH = hueCanvas.offsetHeight || 20;
+    svCanvas.width  = svW;  svCanvas.height = svH;
+    hueCanvas.width = huW; hueCanvas.height = huH;
+  }
+
+  function drawSV() {
+    const ctx = svCanvas.getContext('2d');
+    const W = svCanvas.width, H = svCanvas.height;
+    const { r, g, b } = hsvToRgb(H, 1, 1);
+    const gradX = ctx.createLinearGradient(0, 0, W, 0);
+    gradX.addColorStop(0, '#fff');
+    gradX.addColorStop(1, `rgb(${r},${g},${b})`);
+    ctx.fillStyle = gradX; ctx.fillRect(0, 0, W, H);
+    const gradY = ctx.createLinearGradient(0, 0, 0, H);
+    gradY.addColorStop(0, 'rgba(0,0,0,0)');
+    gradY.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = gradY; ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawHue() {
+    const ctx = hueCanvas.getContext('2d');
+    const W = hueCanvas.width, H = hueCanvas.height;
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    for (let i = 0; i <= 6; i++) {
+      const { r, g, b } = hsvToRgb(i * 60, 1, 1);
+      grad.addColorStop(i / 6, `rgb(${r},${g},${b})`);
+    }
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  }
+
+  function positionThumbs() {
+    const svW = svCanvas.offsetWidth, svH = svCanvas.offsetHeight;
+    const huW = hueCanvas.offsetWidth;
+    svThumb.style.left  = (S * svW) + 'px';
+    svThumb.style.top   = ((1 - V) * svH) + 'px';
+    hueThumb.style.left = (H / 360 * huW) + 'px';
+  }
+
+  function applyColour() {
+    const { r, g, b } = hsvToRgb(H, S, V);
+    const hex = rgbToHex(r, g, b);
+    swatch.style.background = hex;
+    hexInput.value = hex.replace('#', '');
+    inputEl.value  = hex;
+    updateColourPreview();
+  }
+
+  function canvasXY(canvas, e) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX);
+    const cy = (e.touches ? e.touches[0].clientY : e.clientY);
+    return {
+      x: Math.max(0, Math.min(1, (cx - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (cy - rect.top)  / rect.height))
     };
-    const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
-    native.value = hex;
-    preview.style.background = hex;
-    input.value = hex;
-    updateColourPreview();
-  };
+  }
 
-  const syncFromNative = () => {
-    const rgb = hexToRgb(native.value);
-    fields.find(f => f.dataset.rgb === 'r').value = rgb.r;
-    fields.find(f => f.dataset.rgb === 'g').value = rgb.g;
-    fields.find(f => f.dataset.rgb === 'b').value = rgb.b;
-    preview.style.background = native.value;
-    input.value = native.value;
-    updateColourPreview();
-  };
+  // SV drag
+  let svDragging = false;
+  function onSV(e) {
+    e.preventDefault();
+    const { x, y } = canvasXY(svCanvas, e);
+    S = x; V = 1 - y;
+    positionThumbs(); applyColour();
+  }
+  svCanvas.addEventListener('pointerdown', e => { svDragging = true; svCanvas.setPointerCapture(e.pointerId); onSV(e); });
+  svCanvas.addEventListener('pointermove', e => { if (svDragging) onSV(e); });
+  svCanvas.addEventListener('pointerup',   () => { svDragging = false; });
 
-  native.addEventListener('input', syncFromNative);
-  fields.forEach(field => field.addEventListener('input', syncFromRgb));
-  picker.querySelector('.mobile-rgb-close').addEventListener('click', () => picker.remove());
-  picker.querySelector('.mobile-rgb-apply').addEventListener('click', () => picker.remove());
-  picker.addEventListener('click', e => { if (e.target === picker) picker.remove(); });
+  // Hue drag
+  let hueDragging = false;
+  function onHue(e) {
+    e.preventDefault();
+    const { x } = canvasXY(hueCanvas, e);
+    H = x * 360;
+    drawSV(); positionThumbs(); applyColour();
+  }
+  hueCanvas.addEventListener('pointerdown', e => { hueDragging = true; hueCanvas.setPointerCapture(e.pointerId); onHue(e); });
+  hueCanvas.addEventListener('pointermove', e => { if (hueDragging) onHue(e); });
+  hueCanvas.addEventListener('pointerup',   () => { hueDragging = false; });
+
+  // Hex input
+  hexInput.addEventListener('input', () => {
+    const v = '#' + hexInput.value.replace(/[^0-9a-f]/gi, '');
+    if (/^#[0-9a-f]{6}$/i.test(v)) {
+      const rgb = hexToRgb(v);
+      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+      H = hsv.h; S = hsv.s; V = hsv.v;
+      drawSV(); positionThumbs();
+      swatch.style.background = v;
+      inputEl.value = v; updateColourPreview();
+    }
+  });
+
+  // Done / cancel
+  overlay.querySelector('.ccp-done').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('.ccp-close').addEventListener('click', () => {
+    inputEl.value = startHex; updateColourPreview(); overlay.remove();
+  });
+  overlay.addEventListener('pointerdown', e => { if (e.target === overlay) { inputEl.value = startHex; updateColourPreview(); overlay.remove(); } });
+
+  // Init — wait one frame for layout so offsetWidth is accurate
+  requestAnimationFrame(() => {
+    sizeCanvases();
+    drawSV();
+    drawHue();
+    positionThumbs();
+    applyColour();
+  });
 }
 
 function hexToRgb(hex) {
@@ -2858,11 +2991,11 @@ function buildCustomerJobSection(d) {
           <span class="cdv-item-name">${esc(i.name)}${i.qty > 1 ? ` <span class="cdv-item-qty">×${i.qty}</span>` : ''}</span>
           <span class="cdv-item-price">${fmtPrice((i.unitPrice || 0) * (i.qty || 1))}</span>
         </div>`).join('')
-    : '<p class="cdv-empty">No line items recorded.</p>';
+    : '';
 
   const totalsHtml = `
     <div class="cdv-totals">
-      <div class="cdv-total-row"><span>Subtotal</span><span>${fmtPrice(subtotal)}</span></div>
+      ${items.length ? `<div class="cdv-total-row"><span>Subtotal</span><span>${fmtPrice(subtotal)}</span></div>` : ''}
       ${discount > 0 ? `<div class="cdv-total-row cdv-discount-row"><span>Discount (${discPct}%)</span><span>-${fmtPrice(discount)}</span></div>` : ''}
       ${vatAmt   > 0 ? `<div class="cdv-total-row cdv-vat-row"><span>VAT (${vatRate}%)</span><span>${fmtPrice(vatAmt)}</span></div>` : ''}
       <div class="cdv-total-row cdv-grand-total"><span>Total</span><span>${fmtPrice(d.total || 0)}</span></div>
@@ -2942,10 +3075,18 @@ function renderSingleCustomerDashboard(group, groups) {
     q.custEmail   ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">✉</span>${esc(q.custEmail)}</span>` : '',
   ].filter(Boolean).join('');
 
+  // Put customer name in modal title
+  const titleEl = document.getElementById('customerDashboardTitle');
+  if (titleEl) titleEl.textContent = group.name;
+
   const detailHtml = `
     <div class="customer-dashboard-card printable-customer-dashboard">
       <div class="cdv-header">
-        <h3 class="cdv-name">${esc(group.name)}</h3>
+        <div class="cdv-header-actions">
+          <button type="button" class="btn btn-outline btn-sm" id="customerDashboardBackBtn">Back</button>
+          <button type="button" class="btn btn-walnut btn-sm" id="customerDashboardEditBtn">✎ Edit</button>
+          <button type="button" class="btn btn-primary btn-sm" id="customerDashboardPrintBtn">Print Dashboard</button>
+        </div>
         ${contactLines ? `<div class="cdv-contact">${contactLines}</div>` : ''}
       </div>
       <div class="cdv-summary-bar">
@@ -2971,13 +3112,7 @@ function renderSingleCustomerDashboard(group, groups) {
       </div>
     </div>`;
 
-  body.innerHTML = `
-    <div class="customer-dashboard-actions">
-      <button type="button" class="btn btn-outline btn-sm" id="customerDashboardBackBtn">Back</button>
-      <button type="button" class="btn btn-walnut btn-sm" id="customerDashboardEditBtn">✎ Edit</button>
-      <button type="button" class="btn btn-primary btn-sm" id="customerDashboardPrintBtn">Print Dashboard</button>
-    </div>
-    ${detailHtml}`;
+  body.innerHTML = detailHtml;
 
   document.getElementById('customerDashboardBackBtn').addEventListener('click', () => {
     activeCustomerGroup = null;

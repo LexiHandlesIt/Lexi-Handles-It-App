@@ -207,7 +207,7 @@
     <section id="page1" class="page active" data-page="1">
 <div class="page-header">
         <h1 class="page-title" id="page1Title"><span class="page-num">1.</span> Set Up Your Business</h1>
-        <p class="page-sub" id="page1Sub" style="text-align:center;">This takes a few minutes and only needs doing once.</p>
+        <p class="page-sub" id="page1Sub">So what's your trade? Tell me about your business so I can customise your documents.</p>
       </div>
 
       <!-- About You -->
@@ -227,6 +227,14 @@
           <label for="p1BusinessName">Business Name</label>
           <input type="text" id="p1BusinessName" autocomplete="organization">
         </div>
+        <div class="form-group">
+          <label for="p1Address">Business Address</label>
+          <textarea id="p1Address" rows="3" autocomplete="street-address"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="p1Postcode">Postcode</label>
+          <input type="text" id="p1Postcode" autocomplete="postal-code">
+        </div>
         <div class="form-grid-2">
           <div class="form-group">
             <label for="p1Phone">Phone</label>
@@ -237,19 +245,21 @@
             <input type="email" id="p1Email" autocomplete="email">
           </div>
         </div>
-        <div class="form-grid-2">
-          <div class="form-group">
-            <label for="p1Website">Website</label>
-            <input type="url" id="p1Website" autocomplete="url">
-          </div>
-          <div class="form-group">
-            <label for="p1Postcode">Postcode</label>
-            <input type="text" id="p1Postcode" autocomplete="postal-code">
-          </div>
+        <div class="form-group">
+          <label for="p1Website">Website</label>
+          <input type="url" id="p1Website" autocomplete="url">
         </div>
         <div class="form-group">
-          <label for="p1Address">Business Address</label>
-          <textarea id="p1Address" rows="3" autocomplete="street-address"></textarea>
+          <label for="p1Trade">Your Trade</label>
+          <select id="p1Trade">
+            <option value="">Select your trade…</option>
+            <option value="Builder">Builder</option>
+            <option value="Carpenter">Carpenter</option>
+            <option value="Decorator">Decorator</option>
+            <option value="Electrician">Electrician</option>
+            <option value="Gardener">Gardener</option>
+            <option value="Other">Other</option>
+          </select>
         </div>
 
         <!-- Logo Upload -->
@@ -393,7 +403,7 @@
       <!-- Page Footer -->
       <div class="page-footer">
         <button type="button" class="btn btn-primary btn-lg" id="saveBusinessBtn">Save My Business</button>
-        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToPriceListBtn"><span class="btn-step-num">2</span> Add Price List</button>
+        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToPriceListBtn">Add Price List</button>
       </div>
     </section>
 
@@ -497,7 +507,7 @@
 
       <div class="page-footer">
         <button type="button" class="btn btn-outline btn-lg" id="backToSetupBtn">Back</button>
-        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToQuoteBtn"><span class="btn-step-num">3</span> New Estimate or Quote</button>
+        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToQuoteBtn">New Estimate or Quote</button>
       </div>
     </section>
 
@@ -1125,7 +1135,7 @@
   <div id="customerDashboardModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Individual customer dashboard">
     <div class="modal-card">
       <div class="modal-header">
-        <h2 class="modal-title">Individual Customer</h2>
+        <h2 class="modal-title" id="customerDashboardTitle">Customer</h2>
         <button type="button" class="modal-close" id="closeCustomerDashboardBtn" aria-label="Close">✕</button>
       </div>
       <div class="modal-body" id="customerDashboardBody"></div>
