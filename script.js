@@ -9,6 +9,7 @@ const KEY_PL   = 'tq_pl';
 const KEY_SAVED = 'tq_saved';
 const KEY_REF   = 'tq_refseq';
 const KEY_INV   = 'tq_invseq';
+const KEY_REC   = 'tq_recseq';
 const KEY_ONBOARDED    = 'tq_onboarded';
 const KEY_PL_ONBOARDED = 'tq_pl_onboarded';
 const KEY_PREVIEW_FIRST_SUPPRESSED = 'tq_preview_first_suppressed';
@@ -55,6 +56,7 @@ let pendingReceiptDocId = null;
 let pendingPreviewSend = null;
 let activePhotoDocId = null;
 let activeEditChoiceDocId = null;
+let activeCustomerGroup = null;   // group object while customer dashboard is open
 let receiptPreviewed = false;
 let quotePreviewed = false;
 let activeQuoteDraftDoc = null;
@@ -72,6 +74,21 @@ function recalcDocPayments(doc) {
   doc.paidAmount = payments.reduce((s, p) => s + (p.amount || 0), 0);
   doc.paid       = doc.paidAmount >= (doc.total || 0);
   doc.paidDate   = payments.length ? payments[payments.length - 1].date : '';
+}
+
+function businessNameCompliment(name) {
+  const n = (name || '').trim();
+  if (!n) return "I've saved your business details.";
+  const picks = [
+    `${n} — a name people will remember and trust.`,
+    `${n} sounds like a business that gets the job done right.`,
+    `Love it. ${n} has a proper professional ring to it.`,
+    `${n} — solid name. Customers will know exactly who to call.`,
+    `${n} sounds like exactly the kind of tradesperson customers want.`,
+    `Nice one. ${n} — that name means business.`,
+  ];
+  // Pick deterministically based on name so it's consistent
+  return picks[n.length % picks.length];
 }
 
 function traderFirstName() {
@@ -338,6 +355,11 @@ function setupNavigation() {
   document.getElementById('menuNewReceipt')?.addEventListener('click', () => {
     closeMenu();
     openClientPicker('receipt');
+  });
+
+  document.getElementById('menuCustomerDashboard')?.addEventListener('click', () => {
+    closeMenu();
+    openCustomerDashboard();
   });
 
   document.getElementById('menuBankDetails')?.addEventListener('click', () => {
@@ -623,9 +645,9 @@ function saveBusinessDetails(showToast = true) {
   }
 
   const colourChanged =
-    state.company.brandPrimary !== document.getElementById('colourHeader').value ||
-    state.company.brandAccent !== document.getElementById('colourAccent').value ||
-    state.company.brandBg !== document.getElementById('colourBg').value;
+    (state.company.brandPrimary || DEFAULT_COLOURS.primary) !== document.getElementById('colourHeader').value ||
+    (state.company.brandAccent  || DEFAULT_COLOURS.accent)  !== document.getElementById('colourAccent').value ||
+    (state.company.brandBg      || DEFAULT_COLOURS.bg)      !== document.getElementById('colourBg').value;
 
   const methods = [];
   if (document.getElementById('payBankTransfer').checked) methods.push('bank');
@@ -658,7 +680,7 @@ function saveBusinessDetails(showToast = true) {
   updateColourPreview();
   personaliseText();
   if (showToast) showSavedPopup(
-    colourChanged ? "Loving the brand colours" : "I've saved your business details.",
+    colourChanged ? "Loving the brand colours — that's a look people will remember." : businessNameCompliment(getVal('p1BusinessName') || (firstName + ' ' + lastName)),
     null,
     colourChanged ? 5000 : 2500
   );
@@ -1159,30 +1181,15 @@ function setupPage3() {
   });
   document.getElementById('discountCustom').addEventListener('input', recalcTotals);
 
-  // Signature canvas
-  setupSignatureCanvas();
-
-  // Type-to-sign
-  document.getElementById('custSigText').addEventListener('input', () => {
-    if (getVal('custSigText')) clearCanvas();
-  });
-
-  // Auto-populate sig text from authSig name field
+  // Auto-sync signature preview from name field
   document.getElementById('authSig').addEventListener('input', () => {
     const sigText = document.getElementById('custSigText');
-    // Only pre-fill if the canvas is blank and the sig text hasn't been manually changed
     if (!sigText.dataset.userEdited) {
       sigText.value = document.getElementById('authSig').value;
     }
   });
   document.getElementById('custSigText').addEventListener('input', () => {
     document.getElementById('custSigText').dataset.userEdited = '1';
-  });
-
-  document.getElementById('clearSigBtn').addEventListener('click', () => {
-    clearCanvas();
-    setVal('custSigText', '');
-    delete document.getElementById('custSigText').dataset.userEdited;
   });
 
   // Quote footer buttons
@@ -1257,8 +1264,14 @@ function populateQuoteForm() {
   setVal('quoteNotes',    q.notes);
   setVal('quotePrivateNotes', q.privateNotes);
   setVal('customTerms',   q.customTerms || '');
-  setVal('authSig',       q.authSig || state.company.businessName || '');
-  setVal('custSigText',   '');
+  const companyName = state.company.businessName || (state.company.firstName + ' ' + state.company.lastName).trim() || '';
+  const sigName = q.authSig || companyName;
+  setVal('authSig',     sigName);
+  // Prefer the explicitly saved sig text, else fall back to name
+  setVal('custSigText', q.custSigText || sigName);
+  // Reset user-edited flag so authSig changes still sync
+  const sigEl = document.getElementById('custSigText');
+  if (sigEl) delete sigEl.dataset.userEdited;
   // Set discount select (backwards-compat: old docs stored any number, new ones use preset or 'custom')
   const savedDisc = String(q.discount || '0');
   const discPresets = ['0', '5', '10', '20'];
@@ -1441,6 +1454,12 @@ function recalcTotals() {
   document.getElementById('qVatAmount').textContent  = fmtPrice(vatAmt);
   document.getElementById('qDiscount').textContent   = `-${fmtPrice(discount)}`;
   document.getElementById('qTotal').textContent      = fmtPrice(total);
+
+  // Show/hide discount and VAT rows in the totals block
+  const discountRow = document.getElementById('discountRow');
+  const vatRow = document.getElementById('vatRow');
+  if (discountRow) discountRow.style.display = discount > 0 ? '' : 'none';
+  if (vatRow) vatRow.style.display = vatAmt > 0 ? '' : 'none';
 }
 
 function collectQuoteState() {
@@ -1470,7 +1489,8 @@ function collectQuoteState() {
     selectedTerms,
     customTerms:   getVal('customTerms'),
     authSig:       getVal('authSig'),
-    custSig:       getCanvasDataURL(),
+    custSigText:   getVal('custSigText'),
+    custSig:       '',
     sigDate:       todayStr()
   };
 }
@@ -1632,6 +1652,8 @@ function refreshSavedDocs() {
   let docs = [...state.saved];
   if      (filter === 'Estimate') docs = docs.filter(d => d.type === 'Estimate');
   else if (filter === 'Quote')    docs = docs.filter(d => d.type === 'Quote');
+  else if (filter === 'invoiced') docs = docs.filter(d => d.invoiceSent && !d.paid);
+  else if (filter === 'overdue')  docs = docs.filter(d => !d.paid && d.invoiceSent && d.invoiceDueDate && todayStr() > d.invoiceDueDate);
   else if (filter === 'paid')     docs = docs.filter(d => d.paid);
   else if (filter === 'unpaid')   docs = docs.filter(d => !d.paid);
   else if (filter === 'accepted') docs = docs.filter(d => d.accepted);
@@ -1650,9 +1672,10 @@ function refreshSavedDocs() {
   docs.forEach(doc => {
     const card = document.createElement('div');
     const docType = doc.type || (doc.quote && doc.quote.type) || 'Estimate';
-    const statusBadge = doc.paid ? 'paid' : doc.invoiceSent ? 'invoiced' : docType.toLowerCase();
+    const isOverdue = !doc.paid && doc.invoiceSent && doc.invoiceDueDate && todayStr() > doc.invoiceDueDate;
+    const statusBadge = doc.paid ? 'paid' : isOverdue ? 'overdue' : doc.invoiceSent ? 'invoiced' : docType.toLowerCase();
     card.className = `saved-doc-card status-${statusBadge}`;
-    const statusLabel = doc.paid ? 'Paid' : doc.invoiceSent ? 'Invoiced' : docType;
+    const statusLabel = doc.paid ? 'Paid' : isOverdue ? `Overdue since ${formatDate(doc.invoiceDueDate)}` : doc.invoiceSent ? 'Invoiced' : docType;
 
     // Payment totals for card status only (history shown in modal, not on card)
     const payments   = getDocPayments(doc);
@@ -1721,9 +1744,10 @@ function exportDocsCSV(filter) {
   let docs = [...state.saved];
   if      (filter === 'Estimate') docs = docs.filter(d => d.type === 'Estimate');
   else if (filter === 'Quote')    docs = docs.filter(d => d.type === 'Quote');
+  else if (filter === 'invoiced') docs = docs.filter(d => d.invoiceSent && !d.paid);
+  else if (filter === 'overdue')  docs = docs.filter(d => !d.paid && d.invoiceSent && d.invoiceDueDate && todayStr() > d.invoiceDueDate);
   else if (filter === 'paid')     docs = docs.filter(d => d.paid);
   else if (filter === 'unpaid')   docs = docs.filter(d => !d.paid);
-  else if (filter === 'invoiced') docs = docs.filter(d => d.invoiceSent && !d.paid);
 
   if (!docs.length) {
     toast('No jobs match that filter to export.', 'error');
@@ -1788,7 +1812,7 @@ function exportDocsCSV(filter) {
   const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  const filterLabel = { all: 'All', Estimate: 'Estimates', Quote: 'Quotes', paid: 'Paid', unpaid: 'Unpaid', invoiced: 'Invoiced' }[filter] || filter;
+  const filterLabel = { all: 'All', Estimate: 'Estimates', Quote: 'Quotes', invoiced: 'Invoiced', overdue: 'Overdue', paid: 'Paid', unpaid: 'Unpaid' }[filter] || filter;
   a.href     = url;
   a.download = `Lexi-Jobs-${filterLabel}-${todayStr()}.csv`;
   document.body.appendChild(a);
@@ -1865,7 +1889,17 @@ function setupModals() {
   document.getElementById('closeBankDetailsBtn')?.addEventListener('click', () => document.getElementById('bankDetailsModal').style.display = 'none');
   document.getElementById('copyBankDetailsBtn')?.addEventListener('click', copyBankDetails);
   document.getElementById('shareBankDetailsBtn')?.addEventListener('click', shareBankDetails);
-  document.getElementById('closeCustomerDashboardBtn')?.addEventListener('click', () => document.getElementById('customerDashboardModal').style.display = 'none');
+  document.getElementById('closeCustomerDashboardBtn')?.addEventListener('click', () => {
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    activeCustomerGroup = null;
+  });
+  document.getElementById('closeCustEditChoiceBtn')?.addEventListener('click', () => document.getElementById('customerEditChoiceModal').style.display = 'none');
+  document.getElementById('custEditDetailsBtn')?.addEventListener('click', () => customerEditPickDoc('details'));
+  document.getElementById('custEditJobBtn')?.addEventListener('click', () => customerEditPickDoc('job'));
+  document.getElementById('custEditMoneyBtn')?.addEventListener('click', () => customerEditPickDoc('money'));
+  document.getElementById('closeCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
+  document.getElementById('cancelCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
+  document.getElementById('saveCustDetailsBtn')?.addEventListener('click', saveCustomerDetails);
   document.getElementById('clientPickerNewCustomerBtn')?.addEventListener('click', createNewCustomerFromPicker);
   document.getElementById('editChoiceMoneyBtn')?.addEventListener('click', () => {
     const docId = activeEditChoiceDocId;
@@ -1875,7 +1909,14 @@ function setupModals() {
   document.getElementById('editChoiceJobBtn')?.addEventListener('click', () => {
     const docId = activeEditChoiceDocId;
     document.getElementById('editChoiceModal').style.display = 'none';
-    if (docId) editDoc(docId);
+    if (docId) {
+      openQuoteModal(docId);
+      // Override the modal title so it says "Edit Quote/Estimate" not "Send"
+      const doc = state.saved.find(d => d.id === docId);
+      const docType = doc?.quote?.type || doc?.type || 'Quote';
+      const titleEl = document.getElementById('quoteModalTitle');
+      if (titleEl) titleEl.textContent = 'Edit ' + docType;
+    }
   });
   document.getElementById('beforePhotosInput')?.addEventListener('change', e => handlePhotoUpload(e, 'before'));
   document.getElementById('afterPhotosInput')?.addEventListener('change', e => handlePhotoUpload(e, 'after'));
@@ -1893,13 +1934,74 @@ function setupModals() {
    document.getElementById('receiptOutstandingModal'),
    document.getElementById('previewFirstModal'),
    document.getElementById('bankDetailsModal'),
-   document.getElementById('customerDashboardModal')].forEach(m => {
+   document.getElementById('customerDashboardModal'),
+   document.getElementById('customerEditChoiceModal'),
+   document.getElementById('customerDetailsEditModal')].forEach(m => {
     m?.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
+  });
+
+  document.getElementById('previewEditBtn').addEventListener('click', () => {
+    closePreview();
+    const { type, docId } = previewContext;
+    if (type === 'quote' && docId) {
+      document.getElementById('quoteModal').style.display = 'flex';
+    } else if (type === 'invoice') {
+      document.getElementById('invoiceModal').style.display = 'flex';
+    } else if (type === 'receipt') {
+      document.getElementById('receiptModal').style.display = 'flex';
+    }
+    // type==='quote' with no docId means page3 — it's already there, nothing needed
   });
 
   document.getElementById('previewPrintBtn').addEventListener('click', () => {
     const html = document.getElementById('previewContent').innerHTML;
     printRaw(html);
+  });
+
+  document.getElementById('previewSaveBtn').addEventListener('click', () => {
+    const { type, docId } = previewContext;
+    if (type === 'quote' && !docId) {
+      // Save the current page3 form state as a quote
+      closePreview();
+      saveQuote();
+      return;
+    }
+    // Modal flows: save edits to doc without sending
+    if (type === 'quote' && docId) {
+      const doc = state.saved.find(d => d.id === docId);
+      if (doc) {
+        const quoteData = collectQuoteSendForm();
+        Object.assign(doc, applyDocEdits(doc, quoteData));
+        save();
+        refreshSavedDocs();
+      }
+      document.getElementById('quoteModal').style.display = 'none';
+    } else if (type === 'invoice') {
+      const doc = state.saved.find(d => d.id === activeDocId);
+      if (doc) {
+        const invData = collectInvoiceForm();
+        Object.assign(doc, applyDocEdits(doc, invData));
+        doc.invoiceSent    = true;
+        doc.invoiceRef     = invData.invRef;
+        doc.invoiceDueDate = invData.dueDate || '';
+        save();
+        refreshSavedDocs();
+      }
+      document.getElementById('invoiceModal').style.display = 'none';
+    } else if (type === 'receipt') {
+      const doc = state.saved.find(d => d.id === activeDocId);
+      if (doc) {
+        const recData = collectReceiptForm();
+        Object.assign(doc, applyDocEdits(doc, recData));
+        if (recData.recRef) doc.receiptRef = recData.recRef;
+        recordReceiptPayment(doc, recData);
+        save();
+        refreshSavedDocs();
+      }
+      document.getElementById('receiptModal').style.display = 'none';
+    }
+    closePreview();
+    showSavedPopup("I've saved that.");
   });
 
   document.getElementById('previewSendBtn').addEventListener('click', () => {
@@ -1968,8 +2070,9 @@ function setupModals() {
     const editedDoc = applyDocEdits(doc, invData);
     const html = buildDocHtml(editedDoc, 'invoice', invData);
     Object.assign(doc, editedDoc);
-    doc.invoiceSent = true;
-    doc.invoiceRef  = invData.invRef;
+    doc.invoiceSent    = true;
+    doc.invoiceRef     = invData.invRef;
+    doc.invoiceDueDate = invData.dueDate || '';   // persisted for overdue tracking
     save();
     refreshSavedDocs();
     document.getElementById('invoiceModal').style.display = 'none';
@@ -2006,6 +2109,8 @@ function setupModals() {
     const recData = collectReceiptForm();
     const editedDoc = applyDocEdits(doc, recData);
     Object.assign(doc, editedDoc);
+    // Persist the receipt ref so re-opens reuse the same number
+    if (recData.recRef) doc.receiptRef = recData.recRef;
     recordReceiptPayment(doc, recData);
     const html = buildDocHtml(doc, 'receipt', recData);
     save();
@@ -2014,6 +2119,83 @@ function setupModals() {
     document.getElementById('receiptModal').style.display = 'none';
     toast('Receipt sent!', 'success');
   }
+
+  // Quote modal — Edit (go to full page3 builder) and Save (save without sending)
+  document.getElementById('quoteEditBtn')?.addEventListener('click', () => {
+    document.getElementById('quoteModal').style.display = 'none';
+    if (activeDocId) {
+      editDoc(activeDocId);
+    }
+  });
+  document.getElementById('quoteSaveBtn')?.addEventListener('click', () => {
+    const doc = getActiveQuoteDoc();
+    if (!doc) return;
+    const quoteData = collectQuoteSendForm();
+    const editedDoc = applyDocEdits(doc, quoteData);
+    if (activeDocId) {
+      const savedDoc = state.saved.find(d => d.id === activeDocId);
+      if (savedDoc) {
+        Object.assign(savedDoc, editedDoc);
+        save();
+        refreshSavedDocs();
+      }
+    }
+    document.getElementById('quoteModal').style.display = 'none';
+    showSavedPopup("I've saved that.");
+  });
+
+  // Invoice modal — Edit (open quoteModal for same doc) and Save (save without sending)
+  document.getElementById('invEditBtn')?.addEventListener('click', () => {
+    document.getElementById('invoiceModal').style.display = 'none';
+    if (activeDocId) openQuoteModal(activeDocId);
+  });
+  document.getElementById('invSaveBtn')?.addEventListener('click', () => {
+    const doc = state.saved.find(d => d.id === activeDocId);
+    if (!doc) return;
+    const invData = collectInvoiceForm();
+    Object.assign(doc, applyDocEdits(doc, invData));
+    doc.invoiceRef     = invData.invRef;
+    doc.invoiceDueDate = invData.dueDate || '';
+    save();
+    refreshSavedDocs();
+    document.getElementById('invoiceModal').style.display = 'none';
+    showSavedPopup("I've saved that.");
+  });
+
+  // Receipt modal — Edit (open quoteModal for same doc) and Save (save without sending)
+  document.getElementById('recEditBtn')?.addEventListener('click', () => {
+    document.getElementById('receiptModal').style.display = 'none';
+    if (activeDocId) openQuoteModal(activeDocId);
+  });
+  document.getElementById('recSaveBtn')?.addEventListener('click', () => {
+    const doc = state.saved.find(d => d.id === activeDocId);
+    if (!doc) return;
+    const recData = collectReceiptForm();
+    Object.assign(doc, applyDocEdits(doc, recData));
+    if (recData.recRef) doc.receiptRef = recData.recRef;
+    save();
+    refreshSavedDocs();
+    document.getElementById('receiptModal').style.display = 'none';
+    showSavedPopup("I've saved that.");
+  });
+
+  // Add Payment button inside editPaymentsModal
+  document.getElementById('addPaymentBtn')?.addEventListener('click', () => {
+    const doc = state.saved.find(d => d.id === activeDocId);
+    if (!doc) return;
+    const amount = parseFloat(document.getElementById('epAddAmount').value) || 0;
+    const date   = document.getElementById('epAddDate').value || todayStr();
+    if (!amount) { toast('Please enter an amount.', 'error'); return; }
+    if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
+    doc.payments.push({ amount, date });
+    recalcDocPayments(doc);
+    save();
+    refreshSavedDocs();
+    renderEditPaymentsList(doc);
+    document.getElementById('epAddAmount').value = '';
+    setVal('epAddDate', todayStr());
+    toast('Payment added.', 'success');
+  });
 
   // Money In — push new payment to payments array
   document.getElementById('confirmMarkPaidBtn').addEventListener('click', () => {
@@ -2194,7 +2376,7 @@ function populateQuoteSendModal(doc) {
   quotePreviewed = false;
   const q = doc.quote || {};
   const label = q.type || doc.type || 'Quote';
-  document.getElementById('quoteModalTitle').textContent = `Send ${label}`;
+  document.getElementById('quoteModalTitle').textContent = label;
   setVal('quoteCustFirst', q.custFirstName || '');
   setVal('quoteCustLast', q.custLastName || '');
   setVal('quoteRef', q.ref || doc.ref || '');
@@ -2207,7 +2389,10 @@ function populateQuoteSendModal(doc) {
 }
 
 function getActiveQuoteDoc() {
-  return activeDocId ? state.saved.find(d => d.id === activeDocId) : activeQuoteDraftDoc;
+  if (activeDocId) {
+    return state.saved.find(d => d.id === activeDocId) || activeQuoteDraftDoc || null;
+  }
+  return activeQuoteDraftDoc || null;
 }
 
 function openInvoiceModal(docId) {
@@ -2237,6 +2422,9 @@ function openReceiptModal(docId) {
   const payments  = getDocPayments(doc);
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const q = doc.quote || {};
+  // Reuse existing receiptRef if the receipt was already sent; otherwise generate a new one
+  const recRef = doc.receiptRef || nextRef('REC', KEY_REC);
+  setVal('recRef',     recRef);
   setVal('recCustFirst', q.custFirstName || '');
   setVal('recCustLast', q.custLastName || '');
   setVal('recAmount', (totalPaid > 0 ? totalPaid : (doc.total || 0)).toFixed(2));
@@ -2288,6 +2476,9 @@ function openEditPayments(docId) {
   // Migrate legacy single-payment docs
   if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
   renderEditPaymentsList(doc);
+  // Pre-fill date for add payment form
+  setVal('epAddDate', todayStr());
+  document.getElementById('epAddAmount').value = '';
   document.getElementById('editPaymentsModal').style.display = 'flex';
 }
 
@@ -2324,11 +2515,7 @@ function renderEditPaymentsList(doc) {
       recalcDocPayments(doc);
       save();
       refreshSavedDocs();
-      if (!doc.payments.length) {
-        document.getElementById('editPaymentsModal').style.display = 'none';
-      } else {
-        renderEditPaymentsList(doc);
-      }
+      renderEditPaymentsList(doc);
     });
   });
 }
@@ -2363,6 +2550,7 @@ function collectQuoteSendForm() {
 
 function collectReceiptForm() {
   return {
+    recRef:        getVal('recRef'),
     custFirstName: getVal('recCustFirst'),
     custLastName:  getVal('recCustLast'),
     amount:  getVal('recAmount'),
@@ -2643,43 +2831,251 @@ function renderCustomerSelector(groups) {
   });
 }
 
+function buildCustomerJobSection(d) {
+  const q = d.quote || {};
+  const items = q.items || [];
+  const subtotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
+  const discPct  = parseFloat(q.discount) || 0;
+  const discount = subtotal * discPct / 100;
+  const afterDisc = subtotal - discount;
+  const vatRate  = q.vatRate === 'custom' ? parseFloat(q.vatCustom) || 0 : parseFloat(q.vatRate) || 0;
+  const vatAmt   = afterDisc * vatRate / 100;
+  const payments = getDocPayments(d);
+  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const outstanding = Math.max(0, (d.total || 0) - totalPaid);
+  const isOverdue = !d.paid && d.invoiceSent && d.invoiceDueDate && todayStr() > d.invoiceDueDate;
+  const statusClass = d.paid ? 'paid' : isOverdue ? 'overdue' : d.invoiceSent ? 'invoiced' : (q.type || 'estimate').toLowerCase();
+  const statusLabel = d.paid ? 'Paid' : isOverdue ? 'Overdue' : d.invoiceSent ? 'Invoiced' : (q.type || 'Estimate');
+  const ref = d.invoiceRef || d.receiptRef || q.ref || d.ref || '—';
+  const docDate = q.date || d.date || '';
+  const photos = d.photos || {};
+  const beforePhotos = photos.before || [];
+  const afterPhotos  = photos.after  || [];
+
+  const itemsHtml = items.length
+    ? items.map(i => `
+        <div class="cdv-item-row">
+          <span class="cdv-item-name">${esc(i.name)}${i.qty > 1 ? ` <span class="cdv-item-qty">×${i.qty}</span>` : ''}</span>
+          <span class="cdv-item-price">${fmtPrice((i.unitPrice || 0) * (i.qty || 1))}</span>
+        </div>`).join('')
+    : '<p class="cdv-empty">No line items recorded.</p>';
+
+  const totalsHtml = `
+    <div class="cdv-totals">
+      <div class="cdv-total-row"><span>Subtotal</span><span>${fmtPrice(subtotal)}</span></div>
+      ${discount > 0 ? `<div class="cdv-total-row cdv-discount-row"><span>Discount (${discPct}%)</span><span>-${fmtPrice(discount)}</span></div>` : ''}
+      ${vatAmt   > 0 ? `<div class="cdv-total-row cdv-vat-row"><span>VAT (${vatRate}%)</span><span>${fmtPrice(vatAmt)}</span></div>` : ''}
+      <div class="cdv-total-row cdv-grand-total"><span>Total</span><span>${fmtPrice(d.total || 0)}</span></div>
+    </div>`;
+
+  const paymentsHtml = payments.length ? `
+    <div class="cdv-section">
+      <div class="cdv-section-label">💳 Payments</div>
+      ${payments.map((p, i) => `
+        <div class="cdv-payment-row">
+          <span class="cdv-pay-num">Payment ${i + 1}</span>
+          <span class="cdv-pay-date">${formatDate(p.date)}</span>
+          <span class="cdv-pay-amount">${fmtPrice(p.amount)}</span>
+        </div>`).join('')}
+      ${outstanding > 0
+        ? `<div class="cdv-payment-row cdv-outstanding-row"><span class="cdv-pay-num">Outstanding</span><span></span><span class="cdv-pay-amount">${fmtPrice(outstanding)}</span></div>`
+        : `<div class="cdv-paid-stamp">✓ Paid in full</div>`}
+    </div>` : `
+    <div class="cdv-section">
+      <div class="cdv-section-label">💳 Payments</div>
+      <p class="cdv-empty">No payments recorded yet.</p>
+    </div>`;
+
+  const notesHtml = q.notes ? `
+    <div class="cdv-section">
+      <div class="cdv-section-label">📝 Notes to Customer</div>
+      <p class="cdv-note-text">${esc(q.notes)}</p>
+    </div>` : '';
+
+  const privateHtml = q.privateNotes ? `
+    <div class="cdv-section cdv-private">
+      <div class="cdv-section-label">🔒 Private Notes</div>
+      <p class="cdv-note-text">${esc(q.privateNotes)}</p>
+    </div>` : '';
+
+  const photoGroup = (label, list) => list.length ? `
+    <div class="cdv-photo-group">
+      <div class="cdv-photo-label">${label}</div>
+      <div class="cdv-photo-grid">${list.map(src => `<img src="${src}" class="cdv-photo-thumb" alt="${label} photo">`).join('')}</div>
+    </div>` : '';
+  const photosHtml = (beforePhotos.length || afterPhotos.length) ? `
+    <div class="cdv-section">
+      <div class="cdv-section-label">📷 Photos</div>
+      ${photoGroup('Before', beforePhotos)}
+      ${photoGroup('After', afterPhotos)}
+    </div>` : '';
+
+  return `
+    <div class="cdv-job-card">
+      <div class="cdv-job-header">
+        <div class="cdv-job-meta">
+          <span class="cdv-job-ref">${esc(ref)}</span>
+          ${docDate ? `<span class="cdv-job-date">${formatDate(docDate)}</span>` : ''}
+        </div>
+        <span class="type-badge ${statusClass}">${esc(statusLabel)}</span>
+      </div>
+      <div class="cdv-items">${itemsHtml}</div>
+      ${totalsHtml}
+      ${paymentsHtml}
+      ${notesHtml}
+      ${privateHtml}
+      ${photosHtml}
+    </div>`;
+}
+
 function renderSingleCustomerDashboard(group, groups) {
+  activeCustomerGroup = group;
   const body = document.getElementById('customerDashboardBody');
   const firstDoc = group.docs[0];
   const q = firstDoc.quote || {};
   const totals = getCustomerTotals(group.docs);
+
+  // Contact details
+  const contactLines = [
+    q.custAddr    ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">📍</span>${esc(q.custAddr)}${q.custPostcode ? ', ' + esc(q.custPostcode) : ''}</span>` : '',
+    q.custPhone   ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">📞</span>${esc(q.custPhone)}</span>` : '',
+    q.custEmail   ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">✉</span>${esc(q.custEmail)}</span>` : '',
+  ].filter(Boolean).join('');
+
   const detailHtml = `
     <div class="customer-dashboard-card printable-customer-dashboard">
-      <h3>${esc(group.name)}</h3>
-      <p>${esc([q.custAddr, q.custPostcode, q.custPhone, q.custEmail].filter(Boolean).join('\n'))}</p>
-      <div class="customer-dashboard-totals">
-        <span>Jobs: <strong>${group.docs.length}</strong></span>
-        <span>Paid: <strong>${fmtPrice(totals.paid)}</strong></span>
-        <span>Outstanding: <strong>${fmtPrice(totals.outstanding)}</strong></span>
+      <div class="cdv-header">
+        <h3 class="cdv-name">${esc(group.name)}</h3>
+        ${contactLines ? `<div class="cdv-contact">${contactLines}</div>` : ''}
       </div>
-      <div class="customer-dashboard-jobs">
-        ${group.docs.map(d => `<button type="button" class="cp-row customer-edit-row" data-id="${d.id}">
-          <span>${esc(d.invoiceRef || d.ref || d.quote?.ref || 'No ref')}</span>
-          <span>${esc(d.quote?.items?.map(i => i.name).join(', ') || 'Job')}</span>
-          <span>${fmtPrice(getDocPayments(d).reduce((s, p) => s + (p.amount || 0), 0))} paid</span>
-          <span>${fmtPrice(Math.max(0, (d.total || 0) - getDocPayments(d).reduce((s, p) => s + (p.amount || 0), 0)))} outstanding</span>
-        </button>`).join('')}
+      <div class="cdv-summary-bar">
+        <div class="cdv-summary-item">
+          <span class="cdv-summary-label">Jobs</span>
+          <span class="cdv-summary-value">${group.docs.length}</span>
+        </div>
+        <div class="cdv-summary-item">
+          <span class="cdv-summary-label">Total Charged</span>
+          <span class="cdv-summary-value">${fmtPrice(totals.total)}</span>
+        </div>
+        <div class="cdv-summary-item">
+          <span class="cdv-summary-label">Paid</span>
+          <span class="cdv-summary-value cdv-paid">${fmtPrice(totals.paid)}</span>
+        </div>
+        <div class="cdv-summary-item">
+          <span class="cdv-summary-label">Outstanding</span>
+          <span class="cdv-summary-value ${totals.outstanding > 0 ? 'cdv-outstanding' : 'cdv-paid'}">${fmtPrice(totals.outstanding)}</span>
+        </div>
+      </div>
+      <div class="cdv-jobs-list">
+        ${group.docs.map(d => buildCustomerJobSection(d)).join('')}
       </div>
     </div>`;
+
   body.innerHTML = `
     <div class="customer-dashboard-actions">
       <button type="button" class="btn btn-outline btn-sm" id="customerDashboardBackBtn">Back</button>
+      <button type="button" class="btn btn-walnut btn-sm" id="customerDashboardEditBtn">✎ Edit</button>
       <button type="button" class="btn btn-primary btn-sm" id="customerDashboardPrintBtn">Print Dashboard</button>
     </div>
     ${detailHtml}`;
-  document.getElementById('customerDashboardBackBtn').addEventListener('click', () => renderCustomerSelector(groups));
-  document.getElementById('customerDashboardPrintBtn').addEventListener('click', () => printRaw(detailHtml));
-  body.querySelectorAll('.customer-edit-row').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.getElementById('customerDashboardModal').style.display = 'none';
-      editDoc(btn.dataset.id);
-    });
+
+  document.getElementById('customerDashboardBackBtn').addEventListener('click', () => {
+    activeCustomerGroup = null;
+    renderCustomerSelector(groups);
   });
+  document.getElementById('customerDashboardEditBtn').addEventListener('click', () => openCustomerEditChoice());
+  document.getElementById('customerDashboardPrintBtn').addEventListener('click', () => printRaw(detailHtml));
+}
+
+/* ===== CUSTOMER EDIT CHOICE ===== */
+function openCustomerEditChoice() {
+  const modal = document.getElementById('customerEditChoiceModal');
+  const jobList = document.getElementById('custEditJobPicker');
+  // Reset to main choice view
+  document.getElementById('custEditChoiceMain').style.display = '';
+  jobList.style.display = 'none';
+  modal.style.display = 'flex';
+}
+
+function customerEditPickDoc(editType) {
+  const group = activeCustomerGroup;
+  if (!group) return;
+  if (group.docs.length === 1) {
+    executeCustomerEdit(editType, group.docs[0].id);
+  } else {
+    // Show job picker
+    document.getElementById('custEditChoiceMain').style.display = 'none';
+    const jobList = document.getElementById('custEditJobPicker');
+    jobList.innerHTML = `
+      <p class="cec-pick-label">Which job?</p>
+      ${group.docs.map(d => `
+        <button type="button" class="cec-job-option" data-id="${d.id}" data-type="${editType}">
+          <span class="cec-job-ref">${esc(d.invoiceRef || d.ref || d.quote?.ref || 'No ref')}</span>
+          <span class="cec-job-desc">${esc((d.quote?.items || []).map(i => i.name).join(', ') || 'Job')}</span>
+          <span class="cec-job-total">${fmtPrice(d.total || 0)}</span>
+        </button>`).join('')}`;
+    jobList.style.display = '';
+    jobList.querySelectorAll('.cec-job-option').forEach(btn => {
+      btn.addEventListener('click', () => executeCustomerEdit(btn.dataset.type, btn.dataset.id));
+    });
+  }
+}
+
+function executeCustomerEdit(editType, docId) {
+  document.getElementById('customerEditChoiceModal').style.display = 'none';
+  if (editType === 'details') {
+    openCustomerDetailsEdit();
+  } else if (editType === 'job') {
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    openQuoteModal(docId);
+  } else if (editType === 'money') {
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    openEditPayments(docId);
+  }
+}
+
+function openCustomerDetailsEdit() {
+  const group = activeCustomerGroup;
+  if (!group) return;
+  const q = group.docs[0].quote || {};
+  setVal('cdeCustTitle',    q.custTitle    || '');
+  setVal('cdeCustFirst',    q.custFirstName || '');
+  setVal('cdeCustLast',     q.custLastName  || '');
+  setVal('cdeCustAddr',     q.custAddr      || '');
+  setVal('cdeCustPostcode', q.custPostcode  || '');
+  setVal('cdeCustPhone',    q.custPhone     || '');
+  setVal('cdeCustEmail',    q.custEmail     || '');
+  document.getElementById('customerDetailsEditModal').style.display = 'flex';
+}
+
+function saveCustomerDetails() {
+  const group = activeCustomerGroup;
+  if (!group) return;
+  const updates = {
+    custTitle:     getVal('cdeCustTitle'),
+    custFirstName: getVal('cdeCustFirst'),
+    custLastName:  getVal('cdeCustLast'),
+    custAddr:      getVal('cdeCustAddr'),
+    custPostcode:  getVal('cdeCustPostcode'),
+    custPhone:     getVal('cdeCustPhone'),
+    custEmail:     getVal('cdeCustEmail'),
+  };
+  // Apply to all docs belonging to this customer
+  group.docs.forEach(doc => {
+    if (!doc.quote) doc.quote = {};
+    Object.assign(doc.quote, updates);
+    // Refresh computed custName on the doc
+    doc.custName = buildCustName(doc.quote);
+  });
+  // Update in-memory group name for re-render
+  const newName = buildCustName(updates).trim() || group.name;
+  group.name = newName;
+  save();
+  refreshSavedDocs();
+  document.getElementById('customerDetailsEditModal').style.display = 'none';
+  // Re-render the dashboard with updated info
+  renderSingleCustomerDashboard(group, buildCustomerGroups());
+  showSavedPopup("Customer details updated.");
 }
 
 /* ===== DOCUMENT GENERATION ===== */
@@ -2763,6 +3159,8 @@ function buildDocHtml(doc, docType, extra = {}) {
     if (extra.notes)   extraSection += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
   } else if (docType === 'receipt') {
     docLabel = 'Receipt';
+    refLabel  = extra.recRef || doc.receiptRef || '';
+    dateLabel = extra.date || q.date;
     extraSection += `
       <div class="section">
         <h3>Payment Received</h3>
@@ -2930,13 +3328,13 @@ function buildTermsSection(q) {
 }
 
 function buildSigSection(q, co, docType) {
-  if (!q.authSig && !q.custSig && !getVal('custSigText')) return '';
+  // Prefer saved custSigText; only read live DOM for new page3 quotes (where custSigText not yet saved)
+  const sigText = q.custSigText || document.getElementById('custSigText')?.value || '';
+  if (!q.authSig && !sigText) return '';
   const authName = q.authSig || co.businessName || '';
-  const authSigContent = q.custSig
-    ? `<img src="${q.custSig}" class="sig-img">`
-    : (document.getElementById('custSigText')?.value
-        ? `<span class="sig-typed">${esc(document.getElementById('custSigText')?.value || '')}</span>`
-        : '');
+  const authSigContent = sigText
+    ? `<span class="sig-typed">${esc(sigText)}</span>`
+    : '';
 
   return `
     <div class="sig-block">

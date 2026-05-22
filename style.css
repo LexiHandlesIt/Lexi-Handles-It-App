@@ -370,6 +370,14 @@ input[type="text"].sig-text-input:focus {
 }
 .btn-danger-outline:hover { background: var(--danger-l); }
 
+.btn-success {
+  background: var(--success);
+  color: var(--white);
+  border-color: var(--success);
+}
+.btn-success:hover { background: #1e5c23; border-color: #1e5c23; }
+.btn-success:active { transform: scale(0.98); }
+
 .btn-sm {
   padding: 7px 14px;
   font-size: 0.85rem;
@@ -1693,6 +1701,16 @@ input[type="text"].sig-text-input:focus {
   margin-top: 4px;
 }
 
+.totals-discount {
+  color: var(--success);
+  font-size: 0.9rem;
+}
+
+.totals-vat {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
 .vat-row {
   display: flex;
   align-items: center;
@@ -1812,44 +1830,40 @@ input[type="text"].sig-text-input:focus {
 }
 
 /* ===== SIGNATURE ===== */
-.sig-container {
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.sig-canvas {
+.sig-text-input {
   display: block;
   width: 100%;
-  height: 150px;
-  background: var(--white);
-  cursor: crosshair;
-  touch-action: none;
-}
-
-.sig-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  box-sizing: border-box;
+  font-family: 'Dancing Script', cursive;
+  font-size: 1.5rem;
+  color: var(--charcoal);
   background: var(--cream);
-  border-top: 1px solid var(--border);
-  flex-wrap: wrap;
-}
-
-.sig-or {
-  font-size: 0.8rem;
-  color: #999;
-  flex-shrink: 0;
-}
-
-.sig-text-input {
-  flex: 1;
-  min-width: 120px;
-  padding: 8px 10px;
   border: 1.5px solid var(--border);
-  border-radius: 6px;
-  font-size: 16px;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+/* ===== £ PREFIX INPUTS ===== */
+.input-pfx {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+.pfx-symbol {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: 600;
+  color: var(--charcoal);
+  pointer-events: none;
+  z-index: 1;
+  line-height: 1;
+}
+.input-pfx input {
+  padding-left: 30px;
+  width: 100%;
 }
 
 /* ===== SAVED DOCS ===== */
@@ -1911,6 +1925,7 @@ input[type="text"].sig-text-input:focus {
 .saved-doc-card.status-quote    { border-left-color: var(--walnut); }
 .saved-doc-card.status-invoiced { border-left-color: #1d4ed8; }
 .saved-doc-card.status-paid     { border-left-color: var(--success); }
+.saved-doc-card.status-overdue  { border-left-color: var(--danger); }
 
 .saved-doc-header {
   display: flex;
@@ -1940,6 +1955,7 @@ input[type="text"].sig-text-input:focus {
 .type-badge.quote { background: var(--walnut); color: #fff; }
 .type-badge.invoiced { background: #dbeafe; color: #1d4ed8; }
 .type-badge.paid { background: #dcfce7; color: #166534; }
+.type-badge.overdue { background: var(--danger-l); color: var(--danger); }
 
 .journey-btns {
   display: flex;
@@ -2126,7 +2142,59 @@ input[type="text"].sig-text-input:focus {
   gap: 8px;
   justify-content: flex-end;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
+
+/* Walnut (brand brown) button for Edit */
+.btn-walnut {
+  background: var(--walnut);
+  color: var(--white);
+  border-color: var(--walnut);
+}
+.btn-walnut:hover  { background: var(--walnut-d); border-color: var(--walnut-d); }
+.btn-walnut:active { transform: scale(0.98); }
+
+/* Customer Edit Choice modal */
+.cec-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+  padding: 14px 16px;
+  text-align: left;
+  justify-content: flex-start;
+}
+.cec-icon { font-size: 1.2rem; }
+
+/* Job picker inside edit choice modal */
+.cec-pick-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--walnut);
+  margin-bottom: 8px;
+}
+.cec-job-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: var(--cream);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: border-color var(--transition);
+}
+.cec-job-option:hover { border-color: var(--walnut); }
+.cec-job-ref  { font-weight: 700; color: var(--walnut); min-width: 90px; }
+.cec-job-desc { flex: 1; color: var(--charcoal); }
+.cec-job-total { font-weight: 600; white-space: nowrap; }
 .customer-dashboard-card h3 {
   color: var(--walnut);
   margin-bottom: 6px;
@@ -2150,6 +2218,225 @@ input[type="text"].sig-text-input:focus {
   border: 1px solid var(--border);
   border-radius: 8px;
   margin-top: 6px;
+}
+
+/* ===== CUSTOMER DETAIL VIEW (cdv) ===== */
+.cdv-header {
+  border-bottom: 1.5px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+.cdv-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--walnut);
+  margin-bottom: 6px;
+}
+.cdv-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cdv-contact-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--charcoal);
+  line-height: 1.4;
+}
+.cdv-contact-icon {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.cdv-summary-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  background: var(--walnut-tint);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+.cdv-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.cdv-summary-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--walnut);
+  opacity: 0.75;
+  margin-bottom: 2px;
+}
+.cdv-summary-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--charcoal);
+}
+.cdv-paid { color: var(--success); }
+.cdv-outstanding { color: var(--danger); }
+
+.cdv-jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Individual job card */
+.cdv-job-card {
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cdv-job-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--cream-d);
+  border-bottom: 1px solid var(--border);
+}
+.cdv-job-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.cdv-job-ref {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--walnut);
+}
+.cdv-job-date {
+  font-size: 0.82rem;
+  color: #888;
+}
+
+/* Line items */
+.cdv-items {
+  padding: 10px 14px 6px;
+}
+.cdv-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.cdv-item-row:last-child { border-bottom: none; }
+.cdv-item-name { flex: 1; color: var(--charcoal); }
+.cdv-item-qty  { font-size: 0.78rem; color: #999; margin-left: 4px; }
+.cdv-item-price { font-weight: 600; white-space: nowrap; }
+
+/* Totals */
+.cdv-totals {
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--cream);
+}
+.cdv-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.87rem;
+  padding: 3px 0;
+  color: var(--charcoal);
+}
+.cdv-discount-row { color: var(--success); }
+.cdv-vat-row { opacity: 0.75; }
+.cdv-grand-total {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--walnut);
+  border-top: 1.5px solid var(--border);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+/* Payments */
+.cdv-section {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+.cdv-section-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 700;
+  color: var(--walnut);
+  margin-bottom: 6px;
+}
+.cdv-payment-row {
+  display: flex;
+  align-items: center;
+  font-size: 0.88rem;
+  padding: 4px 0;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cdv-payment-row:last-child { border-bottom: none; }
+.cdv-pay-num   { min-width: 82px; color: #888; font-size: 0.82rem; flex-shrink: 0; }
+.cdv-pay-date  { flex: 1; color: var(--charcoal); }
+.cdv-pay-amount { font-weight: 700; white-space: nowrap; }
+.cdv-outstanding-row .cdv-pay-amount { color: var(--danger); }
+.cdv-paid-stamp {
+  font-size: 0.82rem;
+  color: var(--success);
+  font-weight: 600;
+  padding-top: 4px;
+}
+
+/* Notes */
+.cdv-note-text {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--charcoal);
+  white-space: pre-wrap;
+}
+.cdv-private {
+  background: #fffbf0;
+  border-left: 3px solid #e6b800;
+}
+
+/* Photos */
+.cdv-photo-group { margin-bottom: 8px; }
+.cdv-photo-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.cdv-photo-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cdv-photo-thumb {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.cdv-empty {
+  font-size: 0.85rem;
+  color: #aaa;
+  font-style: italic;
+}
+
+@media (max-width: 480px) {
+  .cdv-summary-bar { grid-template-columns: repeat(2, 1fr); }
+  .cdv-photo-thumb { width: 68px; height: 68px; }
 }
 
 /* ===== PAYMENT HISTORY ON CARD ===== */
@@ -2326,6 +2613,12 @@ input[type="text"].sig-text-input:focus {
   font-size: 0.9rem;
 }
 
+.add-payment-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1.5px solid var(--border);
+}
+
 /* ===== MONEY IN MODAL PREV-INFO ===== */
 .mp-prev-info {
   background: var(--cream);
@@ -2385,6 +2678,12 @@ input[type="text"].sig-text-input:focus {
 }
 
 .modal-footer .btn { flex: 1; }
+
+.preview-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
 
 .preview-modal-card {
   max-width: 700px;
