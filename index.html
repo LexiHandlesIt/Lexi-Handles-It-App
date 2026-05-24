@@ -317,6 +317,70 @@
         </div>
       </div>
 
+      <!-- Brand Colours -->
+      <div class="card price-list-card">
+        <h2 class="card-title">
+          Add Your Brand Colours
+          <button type="button" class="tooltip-btn" id="brandTooltipBtn" aria-label="Why set brand colours?">?</button>
+        </h2>
+        <div id="brandTooltip" class="tooltip-box" style="display:none">
+          <p>Every quote and invoice you send is a chance to get your name known. Add your brand colours once and every document goes out looking professional, helping customers recognise and remember you above the competition.</p>
+        </div>
+        <div class="logo-colour-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="useLogoColours"> Use the colours in my logo
+          </label>
+        </div>
+        <div class="colour-layout">
+          <!-- Left: colour pickers -->
+          <div class="colour-pickers">
+            <div class="colour-picker-group">
+              <label for="colourHeader">Header</label>
+              <div class="colour-input-row">
+                <input type="color" id="colourHeader" value="#7D5730" class="colour-swatch">
+              </div>
+            </div>
+            <div class="colour-picker-group">
+              <label for="colourAccent">Accent</label>
+              <div class="colour-input-row">
+                <input type="color" id="colourAccent" value="#6B7C5C" class="colour-swatch">
+              </div>
+            </div>
+            <div class="colour-picker-group">
+              <label for="colourBg">Background</label>
+              <div class="colour-input-row">
+                <input type="color" id="colourBg" value="#F5F0E8" class="colour-swatch">
+              </div>
+            </div>
+          </div>
+          <!-- Right: live preview -->
+          <div class="colour-preview-col">
+            <p class="cp-example-label">Example</p>
+            <div class="colour-preview" id="colourPreview">
+              <div class="cp-header" id="cpHeader">
+                <span id="cpBusinessName"><strong>Ace Trades</strong> <span class="cp-example-tag">EXAMPLE</span></span>
+                <span id="cpDocType">QUOTE</span>
+              </div>
+              <div class="cp-body" id="cpBody">
+                <div class="cp-col-header"><span class="cp-label" id="cpAccentSample">Job Description</span></div>
+                <div class="cp-row"><span>Parts</span><span>£150.00</span></div>
+                <div class="cp-row"><span>Labour</span><span>£75.00</span></div>
+                <div class="cp-total">Total: <strong>£225.00</strong></div>
+              </div>
+            </div>
+            <div class="colour-reset-row">
+              <button type="button" class="btn btn-sm btn-outline" id="resetColourMenu">Reset colours ▾</button>
+              <div id="resetColourDropdown" class="dropdown" style="display:none">
+                <button type="button" class="dropdown-item" data-reset="all">Reset All</button>
+                <button type="button" class="dropdown-item" data-reset="header">Reset Header</button>
+                <button type="button" class="dropdown-item" data-reset="accent">Reset Accent</button>
+                <button type="button" class="dropdown-item" data-reset="bg">Reset Background</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Payment Methods -->
       <div class="card sage-focus">
         <h2 class="card-title">How Would You Like to Be Paid?</h2>
@@ -370,65 +434,6 @@
             <div class="form-group">
               <label for="payOtherText">Payment Details</label>
               <textarea id="payOtherText" rows="2" placeholder="e.g. Cheque made payable to..."></textarea>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Brand Colours -->
-      <div class="card price-list-card">
-        <h2 class="card-title">
-          Add Your Brand Colours
-          <button type="button" class="tooltip-btn" id="brandTooltipBtn" aria-label="Why set brand colours?">?</button>
-        </h2>
-        <div id="brandTooltip" class="tooltip-box" style="display:none">
-          <p>Every quote and invoice you send is a chance to get your name known. Add your brand colours once and every document goes out looking professional, helping customers recognise and remember you above the competition.</p>
-        </div>
-        <div class="colour-layout">
-          <!-- Left: colour pickers -->
-          <div class="colour-pickers">
-            <div class="colour-picker-group">
-              <label for="colourHeader">Header</label>
-              <div class="colour-input-row">
-                <input type="color" id="colourHeader" value="#7D5730" class="colour-swatch">
-              </div>
-            </div>
-            <div class="colour-picker-group">
-              <label for="colourAccent">Accent</label>
-              <div class="colour-input-row">
-                <input type="color" id="colourAccent" value="#6B7C5C" class="colour-swatch">
-              </div>
-            </div>
-            <div class="colour-picker-group">
-              <label for="colourBg">Background</label>
-              <div class="colour-input-row">
-                <input type="color" id="colourBg" value="#F5F0E8" class="colour-swatch">
-              </div>
-            </div>
-          </div>
-          <!-- Right: live preview -->
-          <div class="colour-preview-col">
-            <p class="cp-example-label">Example</p>
-            <div class="colour-preview" id="colourPreview">
-              <div class="cp-header" id="cpHeader">
-                <span id="cpBusinessName"><strong>Ace Trades</strong> <span class="cp-example-tag">EXAMPLE</span></span>
-                <span id="cpDocType">QUOTE</span>
-              </div>
-              <div class="cp-body" id="cpBody">
-                <div class="cp-col-header"><span class="cp-label" id="cpAccentSample">Job Description</span></div>
-                <div class="cp-row"><span>Parts</span><span>£150.00</span></div>
-                <div class="cp-row"><span>Labour</span><span>£75.00</span></div>
-                <div class="cp-total">Total: <strong>£225.00</strong></div>
-              </div>
-            </div>
-            <div class="colour-reset-row">
-              <button type="button" class="btn btn-sm btn-outline" id="resetColourMenu">Reset colours ▾</button>
-              <div id="resetColourDropdown" class="dropdown" style="display:none">
-                <button type="button" class="dropdown-item" data-reset="all">Reset All</button>
-                <button type="button" class="dropdown-item" data-reset="header">Reset Header</button>
-                <button type="button" class="dropdown-item" data-reset="accent">Reset Accent</button>
-                <button type="button" class="dropdown-item" data-reset="bg">Reset Background</button>
-              </div>
             </div>
           </div>
         </div>

@@ -549,6 +549,11 @@ function setupPage1() {
   setupColourPicker('accent', 'colourAccent', DEFAULT_COLOURS.accent);
   setupColourPicker('bg',     'colourBg',     DEFAULT_COLOURS.bg);
 
+  // Logo colour extraction checkbox
+  document.getElementById('useLogoColours').addEventListener('change', e => {
+    if (e.target.checked) extractLogoColours();
+  });
+
   // Brand tooltip
   document.getElementById('brandTooltipBtn').addEventListener('click', () => {
     const t = document.getElementById('brandTooltip');
@@ -604,7 +609,11 @@ function handleLogoUpload(e) {
     state.company.logo = ev.target.result;
     showLogoState();
     save();
-    showSavedPopup("Great Logo, you'll really stand out", null, 5000);
+    if (document.getElementById('useLogoColours')?.checked) {
+      extractLogoColours();
+    } else {
+      showSavedPopup("Great Logo, you'll really stand out", null, 5000);
+    }
   };
   reader.readAsDataURL(file);
 }
@@ -962,6 +971,83 @@ function updateColourPreview() {
   const bizName = getVal('p1BusinessName') || getVal('p1LastName') || 'Ace Trades';
   const cpBiz = document.getElementById('cpBusinessName');
   if (cpBiz) cpBiz.textContent = bizName;
+}
+
+function extractLogoColours() {
+  const logo = state.company.logo;
+  if (!logo) {
+    showSavedPopup('Sure, upload your logo so I can extract the colours');
+    document.getElementById('logoFile').click();
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    // Draw onto a small canvas for speed
+    const canvas = document.createElement('canvas');
+    const MAX = 100;
+    const scale = Math.min(1, MAX / Math.max(img.width || 1, img.height || 1));
+    canvas.width  = Math.max(1, Math.round(img.width  * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    let data;
+    try { data = ctx.getImageData(0, 0, canvas.width, canvas.height).data; }
+    catch (e) { return; } // tainted canvas safety
+
+    // Tally colours — quantize RGB to 32 levels per channel
+    const tally = {};
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue;                         // skip transparent
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      if (r > 230 && g > 230 && b > 230) continue;             // skip near-white
+      if (r < 20  && g < 20  && b < 20)  continue;             // skip near-black
+      const key = `${r >> 3},${g >> 3},${b >> 3}`;
+      tally[key] = (tally[key] || 0) + 1;
+    }
+
+    const sorted = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+
+    // Pick up to 3 visually distinct colours from the most frequent
+    const picked = [];
+    for (const [key] of sorted) {
+      if (picked.length >= 3) break;
+      const [rq, gq, bq] = key.split(',').map(Number);
+      const r = (rq << 3) + 4, g = (gq << 3) + 4, b = (bq << 3) + 4;
+      const isDistinct = picked.every(p =>
+        Math.abs(p.r - r) + Math.abs(p.g - g) + Math.abs(p.b - b) > 60
+      );
+      if (picked.length === 0 || isDistinct) picked.push({ r, g, b });
+    }
+
+    if (!picked.length) {
+      document.getElementById('useLogoColours').checked = false;
+      showSavedPopup("Hmm, couldn't pull colours from this logo. Try adjusting manually.");
+      return;
+    }
+
+    // Sort by luminance: darkest → header, next → accent
+    picked.sort((a, b) => {
+      const lum = c => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+      return lum(a) - lum(b);
+    });
+
+    const header = picked[0];
+    const accent = picked.length > 1 ? picked[1] : picked[0];
+
+    // Background: very light tint derived from the header colour
+    const bgR = Math.round(header.r * 0.12 + 242 * 0.88);
+    const bgG = Math.round(header.g * 0.12 + 242 * 0.88);
+    const bgB = Math.round(header.b * 0.12 + 242 * 0.88);
+
+    setColour('header', rgbToHex(header.r, header.g, header.b));
+    setColour('accent', rgbToHex(accent.r, accent.g, accent.b));
+    setColour('bg',     rgbToHex(bgR, bgG, bgB));
+    updateColourPreview();
+    showSavedPopup('Done! Colours extracted from your logo.');
+  };
+  img.src = logo;
 }
 
 /* ===== PAGE 2 — PRICE LIST ===== */
@@ -3430,7 +3516,10 @@ function buildCustomerJobSection(d) {
           <span class="cdv-job-ref">${esc(ref)}</span>
           ${docDate ? `<span class="cdv-job-date">${formatDate(docDate)}</span>` : ''}
         </div>
-        <span class="type-badge ${statusClass}">${esc(statusLabel)}</span>
+        <div class="cdv-job-header-right">
+          <span class="type-badge ${statusClass}">${esc(statusLabel)}</span>
+          <button type="button" class="cdv-btn-edit cdv-header-edit-btn" data-id="${d.id}">✎ Edit</button>
+        </div>
       </div>
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
@@ -3439,7 +3528,6 @@ function buildCustomerJobSection(d) {
       ${privateHtml}
       ${photosHtml}
       <div class="cdv-job-actions">
-        <button type="button" class="btn btn-sm btn-walnut cdv-btn-edit" data-id="${d.id}">✎ Edit</button>
         <button type="button" class="btn-photo-doc cdv-btn-camera" data-id="${d.id}" title="Before and after photos">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
