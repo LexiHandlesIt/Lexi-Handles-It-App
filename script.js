@@ -33,20 +33,21 @@ let state = {
   },
   priceList: [],
   quote: {
-    type: 'Estimate',
+    type: '',
     custTitle: '', custFirstName: '', custLastName: '',
     custAddr: '', custPostcode: '', custPhone: '', custEmail: '',
     date: '', validFor: '14', validCustom: '',
     ref: '',
     items: [],
-    vatRate: '0', vatCustom: '',
+    vatRate: '20', vatCustom: '',
     discount: '0',
     notes: '', privateNotes: '',
     selectedTerms: [], customTerms: '',
     authSig: '', custSig: '', sigDate: ''
   },
   saved: [],
-  editingDocId: null  // when editing a saved doc
+  editingDocId: null,       // when editing a saved doc
+  editingFromTerms: false   // true when edit was launched from Job Terms in customer dashboard
 };
 
 /* ===== ACTIVE MODAL CONTEXT ===== */
@@ -64,6 +65,15 @@ let activeQuoteDraftDoc = null;
 let voiceRecogniser = null;
 let voiceRecording = false;
 /* ===== PAYMENT HELPERS ===== */
+// Sorts a payments array in-place by date ascending (Payment 1 = earliest)
+function sortPaymentsByDate(payments) {
+  payments.sort((a, b) => {
+    const da = a.date || '';
+    const db = b.date || '';
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
+}
+
 // Returns doc.payments array, synthesising one entry from legacy paidAmount/paidDate if needed
 function getDocPayments(doc) {
   // If doc.payments array exists and is authoritative, always use it (even if empty — empty means no payments)
@@ -188,7 +198,10 @@ function lsGet(key) {
 function nextRef(prefix, key) {
   const n = parseInt(localStorage.getItem(key) || '0') + 1;
   localStorage.setItem(key, n);
-  return `${prefix}-${String(n).padStart(3, '0')}`;
+  const now = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dateStr = `${String(now.getDate()).padStart(2,'0')}${months[now.getMonth()]}${String(now.getFullYear()).slice(-2)}`;
+  return `LEXI-${String(n).padStart(3, '0')}-${dateStr}`;
 }
 
 /* ===== TOAST ===== */
@@ -314,6 +327,15 @@ function showPage(pageId) {
     if (authSig && custSigText && !custSigText.value && !custSigText.dataset.userEdited) {
       custSigText.value = authSig.value;
     }
+    // Personalise the intro text with the customer's first name
+    const introEl = document.getElementById('completionIntroText');
+    if (introEl) {
+      const first = (state.quote.custFirstName || '').trim();
+      introEl.textContent = `${first ? first + ', ' : ''}is this an estimate or a quote?`;
+    }
+    // Close tooltip if it was left open
+    const tooltip = document.getElementById('estQuoteTooltip');
+    if (tooltip) tooltip.style.display = 'none';
   }
 }
 
@@ -365,6 +387,8 @@ function setupNavigation() {
 
   hamburger.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    const onCompletion = document.getElementById('page-completion')?.classList.contains('active');
+    if (onCompletion && !state.quote.type) { docTypeGuard(); return; }
     navMenu.classList.contains('open') ? closeMenu() : openMenu();
   });
   overlay.addEventListener('click', closeMenu);
@@ -373,6 +397,12 @@ function setupNavigation() {
   document.querySelectorAll('[data-target]').forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.target;
+      const onCompletion = document.getElementById('page-completion')?.classList.contains('active');
+      if (onCompletion && !state.quote.type) {
+        closeMenu();
+        docTypeGuard();
+        return;
+      }
       closeMenu();
       if (target === 'page3') prepareNewQuote();
       showPage(target);
@@ -446,6 +476,10 @@ function setupNavigation() {
     showPage('page2');
   });
   document.getElementById('goToQuoteBtn').addEventListener('click', () => {
+    if (state.priceList.length === 0) {
+      showSavedPopup("Add at least one job to your price list before creating an estimate or quote.");
+      return;
+    }
     showPage('page3');
   });
   document.getElementById('saveCustomerGoToJobsBtn')?.addEventListener('click', () => {
@@ -551,7 +585,14 @@ function setupPage1() {
 
   // Logo colour extraction checkbox
   document.getElementById('useLogoColours').addEventListener('change', e => {
-    if (e.target.checked) extractLogoColours();
+    if (e.target.checked) {
+      extractLogoColours();
+    } else {
+      setColour('header', DEFAULT_COLOURS.primary);
+      setColour('accent', DEFAULT_COLOURS.accent);
+      setColour('bg',     DEFAULT_COLOURS.bg);
+      updateColourPreview();
+    }
   });
 
   // Brand tooltip
@@ -572,6 +613,7 @@ function setupPage1() {
       if (r === 'all' || r === 'header') { setColour('header', DEFAULT_COLOURS.primary); }
       if (r === 'all' || r === 'accent') { setColour('accent', DEFAULT_COLOURS.accent); }
       if (r === 'all' || r === 'bg')     { setColour('bg',     DEFAULT_COLOURS.bg); }
+      document.getElementById('useLogoColours').checked = false;
       document.getElementById('resetColourDropdown').style.display = 'none';
       updateColourPreview();
     });
@@ -977,7 +1019,7 @@ function extractLogoColours() {
   const logo = state.company.logo;
   if (!logo) {
     showSavedPopup('Sure, upload your logo so I can extract the colours');
-    document.getElementById('logoFile').click();
+    setTimeout(() => document.getElementById('logoFile').click(), 4000);
     return;
   }
 
@@ -1339,7 +1381,7 @@ function editJobInline(row, job) {
   editingJobId = job.id;
 
   row.innerHTML = `
-    <div class="price-item-edit-row" style="width:100%;display:grid;grid-template-columns:1fr 90px 80px auto auto;gap:8px;align-items:center">
+    <div class="price-item-edit-row">
       <input type="text" class="edit-name" value="${esc(job.name)}" placeholder="Job name" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
       <input type="number" class="edit-price" value="${job.price}" placeholder="Price" min="0" step="0.01" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
       <input type="text" class="edit-unit" value="${esc(job.unit||'')}" placeholder="Unit" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
@@ -1417,6 +1459,12 @@ function setupPageCompletion() {
   document.getElementById('dtEstimate').addEventListener('change', () => setDocType('Estimate'));
   document.getElementById('dtQuote').addEventListener('change',    () => setDocType('Quote'));
 
+  // Estimate vs Quote tooltip
+  document.getElementById('estQuoteTooltipBtn').addEventListener('click', () => {
+    const t = document.getElementById('estQuoteTooltip');
+    t.style.display = t.style.display === 'none' ? 'block' : 'none';
+  });
+
   // Valid for
   document.getElementById('docValidFor').addEventListener('change', e => {
     document.getElementById('validCustomGroup').style.display = e.target.value === 'custom' ? 'block' : 'none';
@@ -1487,7 +1535,7 @@ function prepareNewQuote() {
     date: todayStr(), validFor: '14', validCustom: '',
     ref: buildRef(pendingRefNum),
     items: [],
-    vatRate: '0', vatCustom: '',
+    vatRate: '20', vatCustom: '',
     discount: '0',
     notes: '', privateNotes: '',
     selectedTerms: [], customTerms: '',
@@ -1511,7 +1559,7 @@ function loadQuoteFromDoc(doc) {
 
 function populateQuoteForm() {
   const q = state.quote;
-  setDocType(q.type || 'Estimate');
+  setDocType(q.type || '');
   setVal('custTitle',     q.custTitle);
   setVal('custFirstName', q.custFirstName);
   setVal('custLastName',  q.custLastName);
@@ -1547,7 +1595,7 @@ function populateQuoteForm() {
     document.getElementById('discountCustom').style.display = 'inline-block';
   }
   setVal('vatCustom',     q.vatCustom || '');
-  document.getElementById('vatSelect').value = q.vatRate || '0';
+  document.getElementById('vatSelect').value = q.vatRate || '20';
   document.getElementById('vatCustom').style.display = q.vatRate === 'custom' ? 'inline-block' : 'none';
   document.getElementById('validCustomGroup').style.display = q.validFor === 'custom' ? 'block' : 'none';
 
@@ -1773,7 +1821,8 @@ function collectQuoteState() {
 
 function docTypeGuard() {
   if (!state.quote.type) {
-    toast('Please select Estimate or Quote first.', 'error');
+    const first = (state.quote.custFirstName || '').trim();
+    showSavedPopup(`Before we move on${first ? ' ' + first : ''}, is this a fixed quote or an estimate?`, null, 5000);
     document.getElementById('dtEstimate')?.closest('.doc-type-chooser')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return false;
   }
@@ -1792,6 +1841,7 @@ function saveQuote() {
   }
 
   const isEditing = !!state.editingDocId;
+  const returningFromTerms = !!state.editingFromTerms;
   const docType   = q.type || 'Document';
 
   if (state.editingDocId) {
@@ -1807,6 +1857,7 @@ function saveQuote() {
       };
     }
     state.editingDocId = null;
+    state.editingFromTerms = false;
     // Reset save button label
     const saveBtn = document.getElementById('saveQuoteBtn');
     if (saveBtn) saveBtn.textContent = '✓ Save';
@@ -1838,9 +1889,25 @@ function saveQuote() {
   updateSavedBadge();
   refreshSavedDocs();
   const popupLabel = isEditing ? "I've saved your changes." : `I've saved your ${docType.toLowerCase()}.`;
-  showSavedPopup(popupLabel);
-  showPage('page4');
-  showNavHint();
+
+  if (returningFromTerms && activeCustomerGroup) {
+    // Came from Job Terms edit via customer dashboard — go back to dashboard
+    showSavedPopup(popupLabel, () => {
+      try {
+        const groups = buildCustomerGroups();
+        const updated = groups.find(g => g.docs.some(d =>
+          activeCustomerGroup.docs.some(ad => ad.id === d.id)
+        )) || activeCustomerGroup;
+        activeCustomerGroup = updated;
+        renderSingleCustomerDashboard(updated, groups);
+        document.getElementById('customerDashboardModal').style.display = 'flex';
+      } catch(e) { console.error('Dashboard reopen error:', e); }
+    });
+  } else {
+    showSavedPopup(popupLabel);
+    showPage('page4');
+    showNavHint();
+  }
 }
 
 function buildCustName(q) {
@@ -2268,8 +2335,8 @@ function setupModals() {
   document.getElementById('closeQuoteBtn').addEventListener('click', () => document.getElementById('quoteModal').style.display = 'none');
   document.getElementById('closeInvoiceBtn').addEventListener('click', () => document.getElementById('invoiceModal').style.display = 'none');
   document.getElementById('closeReceiptBtn').addEventListener('click', () => document.getElementById('receiptModal').style.display = 'none');
-  document.getElementById('closeMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; refreshActiveDashboard(); });
-  document.getElementById('cancelMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; refreshActiveDashboard(); });
+  document.getElementById('closeMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
+  document.getElementById('cancelMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
   document.getElementById('mpAmount').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('confirmMarkPaidBtn').click(); } });
   document.getElementById('closeEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
   document.getElementById('doneEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
@@ -2308,6 +2375,7 @@ function setupModals() {
   document.getElementById('custEditDetailsBtn')?.addEventListener('click', () => customerEditPickDoc('details'));
   document.getElementById('custEditJobBtn')?.addEventListener('click', () => customerEditPickDoc('job'));
   document.getElementById('custEditMoneyBtn')?.addEventListener('click', () => customerEditPickDoc('money'));
+  document.getElementById('custEditTermsBtn')?.addEventListener('click', () => customerEditPickDoc('terms'));
   document.getElementById('closeCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('cancelCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('saveCustDetailsBtn')?.addEventListener('click', saveCustomerDetails);
@@ -2613,6 +2681,7 @@ function setupModals() {
     if (!amount) { toast('Please enter an amount.', 'error'); return; }
     if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
     doc.payments.push({ amount, date });
+    sortPaymentsByDate(doc.payments);
     recalcDocPayments(doc);
     save();
     refreshSavedDocs();
@@ -2632,6 +2701,7 @@ function setupModals() {
     // Migrate legacy single-payment docs
     if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
     doc.payments.push({ amount, date });
+    sortPaymentsByDate(doc.payments);
     recalcDocPayments(doc);
     save();
     refreshSavedDocs();
@@ -2928,12 +2998,42 @@ function refreshActiveDashboard() {
   } catch(e) { console.error('Dashboard refresh error:', e); }
 }
 
+// Called when the Money In modal is closed without logging — re-shows the customer
+// dashboard (which was hidden by executeCustomerEdit before opening Money In).
+function reopenDashboardAfterMoneyIn() {
+  if (!activeCustomerGroup) return;
+  try {
+    const groups = buildCustomerGroups();
+    const updated = groups.find(g => g.docs.some(d => d.id === activeDocId)) || activeCustomerGroup;
+    activeCustomerGroup = updated;
+    renderSingleCustomerDashboard(updated, groups);
+    document.getElementById('customerDashboardModal').style.display = 'flex';
+  } catch(e) { console.error('Dashboard reopen error:', e); }
+}
+
+// Updates only the totals rows inside mpPrevInfo — does NOT replace the whole innerHTML,
+// so edit inputs and delete buttons remain intact and clickable.
+function refreshMpTotalsOnly(doc) {
+  const payments  = doc.payments || [];
+  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const remaining = Math.max(0, (doc.total || 0) - totalPaid);
+  const prevInfo  = document.getElementById('mpPrevInfo');
+  if (!prevInfo) return;
+  const totalStrong = prevInfo.querySelector('.mp-totals-divider strong');
+  if (totalStrong) totalStrong.textContent = fmtPrice(totalPaid);
+  const outstandingStrong = prevInfo.querySelector('.mp-prev-row:not(.mp-totals-divider) strong');
+  if (outstandingStrong) outstandingStrong.textContent = fmtPrice(remaining);
+  // Keep the new-payment prefill in sync
+  setVal('mpAmount', remaining > 0 ? remaining.toFixed(2) : '');
+}
+
 function renderMpPrevInfo() {
   const doc = state.saved.find(d => d.id === activeDocId);
   if (!doc) return;
   // Ensure doc.payments is always a real array (migrate legacy scalar)
   if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
   const payments  = doc.payments;
+  sortPaymentsByDate(payments);
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const total     = doc.total || 0;
   const remaining = Math.max(0, total - totalPaid);
@@ -2942,6 +3042,8 @@ function renderMpPrevInfo() {
 
   if (payments.length === 0) {
     prevInfo.style.display = 'none';
+    const addLabel = document.getElementById('mpAddLabel');
+    if (addLabel) addLabel.style.display = 'none';
     return;
   }
 
@@ -2966,7 +3068,8 @@ function renderMpPrevInfo() {
        <span>Still outstanding:</span><span><strong style="color:var(--walnut)">${fmtPrice(remaining)}</strong></span>
      </div>`;
 
-  // Wire amount edits — save on blur so typing isn't interrupted
+  // Wire amount edits — update totals in-place (no innerHTML replace) so that
+  // a pending click on the delete button is never interrupted by a DOM rebuild.
   prevInfo.querySelectorAll('.mp-edit-val').forEach(inp => {
     inp.addEventListener('change', () => {
       const freshDoc = state.saved.find(d => d.id === activeDocId);
@@ -2977,12 +3080,11 @@ function renderMpPrevInfo() {
       recalcDocPayments(freshDoc);
       save();
       refreshSavedDocs();
-      refreshActiveDashboard();
-      renderMpPrevInfo();
+      refreshMpTotalsOnly(freshDoc);   // in-place totals update — keeps delete buttons alive
     });
   });
 
-  // Wire date edits
+  // Wire date edits — same: in-place update only
   prevInfo.querySelectorAll('.mp-edit-date').forEach(inp => {
     inp.addEventListener('change', () => {
       const freshDoc = state.saved.find(d => d.id === activeDocId);
@@ -2993,12 +3095,11 @@ function renderMpPrevInfo() {
       recalcDocPayments(freshDoc);
       save();
       refreshSavedDocs();
-      refreshActiveDashboard();
-      renderMpPrevInfo();
+      refreshMpTotalsOnly(freshDoc);   // in-place totals update — keeps delete buttons alive
     });
   });
 
-  // Wire delete buttons
+  // Wire delete buttons — full re-render is fine here since delete is the action
   prevInfo.querySelectorAll('.mp-delete-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const freshDoc = state.saved.find(d => d.id === activeDocId);
@@ -3008,14 +3109,17 @@ function renderMpPrevInfo() {
       recalcDocPayments(freshDoc);
       save();
       refreshSavedDocs();
-      refreshActiveDashboard();
       renderMpPrevInfo();
-      // Re-prefill the new-payment amount with updated remaining
-      const updatedPaid = freshDoc.payments.reduce((s, p) => s + (p.amount || 0), 0);
-      const updatedRemaining = Math.max(0, (freshDoc.total || 0) - updatedPaid);
-      setVal('mpAmount', updatedRemaining > 0 ? updatedRemaining.toFixed(2) : '');
+      // Clear the "Add payment" form — the deletion is already saved.
+      // Leaving it pre-filled risks the user accidentally logging a duplicate payment.
+      setVal('mpAmount', '');
+      showSavedPopup('Payment removed and saved.');
     });
   });
+
+  // Show "Add another payment" label whenever the history section is visible
+  const addLabel = document.getElementById('mpAddLabel');
+  if (addLabel) addLabel.style.display = 'block';
 }
 
 function openMarkPaid(docId) {
@@ -3055,6 +3159,7 @@ function renderEditPaymentsList(doc) {
   const listEl = document.getElementById('editPaymentsList');
   if (!listEl) return;
   const payments    = doc.payments || [];
+  sortPaymentsByDate(payments);
   const totalPaid   = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const outstanding = Math.max(0, (doc.total || 0) - totalPaid);
 
@@ -3487,13 +3592,13 @@ function buildCustomerJobSection(d) {
 
   const notesHtml = q.notes ? `
     <div class="cdv-section">
-      <div class="cdv-section-label">📝 Notes to Customer</div>
+      <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Notes to Customer</div>
       <p class="cdv-note-text">${esc(q.notes)}</p>
     </div>` : '';
 
   const privateHtml = q.privateNotes ? `
     <div class="cdv-section cdv-private">
-      <div class="cdv-section-label">🔒 Private Notes</div>
+      <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Private Notes</div>
       <p class="cdv-note-text">${esc(q.privateNotes)}</p>
     </div>` : '';
 
@@ -3504,7 +3609,7 @@ function buildCustomerJobSection(d) {
     </div>` : '';
   const photosHtml = (beforePhotos.length || afterPhotos.length) ? `
     <div class="cdv-section">
-      <div class="cdv-section-label">📷 Photos</div>
+      <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Photos</div>
       ${photoGroup('Before', beforePhotos)}
       ${photoGroup('After', afterPhotos)}
     </div>` : '';
@@ -3516,10 +3621,7 @@ function buildCustomerJobSection(d) {
           <span class="cdv-job-ref">${esc(ref)}</span>
           ${docDate ? `<span class="cdv-job-date">${formatDate(docDate)}</span>` : ''}
         </div>
-        <div class="cdv-job-header-right">
-          <span class="type-badge ${statusClass}">${esc(statusLabel)}</span>
-          <button type="button" class="cdv-btn-edit cdv-header-edit-btn" data-id="${d.id}">✎ Edit</button>
-        </div>
+        <span class="type-badge ${statusClass}">${esc(statusLabel)}</span>
       </div>
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
@@ -3527,15 +3629,6 @@ function buildCustomerJobSection(d) {
       ${notesHtml}
       ${privateHtml}
       ${photosHtml}
-      <div class="cdv-job-actions">
-        <button type="button" class="btn-photo-doc cdv-btn-camera" data-id="${d.id}" title="Before and after photos">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </button>
-        <button type="button" class="btn-photo-doc cdv-btn-download" title="Download customer dashboard">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>
-        <button type="button" class="btn btn-sm btn-danger-outline cdv-btn-delete" data-id="${d.id}">Delete</button>
-      </div>
     </div>`;
 }
 
@@ -3591,27 +3684,29 @@ function renderSingleCustomerDashboard(group, groups) {
 
   body.innerHTML = contentHtml;
 
-  // Per-job download buttons (each opens full customer dashboard download)
-  body.querySelectorAll('.cdv-btn-download').forEach(btn => {
-    btn.addEventListener('click', () => downloadCustomerDashboard(group.name, contentHtml));
-  });
+  // Wire modal-header action buttons (all set after contentHtml is ready)
+  const firstDocId = group.docs[0]?.id;
+  const modal = document.getElementById('customerDashboardModal');
 
-  // Per-job action buttons
-  body.querySelectorAll('.cdv-btn-edit').forEach(btn => {
-    btn.addEventListener('click', () => openCustomerEditChoice(btn.dataset.id));
-  });
-  body.querySelectorAll('.cdv-btn-camera').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.getElementById('customerDashboardModal').style.display = 'none';
-      openPhotosModal(btn.dataset.id);
-    });
-  });
-  body.querySelectorAll('.cdv-btn-delete').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.getElementById('customerDashboardModal').style.display = 'none';
-      deleteDoc(btn.dataset.id);
-    });
-  });
+  const dashEditBtn = document.getElementById('custDashEditBtn');
+  if (dashEditBtn) dashEditBtn.onclick = () =>
+    openCustomerEditChoice(group.docs.length === 1 ? firstDocId : null);
+
+  const dashPhotoBtn = document.getElementById('custDashPhotoBtn');
+  if (dashPhotoBtn) dashPhotoBtn.onclick = () => {
+    modal.style.display = 'none';
+    openPhotosModal(firstDocId);
+  };
+
+  const dashDownloadBtn = document.getElementById('custDashDownloadBtn');
+  if (dashDownloadBtn) dashDownloadBtn.onclick = () =>
+    downloadCustomerDashboard(group.name, contentHtml);
+
+  const dashDeleteBtn = document.getElementById('custDashDeleteBtn');
+  if (dashDeleteBtn) dashDeleteBtn.onclick = () => {
+    modal.style.display = 'none';
+    deleteDoc(firstDocId);
+  };
 }
 
 /* ===== CUSTOMER EDIT CHOICE ===== */
@@ -3669,6 +3764,15 @@ function executeCustomerEdit(editType, docId) {
   } else if (editType === 'money') {
     document.getElementById('customerDashboardModal').style.display = 'none';
     openMarkPaid(docId);
+  } else if (editType === 'terms') {
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    const doc = state.saved.find(d => d.id === docId);
+    if (doc) {
+      loadQuoteFromDoc(doc);
+      state.editingDocId = docId;
+      state.editingFromTerms = true;
+      showPage('page-completion');
+    }
   }
 }
 
@@ -3964,41 +4068,107 @@ function saveJobDetails() {
 /* ===== DOCUMENT GENERATION ===== */
 const DOC_CSS = `
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;color:#2C2C2C;background:#fff;padding:0}
-  .doc-wrap{max-width:760px;margin:0 auto;padding:32px 24px}
-  .doc-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px;color:#fff;border-radius:8px 8px 0 0}
-  .doc-header-left{display:flex;align-items:center;gap:16px}
-  .doc-logo{max-height:56px;max-width:160px;object-fit:contain}
-  .doc-biz-name{font-size:1.3rem;font-weight:700}
-  .doc-type{font-size:1.1rem;font-weight:700;opacity:.9;text-align:right}
-  .doc-ref{font-size:0.85rem;opacity:.75;text-align:right}
-  .doc-info{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:20px 0;border-bottom:1px solid #ddd5c5}
-  .doc-info h3{font-size:0.75rem;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:8px}
-  .doc-info p{font-size:0.9rem;line-height:1.6;white-space:pre-wrap}
-  table{width:100%;border-collapse:collapse;margin:20px 0}
-  thead th{padding:10px 12px;text-align:left;font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#fff}
-  thead th:last-child{text-align:right}
-  tbody td{padding:10px 12px;border-bottom:1px solid #eee;font-size:0.9rem;vertical-align:top}
-  tbody td:last-child{text-align:right;font-weight:600}
-  tbody tr:last-child td{border-bottom:none}
-  .totals{margin-left:auto;width:260px;border-top:1px solid #ddd5c5;padding-top:12px}
-  .totals-row{display:flex;justify-content:space-between;padding:4px 0;font-size:0.9rem}
-  .totals-total{font-weight:700;font-size:1.05rem;border-top:1.5px solid #2C2C2C;padding-top:8px;margin-top:4px}
-  .section{margin-top:24px;padding-top:16px;border-top:1px solid #ddd5c5}
-  .section h3{font-size:0.75rem;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:8px}
-  .section p,.section ul{font-size:0.875rem;line-height:1.7;white-space:pre-wrap}
-  .section ul{list-style:disc;padding-left:18px}
+  body{font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:13px;color:#1a1a1a;background:#e0e0e0;padding:20px 0}
+
+  /* ── PAGE (full border, like the Word template) ── */
+  .doc-wrap{max-width:760px;margin:0 auto;background:#fff;border:1px solid #b8b8b8}
+
+  /* ── HEADER BAND (brand primary — set via inline style) ── */
+  .doc-header{display:grid;grid-template-columns:110px 1fr 155px;align-items:center;gap:10px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .doc-logo{max-height:56px;max-width:100px;object-fit:contain}
+  .doc-logo-placeholder{width:72px;height:46px;border:1.5px dashed rgba(255,255,255,0.45);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:rgba(255,255,255,0.65)}
+  .doc-biz-name{font-size:1.2rem;font-weight:700;text-align:center;line-height:1.25;color:#fff}
+  .doc-type-label{font-size:1.05rem;font-weight:700;text-align:right;text-decoration:underline;line-height:1.3;color:#fff}
+
+  /* ── PREPARED BY / FOR (two cols, horizontal dividers, vertical centre line) ── */
+  .doc-info{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #c4c4c4;border-bottom:1px solid #c4c4c4}
+  .doc-info-col{padding:10px 18px}
+  .doc-info-col+.doc-info-col{border-left:1px solid #c4c4c4}
+  .doc-info-col h3{font-size:0.83rem;font-weight:700;margin-bottom:5px;text-transform:none;letter-spacing:0}
+  .doc-info-col p{font-size:0.83rem;line-height:1.6;white-space:pre-wrap;color:#333}
+
+  /* ── REFERENCE ROW (three bordered cells) ── */
+  .doc-ref-row{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #c4c4c4}
+  .doc-ref-cell{padding:6px 18px;font-size:0.83rem;display:flex;gap:4px;align-items:baseline;flex-wrap:wrap}
+  .doc-ref-cell+.doc-ref-cell{border-left:1px solid #c4c4c4}
+  .ref-label{font-weight:700;white-space:nowrap}
+
+  /* ── BODY PADDING ── */
+  .doc-body{padding:14px 18px 20px}
+
+  /* ── INTRO ── */
+  .doc-intro{font-size:0.83rem;line-height:1.75;color:#333;margin-bottom:14px}
+
+  /* ── SECTION HEADINGS (sentence-case bold + thin rule, matching Word) ── */
+  .doc-section-heading{font-size:0.88rem;font-weight:700;margin-top:16px;margin-bottom:0;padding-bottom:3px;border-bottom:1px solid #888;text-transform:none;letter-spacing:0}
+
+  /* ── DESCRIPTION BOX (brand bg — set via inline style) ── */
+  .doc-desc-box{border:1px solid #ccc;border-top:none;padding:10px 12px;min-height:70px;font-size:0.83rem;line-height:1.7;color:#aaa;font-style:italic;white-space:pre-wrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .doc-desc-box.filled{color:#333;font-style:normal}
+
+  /* ── ITEMS TABLE (accent header — set via inline style) ── */
+  .doc-items-table{width:100%;border-collapse:collapse;border:1px solid #ccc;border-top:none}
+  .doc-items-table thead tr{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .doc-items-table thead th{padding:8px 10px;font-size:0.77rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left;color:#fff;border-right:1px solid rgba(255,255,255,0.2)}
+  .doc-items-table thead th:last-child{text-align:right;border-right:none}
+  .doc-items-table thead th.r{text-align:right}
+  .doc-items-table tbody td{padding:8px 10px;border-bottom:1px solid #e8e8e8;border-right:1px solid #e8e8e8;font-size:0.83rem;vertical-align:top}
+  .doc-items-table tbody td:last-child{text-align:right;font-weight:600;border-right:none}
+  .doc-items-table tbody td.r{text-align:right}
+  .item-unit{display:block;font-size:0.71rem;color:#888;margin-top:1px}
+  .totals-sep td{border-top:1.5px solid #bbb!important;border-bottom:none!important;border-right:none!important;padding:6px 0 0!important;background:#fff}
+  .totals-row td{padding:3px 10px;font-size:0.82rem;border:none!important;background:#fff}
+  .totals-row td.r{text-align:right}
+  .totals-total{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .totals-total td{padding:8px 10px;font-size:0.9rem;font-weight:700;border:none!important;color:#fff}
+  .totals-total td.r{text-align:right}
+
+  /* ── TERMS TABLE ── */
+  .doc-terms-table{width:100%;border-collapse:collapse;border:1px solid #ccc;border-top:none}
+  .doc-terms-table td{padding:7px 12px;font-size:0.82rem;vertical-align:top;border-bottom:1px solid #e8e8e8;line-height:1.55}
+  .doc-terms-table tr:last-child td{border-bottom:none}
+  .t-label{font-weight:700;width:130px;border-right:1px solid #ccc!important;white-space:nowrap;color:#1a1a1a}
+  .t-value{color:#333}
+
+  /* ── GENERIC SECTIONS (invoice/receipt extras) ── */
+  .section,.doc-section{margin-top:16px;padding-top:12px;border-top:1px solid #ddd}
+  .section h3,.doc-section h3{font-size:0.75rem;text-transform:uppercase;letter-spacing:.07em;color:#888;margin-bottom:7px;font-weight:700}
+  .section p,.doc-section p,.section ul,.doc-section ul{font-size:0.83rem;line-height:1.7;white-space:pre-wrap}
+  .section ul,.doc-section ul{list-style:disc;padding-left:18px}
+
+  /* ── SIG BLOCK (invoice/receipt) ── */
   .sig-block{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}
-  .sig-box{border:1.5px solid #ddd5c5;border-radius:6px;padding:12px;min-height:80px;display:flex;flex-direction:column;justify-content:flex-end}
+  .sig-box{border:1.5px solid #ddd;border-radius:4px;padding:12px;min-height:80px;display:flex;flex-direction:column;justify-content:flex-end}
   .sig-label{font-size:0.75rem;color:#888;margin-top:8px;text-transform:uppercase;letter-spacing:.06em}
   .sig-img{max-height:60px;max-width:200px}
-  .sig-typed{font-family:'Dancing Script',cursive;font-size:1.5rem;color:#2C2C2C}
-  .doc-footer{margin-top:32px;padding-top:16px;border-top:1px solid #ddd5c5;font-size:0.75rem;color:#aaa;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
-  .photo-doc-page{page-break-before:always}
+  .sig-typed{font-family:'Dancing Script',cursive;font-size:1.5rem;color:#1a1a1a}
+
+  /* ── PAGE FOOTER ── */
+  .doc-footer{padding:8px 18px;text-align:center;font-size:0.7rem;color:#aaa;border-top:1px solid #e0e0e0}
+
+  /* ── ACCEPTANCE PAGE (quotes/estimates — same bordered box) ── */
+  .doc-accept{max-width:760px;margin:20px auto 0;background:#fff;border:1px solid #b8b8b8;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:13px;color:#1a1a1a;page-break-before:always}
+  .doc-accept-body{padding:22px 18px 20px}
+  .doc-accept-heading{font-size:0.88rem;font-weight:700;padding-bottom:4px;border-bottom:1px solid #888;margin-bottom:16px;text-transform:none;letter-spacing:0}
+  .doc-accept-body>p{font-size:0.83rem;line-height:1.75;color:#333;margin-bottom:32px}
+  .doc-sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:32px}
+  .doc-sig-box{padding-top:48px;border-top:1px solid #999}
+  .doc-sig-label{font-size:0.73rem;color:#666;margin-top:5px}
+  .doc-sig-typed{font-family:'Dancing Script',cursive;font-size:1.4rem;color:#1a1a1a;display:block;margin-bottom:2px}
+  .doc-sig-name{font-size:0.83rem;font-weight:600;color:#1a1a1a}
+  .doc-accept-thanks{font-size:0.83rem;text-align:center;line-height:1.75;color:#333}
+
+  /* ── PHOTOS ── */
+  .photo-doc-page{page-break-before:always;padding-top:24px}
   .photo-doc-group{margin-top:16px}
   .photo-doc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
-  .photo-doc-grid img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;border:1px solid #ddd5c5}
-  @media print{body{padding:0}.doc-wrap{max-width:100%;padding:16px}}
+  .photo-doc-grid img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;border:1px solid #ddd}
+
+  @media print{
+    body{background:#fff;padding:0}
+    .doc-wrap,.doc-accept{max-width:100%;margin:0;border:1px solid #b8b8b8}
+    .doc-accept{margin-top:0}
+  }
 `;
 
 function buildQuoteDoc() {
@@ -4016,89 +4186,130 @@ function buildQuoteDoc() {
 }
 
 function buildDocHtml(doc, docType, extra = {}) {
-  const q = doc.quote;
+  const q  = doc.quote;
   const co = doc.company || state.company;
-  const primary = co.brandPrimary || DEFAULT_COLOURS.primary;
-  const accent  = co.brandAccent  || DEFAULT_COLOURS.accent;
-  const bg      = co.brandBg      || DEFAULT_COLOURS.bg;
 
-  const sub    = (q.items || []).reduce((s, i) => s + i.unitPrice * i.qty, 0);
-  const vatRate = q.vatRate === 'custom' ? parseFloat(q.vatCustom) || 0 : parseFloat(q.vatRate) || 0;
-  const disc   = parseFloat(q.discount) || 0;
+  // ── Brand colours — read live picker values so the document always
+  //    reflects the currently selected colours, even before Save ──
+  const primary = document.getElementById('colourHeader')?.value || state.company.brandPrimary || DEFAULT_COLOURS.primary;
+  const accent  = document.getElementById('colourAccent')?.value || state.company.brandAccent  || DEFAULT_COLOURS.accent;
+  const bgCol   = document.getElementById('colourBg')?.value     || state.company.brandBg      || DEFAULT_COLOURS.bg;
+
+  // ── Financials ───────────────────────────────────────────────────
+  const sub       = (q.items||[]).reduce((s,i) => s + i.unitPrice * i.qty, 0);
+  const vatRate   = q.vatRate === 'custom' ? parseFloat(q.vatCustom)||0 : parseFloat(q.vatRate)||0;
+  const disc      = parseFloat(q.discount)||0;
   const afterDisc = sub - sub * disc / 100;
-  const vatAmt = afterDisc * vatRate / 100;
-  const total  = doc.total != null ? doc.total : afterDisc + vatAmt;
+  const vatAmt    = afterDisc * vatRate / 100;
+  const total     = doc.total != null ? doc.total : afterDisc + vatAmt;
 
-  let docLabel = q.type || 'Estimate';
-  let refLabel = q.ref || '';
+  // ── Doc labels ───────────────────────────────────────────────────
+  let docLabel  = q.type || 'Estimate';
+  let refLabel  = q.ref  || '';
   let dateLabel = q.date;
-  let extraSection = '';
+  if (docType === 'invoice') { docLabel = 'Invoice'; refLabel = extra.invRef||''; dateLabel = extra.invDate||q.date; }
+  if (docType === 'receipt') { docLabel = 'Receipt'; refLabel = extra.recRef||doc.receiptRef||''; dateLabel = extra.date||q.date; }
 
-  if (docType === 'invoice') {
-    docLabel = 'Invoice';
-    refLabel = extra.invRef || '';
-    dateLabel = extra.invDate || q.date;
-    if (extra.dueDate) extraSection += `<div class="section"><h3>Payment Due</h3><p>${formatDate(extra.dueDate)}</p></div>`;
-    if (extra.notes)   extraSection += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
-  } else if (docType === 'receipt') {
-    docLabel = 'Receipt';
-    refLabel  = extra.recRef || doc.receiptRef || '';
-    dateLabel = extra.date || q.date;
-    extraSection += `
-      <div class="section">
-        <h3>Payment Received</h3>
-        <p>Amount: <strong>${fmtPrice(parseFloat(extra.amount) || 0)}</strong><br>
-        Date: ${formatDate(extra.date || todayStr())}<br>
-        Method: ${esc(extra.method || '')}</p>
-      </div>`;
-    if (extra.notes) extraSection += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
-  }
+  const isQuote = (docType !== 'invoice' && docType !== 'receipt');
 
-  const bizLines = [
-    co.businessName,
-    (co.firstName + ' ' + co.lastName).trim(),
-    co.address,
-    co.postcode,
-    co.phone,
-    co.email,
-    co.website
-  ].filter(Boolean).join('\n');
+  // ── Names ────────────────────────────────────────────────────────
+  const authFullName = [(co.firstName||''), (co.lastName||'')].filter(Boolean).join(' ');
+  const bizName      = co.businessName || authFullName;
+  const custName     = [q.custTitle, q.custFirstName, q.custLastName].filter(Boolean).join(' ');
 
-  const custName = [q.custTitle, q.custFirstName, q.custLastName].filter(Boolean).join(' ');
-  const custLines = [
-    custName,
-    q.custAddr,
-    q.custPostcode,
-    q.custPhone,
-    q.custEmail
-  ].filter(Boolean).join('\n');
+  // ── Address blocks ───────────────────────────────────────────────
+  const bizLines  = [co.address, co.postcode, co.phone, co.email, co.website].filter(Boolean).join('\n');
+  const custLines = [custName, q.custAddr, q.custPostcode, q.custEmail, q.custPhone].filter(Boolean).join('\n');
 
-  const itemsHtml = (q.items || []).map(item => `
-    <tr>
-      <td>${esc(item.name)}</td>
-      <td>${esc(item.unit || '')}</td>
-      <td style="text-align:right">${item.qty}</td>
-      <td style="text-align:right">${fmtPrice(item.unitPrice)}</td>
-      <td style="text-align:right">${fmtPrice(item.unitPrice * item.qty)}</td>
-    </tr>
-  `).join('') || `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:12px 0;font-style:italic">No jobs added - go back and add jobs in Step 2</td></tr>`;
-
-  const paymentSection = buildPaymentSection(co, docType, extra.payMethod);
-  const termsSection   = buildTermsSection(q);
-  const sigSection     = buildSigSection(q, co, docType);
-  const photosSection  = extra.includePhotos ? buildPhotosSection(doc) : '';
-
-  const validLine = (() => {
-    if (!q.validFor || docType !== 'quote') return '';
-    const days = q.validFor === 'custom' ? (q.validCustom || '') : q.validFor;
-    return days ? `<p style="font-size:0.8rem;color:#888;margin-top:8px">Valid for ${days} days from ${formatDate(q.date)}</p>` : '';
-  })();
-
-  const notesSection = q.notes ? `<div class="section"><h3>Notes</h3><p>${esc(q.notes)}</p></div>` : '';
-
+  // ── Logo ─────────────────────────────────────────────────────────
   const logoHtml = co.logo
     ? `<img src="${co.logo}" alt="Logo" class="doc-logo">`
+    : `<div class="doc-logo-placeholder">Logo</div>`;
+
+  // ── Valid for ────────────────────────────────────────────────────
+  let validForText = '';
+  if (isQuote) {
+    if      (q.validFor === 'custom') validForText = q.validCustom ? `${q.validCustom} days` : '';
+    else if (q.validFor)              validForText = `${q.validFor} days`;
+  }
+
+  // ── Line items ───────────────────────────────────────────────────
+  const itemsHtml = (q.items||[]).map(item => `
+    <tr>
+      <td>${esc(item.name)}${item.unit ? `<span class="item-unit">${esc(item.unit)}</span>` : ''}</td>
+      <td class="r">${item.qty}</td>
+      <td class="r">${fmtPrice(item.unitPrice)}</td>
+      <td class="r">${fmtPrice(item.unitPrice * item.qty)}</td>
+    </tr>`).join('') ||
+    `<tr><td colspan="4" style="text-align:center;color:#aaa;padding:14px;font-style:italic">No items added — go back and add jobs in Step 2</td></tr>`;
+
+  // ── Totals ───────────────────────────────────────────────────────
+  const discRow = disc > 0
+    ? `<tr class="totals-row"><td></td><td colspan="2" class="r" style="font-size:0.79rem">Discount (${disc}%):</td><td class="r">-${fmtPrice(sub*disc/100)}</td></tr>`
     : '';
+  const totalsRows = `
+    <tr class="totals-sep"><td colspan="4"></td></tr>
+    <tr class="totals-row"><td></td><td colspan="2" class="r" style="font-size:0.79rem;font-weight:700">Subtotal:</td><td class="r">${fmtPrice(afterDisc)}</td></tr>
+    ${discRow}
+    <tr class="totals-row"><td></td><td colspan="2" class="r" style="font-size:0.79rem">VAT${vatRate>0?` (${vatRate}%)`:'  (if applicable)'}:</td><td class="r">${vatRate>0?fmtPrice(vatAmt):'—'}</td></tr>
+    <tr class="totals-total" style="background:${accent}"><td></td><td colspan="2" class="r">TOTAL:</td><td class="r">${fmtPrice(total)}</td></tr>`;
+
+  // ── Intro paragraph (quotes only) ───────────────────────────────
+  const introHtml = isQuote
+    ? `<p class="doc-intro">Thank you for allowing me to give you this free, no obligation ${(q.type||'quote').toLowerCase()} today. Please find below a full breakdown of the proposed work and costs. There is no pressure and no obligation to proceed. Please read through at your leisure, discuss it with anyone you need to, and let me know if you have any questions.</p>`
+    : '';
+
+  // ── Description of work ─────────────────────────────────────────
+  const descHtml = q.notes
+    ? `<div class="doc-desc-box filled" style="background:${bgCol}">${esc(q.notes)}</div>`
+    : `<div class="doc-desc-box" style="background:${bgCol}">Describe clearly exactly what work you will carry out. Be as specific as possible to protect both you and your customer.</div>`;
+
+  // ── Terms table ──────────────────────────────────────────────────
+  const termsHtml = buildNewTermsHtml(q);
+
+  // ── Invoice / receipt extras ────────────────────────────────────
+  let extraHtml = '';
+  if (docType === 'invoice') {
+    if (extra.dueDate) extraHtml += `<div class="section"><h3>Payment Due</h3><p>${formatDate(extra.dueDate)}</p></div>`;
+    extraHtml += buildPaymentSection(co, docType, extra.payMethod);
+    if (extra.notes)   extraHtml += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
+  } else if (docType === 'receipt') {
+    extraHtml = `<div class="section"><h3>Payment Received</h3><p>Amount: <strong>${fmtPrice(parseFloat(extra.amount)||0)}</strong><br>Date: ${formatDate(extra.date||todayStr())}<br>Method: ${esc(extra.method||'')}</p></div>`;
+    if (extra.notes) extraHtml += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
+  }
+
+  // ── Sig block for invoice/receipt ───────────────────────────────
+  const sigHtml = !isQuote ? buildSigSection(q, co, docType) : '';
+
+  // ── Photos ───────────────────────────────────────────────────────
+  const photosHtml = extra.includePhotos ? buildPhotosSection(doc) : '';
+
+  // ── Acceptance page (quotes / estimates) ────────────────────────
+  let acceptancePage = '';
+  if (isQuote) {
+    const sigText    = q.custSigText || '';
+    const authName   = q.authSig || authFullName || bizName;
+    const sigContent = sigText ? `<span class="doc-sig-typed">${esc(sigText)}</span>` : '';
+    acceptancePage = `
+      <div class="doc-accept">
+        <div class="doc-accept-body">
+          <div class="doc-accept-heading">Acceptance</div>
+          <p>Please let me know if this meets your needs. To accept this ${(q.type||'quote').toLowerCase()} please sign below or reply confirming your acceptance.</p>
+          <div class="doc-sig-grid">
+            <div class="doc-sig-box">
+              ${sigContent}
+              ${authName ? `<div class="doc-sig-name">${esc(authName)}</div>` : ''}
+              <div class="doc-sig-label">Authorised Signature</div>
+            </div>
+            <div class="doc-sig-box">
+              <div class="doc-sig-label">Customer Signature</div>
+            </div>
+          </div>
+          <p class="doc-accept-thanks">Thank you for the opportunity. I look forward to hearing from you.<br>Kind regards, ${esc(authName)}</p>
+        </div>
+        <div class="doc-footer">Powered by LexiHandlesIt.com</div>
+      </div>`;
+  }
 
   return `
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -4106,59 +4317,47 @@ function buildDocHtml(doc, docType, extra = {}) {
     <style>${DOC_CSS}</style>
     <div class="doc-wrap">
       <div class="doc-header" style="background:${primary}">
-        <div class="doc-header-left">
-          ${logoHtml}
-          <div class="doc-biz-name">${esc(co.businessName || (co.firstName + ' ' + co.lastName).trim())}</div>
-        </div>
-        <div>
-          <div class="doc-type">${docLabel}</div>
-          ${refLabel ? `<div class="doc-ref">${esc(refLabel)}</div>` : ''}
-          ${dateLabel ? `<div class="doc-ref">${formatDate(dateLabel)}</div>` : ''}
-        </div>
+        ${logoHtml}
+        <div class="doc-biz-name">${esc(bizName)}</div>
+        <div class="doc-type-label">${esc(docLabel)}</div>
       </div>
       <div class="doc-info">
-        <div>
-          <h3>From</h3>
+        <div class="doc-info-col">
+          <h3>Prepared By</h3>
           <p>${esc(bizLines)}</p>
         </div>
-        <div>
+        <div class="doc-info-col">
           <h3>Prepared For</h3>
           <p>${esc(custLines)}</p>
         </div>
       </div>
-      <table>
-        <thead style="background:${accent}">
-          <tr>
+      <div class="doc-ref-row">
+        <div class="doc-ref-cell"><span class="ref-label">Reference No:</span>&nbsp;${esc(refLabel)}</div>
+        <div class="doc-ref-cell"><span class="ref-label">Date:</span>&nbsp;${dateLabel ? formatDate(dateLabel) : ''}</div>
+        <div class="doc-ref-cell"><span class="ref-label">Valid for:</span>&nbsp;${esc(validForText)}</div>
+      </div>
+      <div class="doc-body">
+        ${introHtml}
+        <div class="doc-section-heading">Description of Work</div>
+        ${descHtml}
+        <div class="doc-section-heading">Itemised Breakdown</div>
+        <table class="doc-items-table">
+          <thead><tr style="background:${accent}">
             <th>Description</th>
-            <th>Unit</th>
-            <th style="text-align:right">Qty</th>
-            <th style="text-align:right">Unit Price</th>
-            <th style="text-align:right">Total</th>
-          </tr>
-        </thead>
-        <tbody>${itemsHtml}</tbody>
-      </table>
-      <div style="display:flex;justify-content:flex-end">
-        <div class="totals">
-          <div class="totals-row"><span>Subtotal</span><span>${fmtPrice(sub)}</span></div>
-          ${disc > 0 ? `<div class="totals-row"><span>Discount (${disc}%)</span><span>-${fmtPrice(sub * disc / 100)}</span></div>` : ''}
-          ${vatRate > 0 ? `<div class="totals-row"><span>VAT (${vatRate}%)</span><span>${fmtPrice(vatAmt)}</span></div>` : ''}
-          <div class="totals-row totals-total"><span>Total</span><span>${fmtPrice(total)}</span></div>
-        </div>
+            <th class="r">Qty</th>
+            <th class="r">Unit Price</th>
+            <th class="r" style="border-right:none">Total</th>
+          </tr></thead>
+          <tbody>${itemsHtml}${totalsRows}</tbody>
+        </table>
+        ${extraHtml}
+        ${termsHtml}
+        ${sigHtml}
+        ${photosHtml}
       </div>
-      ${validLine}
-      ${notesSection}
-      ${extraSection}
-      ${paymentSection}
-      ${termsSection}
-      ${sigSection}
-      ${photosSection}
-      <div class="doc-footer">
-        <span>Generated by Lexi Handles It</span>
-        <span>${new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' })}</span>
-      </div>
+      <div class="doc-footer">Powered by LexiHandlesIt.com</div>
     </div>
-  `;
+    ${acceptancePage}`;
 }
 
 function buildPaymentSection(co, docType, preferredMethod = '') {
@@ -4209,6 +4408,7 @@ function buildPhotosSection(doc) {
 }
 
 function buildTermsSection(q) {
+  // Legacy — kept for compatibility; new output uses buildNewTermsHtml
   const presets = {
     payment30:       'Payment due within 30 days of invoice date.',
     depositRequired: 'A 50% deposit is required before work commences.',
@@ -4220,6 +4420,29 @@ function buildTermsSection(q) {
   if (q.customTerms) lines.push(q.customTerms);
   if (!lines.length) return '';
   return `<div class="section"><h3>Terms &amp; Conditions</h3><ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
+}
+
+function buildNewTermsHtml(q) {
+  const presets = {
+    payment30:       'Payment due within 30 days of invoice date.',
+    depositRequired: 'A 50% deposit is required before work commences.',
+    quotationValid:  'This quotation is valid for 30 days from the date shown.',
+    materialsExtra:  'Materials are not included unless stated above.',
+    cancellation:    'Cancellation within 48 hours of scheduled start date may incur a charge.'
+  };
+  const payKeys  = new Set(['payment30', 'depositRequired']);
+  const sel      = q.selectedTerms || [];
+  const payLines = sel.filter(k =>  payKeys.has(k)).map(k => presets[k]);
+  const conLines = sel.filter(k => !payKeys.has(k)).map(k => presets[k]);
+  const addText  = q.customTerms || '';
+  if (!payLines.length && !conLines.length && !addText) return '';
+  return `
+    <div class="doc-section-heading">Terms and Conditions</div>
+    <table class="doc-terms-table">
+      <tr><td class="t-label">Payment Terms</td><td class="t-value">${esc(payLines.join(' '))}</td></tr>
+      <tr><td class="t-label">Contract</td><td class="t-value">${esc(conLines.join(' '))}</td></tr>
+      <tr><td class="t-label">Additional Terms</td><td class="t-value">${esc(addText)}</td></tr>
+    </table>`;
 }
 
 function buildSigSection(q, co, docType) {
