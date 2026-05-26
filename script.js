@@ -4078,7 +4078,7 @@ const DOC_CSS = `
   .doc-logo{max-height:56px;max-width:100px;object-fit:contain}
   .doc-logo-placeholder{width:72px;height:46px;border:1.5px dashed rgba(255,255,255,0.45);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:rgba(255,255,255,0.65)}
   .doc-biz-name{font-size:1.2rem;font-weight:700;text-align:center;line-height:1.25;color:#fff}
-  .doc-type-label{font-size:1.05rem;font-weight:700;text-align:right;text-decoration:underline;line-height:1.3;color:#fff}
+  .doc-type-label{font-size:1.05rem;font-weight:700;text-align:right;text-decoration:none;text-transform:uppercase;letter-spacing:0.06em;line-height:1.3;color:#fff}
 
   /* ── PREPARED BY / FOR (two cols, horizontal dividers, vertical centre line) ── */
   .doc-info{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #c4c4c4;border-bottom:1px solid #c4c4c4}
@@ -4087,17 +4087,18 @@ const DOC_CSS = `
   .doc-info-col h3{font-size:0.83rem;font-weight:700;margin-bottom:5px;text-transform:none;letter-spacing:0}
   .doc-info-col p{font-size:0.83rem;line-height:1.6;white-space:pre-wrap;color:#333}
 
-  /* ── REFERENCE ROW (three bordered cells) ── */
+  /* ── REFERENCE ROW (three bordered cells, label on top / value below) ── */
   .doc-ref-row{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #c4c4c4}
-  .doc-ref-cell{padding:6px 18px;font-size:0.83rem;display:flex;gap:4px;align-items:baseline;flex-wrap:wrap}
+  .doc-ref-cell{padding:6px 18px;font-size:0.83rem;display:flex;flex-direction:column;gap:2px}
   .doc-ref-cell+.doc-ref-cell{border-left:1px solid #c4c4c4}
   .ref-label{font-weight:700;white-space:nowrap}
+  .ref-value{color:#333}
 
   /* ── BODY PADDING ── */
   .doc-body{padding:14px 18px 20px}
 
   /* ── INTRO ── */
-  .doc-intro{font-size:0.83rem;line-height:1.75;color:#333;margin-bottom:14px}
+  .doc-intro{font-size:0.83rem;line-height:1.3;color:#333;margin-bottom:14px}
 
   /* ── SECTION HEADINGS (sentence-case bold + thin rule, matching Word) ── */
   .doc-section-heading{font-size:0.88rem;font-weight:700;margin-top:16px;margin-bottom:0;padding-bottom:3px;border-bottom:1px solid #888;text-transform:none;letter-spacing:0}
@@ -4150,19 +4151,66 @@ const DOC_CSS = `
   .doc-accept{max-width:760px;margin:20px auto 0;background:#fff;border:1px solid #b8b8b8;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:13px;color:#1a1a1a;page-break-before:always}
   .doc-accept-body{padding:22px 18px 20px}
   .doc-accept-heading{font-size:0.88rem;font-weight:700;padding-bottom:4px;border-bottom:1px solid #888;margin-bottom:16px;text-transform:none;letter-spacing:0}
-  .doc-accept-body>p{font-size:0.83rem;line-height:1.75;color:#333;margin-bottom:32px}
+  .doc-accept-body>p{font-size:0.83rem;line-height:1.3;color:#333;margin-bottom:32px}
   .doc-sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:32px}
   .doc-sig-box{padding-top:48px;border-top:1px solid #999}
   .doc-sig-label{font-size:0.73rem;color:#666;margin-top:5px}
   .doc-sig-typed{font-family:'Dancing Script',cursive;font-size:1.4rem;color:#1a1a1a;display:block;margin-bottom:2px}
   .doc-sig-name{font-size:0.83rem;font-weight:600;color:#1a1a1a}
-  .doc-accept-thanks{font-size:0.83rem;text-align:center;line-height:1.75;color:#333}
+  .doc-accept-thanks{font-size:0.83rem;text-align:center;line-height:1.3;color:#333}
 
   /* ── PHOTOS ── */
   .photo-doc-page{page-break-before:always;padding-top:24px}
   .photo-doc-group{margin-top:16px}
   .photo-doc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
   .photo-doc-grid img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;border:1px solid #ddd}
+
+  /* ── MOBILE (≤ 520 px) ── */
+  @media (max-width:520px){
+    body{padding:0;background:#fff}
+    .doc-wrap{border-left:none;border-right:none;max-width:100%}
+
+    /* Header: shrink logo column, keep type label on right */
+    .doc-header{grid-template-columns:52px 1fr 82px;gap:6px;padding:10px 10px}
+    .doc-logo{max-height:40px;max-width:48px}
+    .doc-logo-placeholder{width:40px;height:32px;font-size:0.62rem}
+    .doc-biz-name{font-size:0.92rem}
+    .doc-type-label{font-size:0.78rem;letter-spacing:0.03em}
+
+    /* Prepared by/for: stack vertically */
+    .doc-info{grid-template-columns:1fr}
+    .doc-info-col+.doc-info-col{border-left:none;border-top:1px solid #c4c4c4}
+
+    /* Ref row: keep 3 cols but tighten */
+    .doc-ref-cell{padding:5px 10px;font-size:0.77rem}
+
+    /* Body */
+    .doc-body{padding:10px 10px 14px}
+    .doc-intro{margin-bottom:10px}
+    .doc-section-heading{margin-top:12px}
+    .doc-desc-box{padding:8px 10px;font-size:0.79rem}
+
+    /* Items table */
+    .doc-items-table{border-left:none;border-right:none}
+    .doc-items-table thead th{padding:6px 5px;font-size:0.68rem;letter-spacing:0}
+    .doc-items-table tbody td{padding:6px 5px;font-size:0.77rem}
+    .item-unit{font-size:0.65rem}
+    .totals-row td{padding:2px 5px;font-size:0.76rem}
+    .totals-total td{padding:7px 6px;font-size:0.82rem}
+
+    /* Terms */
+    .doc-terms-table td{padding:5px 8px;font-size:0.77rem}
+    .t-label{width:90px}
+
+    /* Footer */
+    .doc-footer{padding:6px 10px}
+
+    /* Acceptance page */
+    .doc-accept{margin-top:8px;border-left:none;border-right:none}
+    .doc-accept-body{padding:14px 10px 14px}
+    .doc-sig-grid{grid-template-columns:1fr;gap:16px}
+    .doc-accept-thanks{font-size:0.79rem}
+  }
 
   @media print{
     body{background:#fff;padding:0}
@@ -4221,9 +4269,10 @@ function buildDocHtml(doc, docType, extra = {}) {
   const bizLines  = [co.address, co.postcode, co.phone, co.email, co.website].filter(Boolean).join('\n');
   const custLines = [custName, q.custAddr, q.custPostcode, q.custEmail, q.custPhone].filter(Boolean).join('\n');
 
-  // ── Logo ─────────────────────────────────────────────────────────
-  const logoHtml = co.logo
-    ? `<img src="${co.logo}" alt="Logo" class="doc-logo">`
+  // ── Logo — prefer doc snapshot, fall back to live state so it always shows ──
+  const logoSrc = co.logo || state.company.logo || '';
+  const logoHtml = logoSrc
+    ? `<img src="${logoSrc}" alt="Logo" class="doc-logo">`
     : `<div class="doc-logo-placeholder">Logo</div>`;
 
   // ── Valid for ────────────────────────────────────────────────────
@@ -4259,10 +4308,11 @@ function buildDocHtml(doc, docType, extra = {}) {
     ? `<p class="doc-intro">Thank you for allowing me to give you this free, no obligation ${(q.type||'quote').toLowerCase()} today. Please find below a full breakdown of the proposed work and costs. There is no pressure and no obligation to proceed. Please read through at your leisure, discuss it with anyone you need to, and let me know if you have any questions.</p>`
     : '';
 
-  // ── Description of work ─────────────────────────────────────────
+  // ── Description of work — only shown when a description was entered ──
   const descHtml = q.notes
-    ? `<div class="doc-desc-box filled" style="background:${bgCol}">${esc(q.notes)}</div>`
-    : `<div class="doc-desc-box" style="background:${bgCol}">Describe clearly exactly what work you will carry out. Be as specific as possible to protect both you and your customer.</div>`;
+    ? `<div class="doc-section-heading">Description of Work</div>
+       <div class="doc-desc-box filled" style="background:${bgCol};-webkit-print-color-adjust:exact;print-color-adjust:exact">${esc(q.notes)}</div>`
+    : '';
 
   // ── Terms table ──────────────────────────────────────────────────
   const termsHtml = buildNewTermsHtml(q);
@@ -4332,13 +4382,12 @@ function buildDocHtml(doc, docType, extra = {}) {
         </div>
       </div>
       <div class="doc-ref-row">
-        <div class="doc-ref-cell"><span class="ref-label">Reference No:</span>&nbsp;${esc(refLabel)}</div>
-        <div class="doc-ref-cell"><span class="ref-label">Date:</span>&nbsp;${dateLabel ? formatDate(dateLabel) : ''}</div>
-        <div class="doc-ref-cell"><span class="ref-label">Valid for:</span>&nbsp;${esc(validForText)}</div>
+        <div class="doc-ref-cell"><span class="ref-label">Reference No:</span><span class="ref-value">${esc(refLabel)}</span></div>
+        <div class="doc-ref-cell"><span class="ref-label">Date:</span><span class="ref-value">${dateLabel ? formatDate(dateLabel) : ''}</span></div>
+        <div class="doc-ref-cell"><span class="ref-label">Valid for:</span><span class="ref-value">${esc(validForText)}</span></div>
       </div>
       <div class="doc-body">
         ${introHtml}
-        <div class="doc-section-heading">Description of Work</div>
         ${descHtml}
         <div class="doc-section-heading">Itemised Breakdown</div>
         <table class="doc-items-table">
@@ -4355,7 +4404,7 @@ function buildDocHtml(doc, docType, extra = {}) {
         ${sigHtml}
         ${photosHtml}
       </div>
-      <div class="doc-footer">Powered by LexiHandlesIt.com</div>
+      ${isQuote ? '' : '<div class="doc-footer">Powered by LexiHandlesIt.com</div>'}
     </div>
     ${acceptancePage}`;
 }

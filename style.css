@@ -3276,6 +3276,16 @@ input[type="text"].sig-text-input:focus {
   .modal-card { border-radius: var(--radius) var(--radius) 0 0; max-height: 92vh; }
   .onboarding-card { border-radius: var(--radius); margin: 0 0 env(safe-area-inset-bottom); }
   .modal-overlay.for-onboarding { align-items: center; padding: 16px; }
+
+  /* Preview modal — full screen on mobile so the document is readable */
+  #previewModal { align-items: flex-start; }
+  #previewModal .modal-card {
+    border-radius: 0;
+    max-height: 100vh;
+    height: 100vh;
+  }
+  .preview-content { padding: 0; background: #fff; }
+  .preview-footer { padding: 10px 12px; gap: 6px; }
 }
 
 /* ===== TOAST ===== */
