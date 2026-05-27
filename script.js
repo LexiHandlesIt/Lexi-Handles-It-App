@@ -17,12 +17,26 @@ const KEY_PREVIEW_FIRST_SUPPRESSED = 'tq_preview_first_suppressed';
 /* ===== DEFAULT COLOURS ===== */
 const DEFAULT_COLOURS = { primary: '#7D5730', accent: '#6B7C5C', bg: '#F5F0E8' };
 
+/* ===== COLOUR HELPERS ===== */
+// Returns true when a hex colour is perceptually light (text should be dark)
+function isColorLight(hex) {
+  try {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const r = parseInt(full.substr(0, 2), 16);
+    const g = parseInt(full.substr(2, 2), 16);
+    const b = parseInt(full.substr(4, 2), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55;
+  } catch { return false; }
+}
+
 /* ===== STATE ===== */
 let state = {
   company: {
     firstName: '', lastName: '', businessName: '',
     trade: '',
     phone: '', email: '', website: '', address: '', postcode: '',
+    companyNumber: '',
     logo: '',
     payMethods: [],
     bankAccHolder: '', bankName: '', bankSort: '', bankAcc: '',
@@ -139,6 +153,7 @@ function personaliseText() {
 document.addEventListener('DOMContentLoaded', () => {
   loadFromStorage();
   setupOnboarding();
+  setupWelcomeBack();
   setupNavigation();
   setupNavHint();
   setupPage1();
@@ -159,10 +174,11 @@ document.addEventListener('DOMContentLoaded', () => {
   populateAuthSig();
   personaliseText();
 
-  // If business is already set up, prepare a fresh quote and land on page 3
+  // Returning user — page3 sits underneath, welcome back modal appears on top
   if (hasRequiredSetup()) {
     prepareNewQuote();
     showPage('page3');
+    showWelcomeBack();
   } else {
     showPage('page1');
   }
@@ -424,10 +440,10 @@ function setupNavigation() {
   });
 
 
-  document.getElementById('menuBankDetails')?.addEventListener('click', () => {
+  document.getElementById('menuBizInfo')?.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
     closeMenu();
-    openBankDetailsModal();
+    openBizInfoModal();
   });
 
   document.getElementById('menuShareLexi')?.addEventListener('click', () => {
@@ -501,6 +517,52 @@ function setupNavigation() {
     prepareNewQuote();
     showPage('page3');
   });
+}
+
+/* ===== WELCOME BACK MODAL ===== */
+function setupWelcomeBack() {
+  const modal = document.getElementById('welcomeBackModal');
+  if (!modal) return;
+
+  function dismiss() { modal.style.display = 'none'; }
+
+  // Wire each button — dismiss modal then navigate
+  document.getElementById('wbNewQuoteBtn')?.addEventListener('click', () => {
+    dismiss();
+    prepareNewQuote();
+    showPage('page3');
+  });
+  document.getElementById('wbViewSavedBtn')?.addEventListener('click', () => {
+    dismiss();
+    showPage('page4');
+  });
+  document.getElementById('wbEditBusinessBtn')?.addEventListener('click', () => {
+    dismiss();
+    showPage('page1');
+  });
+  document.getElementById('wbEditPriceListBtn')?.addEventListener('click', () => {
+    dismiss();
+    showPage('page2');
+  });
+  document.getElementById('wbBizInfoBtn')?.addEventListener('click', () => {
+    dismiss();
+    openBizInfoModal();
+  });
+  document.getElementById('wbShareLexiBtn')?.addEventListener('click', () => {
+    dismiss();
+    shareLexiApp();
+  });
+}
+
+function showWelcomeBack() {
+  const modal = document.getElementById('welcomeBackModal');
+  if (!modal) return;
+  // Personalise greeting with first name
+  const first = (state.company.firstName || '').trim();
+  const nameEl = document.getElementById('wbFirstName');
+  if (nameEl) nameEl.textContent = first || 'there';
+  modal.style.display = 'flex';
+  modal.classList.add('for-onboarding');
 }
 
 /* ===== ONBOARDING ===== */
@@ -673,11 +735,12 @@ function populatePage1Fields() {
   setVal('p1LastName',     c.lastName);
   setVal('p1BusinessName', c.businessName);
   setVal('p1Address',      c.address);
-  setVal('p1Postcode',     c.postcode);
-  setVal('p1Phone',        c.phone);
-  setVal('p1Email',        c.email);
-  setVal('p1Website',      c.website);
-  setVal('p1Trade',        c.trade || '');
+  setVal('p1Postcode',      c.postcode);
+  setVal('p1Phone',         c.phone);
+  setVal('p1Email',         c.email);
+  setVal('p1Website',       c.website);
+  setVal('p1CompanyNumber', c.companyNumber || '');
+  setVal('p1Trade',         c.trade || '');
 
   showLogoState();
 
@@ -766,8 +829,9 @@ function saveBusinessDetails(showToast = true) {
     postcode:     getVal('p1Postcode'),
     phone:        getVal('p1Phone'),
     email:        getVal('p1Email'),
-    website:      getVal('p1Website'),
-    payMethods:   methods,
+    website:       getVal('p1Website'),
+    companyNumber: getVal('p1CompanyNumber'),
+    payMethods:    methods,
     bankAccHolder: getVal('bankAccHolder'),
     bankName:     getVal('bankName'),
     bankSort:     getVal('bankSort'),
@@ -1449,6 +1513,8 @@ function setupPageJobs() {
   // Save and go to completion
   document.getElementById('saveJobsGoToCompletionBtn')?.addEventListener('click', () => {
     recalcTotals();
+    const titleEl = document.querySelector('#page-completion .page-title');
+    if (titleEl) titleEl.textContent = 'Save';
     showPage('page-completion');
   });
 }
@@ -2364,9 +2430,10 @@ function setupModals() {
     closePreviewFirstModal();
     if (fn) fn(false);
   });
-  document.getElementById('closeBankDetailsBtn')?.addEventListener('click', () => document.getElementById('bankDetailsModal').style.display = 'none');
-  document.getElementById('copyBankDetailsBtn')?.addEventListener('click', copyBankDetails);
-  document.getElementById('shareBankDetailsBtn')?.addEventListener('click', shareBankDetails);
+  document.getElementById('closeBizInfoBtn')?.addEventListener('click', () => document.getElementById('bizInfoModal').style.display = 'none');
+  document.getElementById('bizInfoOptions')?.addEventListener('change', updateBizInfoPreview);
+  document.getElementById('copyBizInfoBtn')?.addEventListener('click', copyBizInfo);
+  document.getElementById('shareBizInfoBtn')?.addEventListener('click', shareBizInfo);
   document.getElementById('closeCustomerDashboardBtn')?.addEventListener('click', () => {
     document.getElementById('customerDashboardModal').style.display = 'none';
     activeCustomerGroup = null;
@@ -2377,11 +2444,52 @@ function setupModals() {
   document.getElementById('custEditMoneyBtn')?.addEventListener('click', () => customerEditPickDoc('money'));
   document.getElementById('custEditTermsBtn')?.addEventListener('click', () => customerEditPickDoc('terms'));
   document.getElementById('closeCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
-  document.getElementById('cancelCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('saveCustDetailsBtn')?.addEventListener('click', saveCustomerDetails);
+  document.getElementById('nextToJobDetailsBtn')?.addEventListener('click', () => {
+    document.getElementById('customerDetailsEditModal').style.display = 'none';
+    const docId = activeEditDocId || (activeCustomerGroup?.docs[0]?.id);
+    if (docId) openJobDetailsEdit(docId);
+  });
   document.getElementById('closeJobDetailsEditBtn')?.addEventListener('click', () => document.getElementById('jobDetailsEditModal').style.display = 'none');
-  document.getElementById('cancelJobDetailsEditBtn')?.addEventListener('click', () => document.getElementById('jobDetailsEditModal').style.display = 'none');
+  document.getElementById('backToCustDetailsBtn')?.addEventListener('click', () => {
+    document.getElementById('jobDetailsEditModal').style.display = 'none';
+    if (activeJobDetailsDocId) openCustomerDetailsEdit(activeJobDetailsDocId);
+  });
   document.getElementById('saveJobDetailsBtn')?.addEventListener('click', saveJobDetails);
+  document.getElementById('nextToJobTermsBtn')?.addEventListener('click', () => {
+    const docId = activeJobDetailsDocId;
+    const doc = state.saved.find(d => d.id === docId);
+    if (!doc) return;
+    // Silently save job details before navigating
+    const items = [];
+    document.querySelectorAll('#jdeItemsList .jde-item-row').forEach(row => {
+      const name = (row.querySelector('.jde-item-name')?.value || '').trim();
+      const price = parseFloat(row.querySelector('.jde-item-price')?.value) || 0;
+      if (name || price) items.push({ id: uid(), name, unitPrice: price, unit: '', qty: 1 });
+    });
+    const notes = document.getElementById('jdeNotes')?.value || '';
+    const totalOverride = parseFloat(document.getElementById('jdeTotalOverride')?.value) || 0;
+    if (!doc.quote) doc.quote = {};
+    doc.quote.items = items;
+    doc.quote.notes = notes;
+    if (items.length > 0) {
+      const subtotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
+      const vatPct = parseFloat(doc.quote.vatRate) || 0;
+      doc.total = subtotal * (1 + vatPct / 100);
+    } else if (totalOverride > 0) {
+      doc.total = totalOverride;
+    }
+    doc.custName = buildCustName(doc.quote);
+    save();
+    refreshSavedDocs();
+    document.getElementById('jobDetailsEditModal').style.display = 'none';
+    loadQuoteFromDoc(doc);
+    state.editingDocId = docId;
+    state.editingFromTerms = true;
+    const titleEl = document.querySelector('#page-completion .page-title');
+    if (titleEl) titleEl.textContent = 'Edit Job Terms';
+    showPage('page-completion');
+  });
   document.getElementById('clientPickerNewCustomerBtn')?.addEventListener('click', createNewCustomerFromPicker);
   document.getElementById('editChoiceMoneyBtn')?.addEventListener('click', () => {
     const docId = activeEditChoiceDocId;
@@ -2415,7 +2523,7 @@ function setupModals() {
    document.getElementById('photosModal'),
    document.getElementById('receiptOutstandingModal'),
    document.getElementById('previewFirstModal'),
-   document.getElementById('bankDetailsModal'),
+   document.getElementById('bizInfoModal'),
    document.getElementById('customerDashboardModal'),
    document.getElementById('customerEditChoiceModal'),
    document.getElementById('customerDetailsEditModal')].forEach(m => {
@@ -2532,7 +2640,9 @@ function setupModals() {
       }
     }
     document.getElementById('quoteModal').style.display = 'none';
-    sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'));
+    // Pass the notes (pre-filled with the intro paragraph) as the share message body
+    const shareMessage = quoteData.quoteNotes || '';
+    sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), shareMessage);
     toast('Quote sent!', 'success');
   }
 
@@ -2914,7 +3024,10 @@ function populateQuoteSendModal(doc) {
   setVal('quoteSendDate', q.date || doc.date || todayStr());
   setVal('quoteItemsText', (q.items || []).map(i => `${i.name}, ${Number(i.unitPrice || 0).toFixed(2)}`).join('\n'));
   setVal('quoteTotalOverride', (doc.total || calcTotal(q) || 0).toFixed(2));
-  setVal('quoteSendNotes', q.notes || '');
+  // Pre-fill the send notes with the courtesy intro paragraph so it goes as the message body when sharing
+  const docTypeLower = (q.type || doc.type || 'quote').toLowerCase();
+  const introMsg = `Thank you for allowing me to give you this free, no obligation ${docTypeLower} today. Please find below a full breakdown of the proposed work and costs. There is no pressure and no obligation to proceed. Please read through at your leisure, discuss it with anyone you need to, and let me know if you have any questions.`;
+  setVal('quoteSendNotes', introMsg);
   document.getElementById('quoteIncludePhotos').checked = false;
   document.getElementById('quoteModal').style.display = 'flex';
 }
@@ -3415,43 +3528,113 @@ function createNewCustomerFromPicker() {
   else openInvoiceModal(doc.id);
 }
 
-function buildPaymentShareText() {
+/* ===== SEND MY BUSINESS INFO ===== */
+
+function bizInfoSections() {
+  // Returns an array of section descriptors for all info the user has entered.
+  // Each section: { id, label, text, checked }
   const c = state.company;
-  const lines = [];
-  if ((c.payMethods || []).includes('bank')) {
-    lines.push(`Bank Transfer`);
-    if (c.bankAccHolder) lines.push(`Account name: ${c.bankAccHolder}`);
-    if (c.bankName) lines.push(`Bank: ${c.bankName}`);
-    if (c.bankSort) lines.push(`Sort code: ${c.bankSort}`);
-    if (c.bankAcc) lines.push(`Account number: ${c.bankAcc}`);
+  const methods = c.payMethods || [];
+  const bizName = (c.businessName || `${c.firstName || ''} ${c.lastName || ''}`.trim()).trim();
+  const sections = [];
+
+  // ── Business contact details ─────────────────────────────────
+  const contactLines = [bizName];
+  if (c.address)   contactLines.push(c.address);
+  if (c.postcode)  contactLines.push(c.postcode);
+  if (c.email)     contactLines.push(c.email);
+  if (c.website)   contactLines.push(c.website);
+  sections.push({
+    id: 'contact',
+    label: `Business Name & Address${c.email ? ' / Email' : ''}${c.website ? ' / Website' : ''}`,
+    text: contactLines.filter(Boolean).join('\n'),
+    checked: true
+  });
+
+  // ── Phone ────────────────────────────────────────────────────
+  if (c.phone) {
+    sections.push({ id: 'phone', label: `Phone:  ${c.phone}`, text: `Phone: ${c.phone}`, checked: true });
   }
-  if ((c.payMethods || []).includes('cash')) lines.push('Cash on completion');
-  if ((c.payMethods || []).includes('paypal') && c.paypalRef) lines.push(`PayPal: ${c.paypalRef}`);
-  if ((c.payMethods || []).includes('other') && c.payOther) lines.push(c.payOther);
-  return lines.join('\n') || 'No payment details saved yet.';
+
+  // ── Company / Registration number ────────────────────────────
+  if (c.companyNumber) {
+    sections.push({ id: 'companyNum', label: `Company Number:  ${c.companyNumber}`, text: `Company / Registration Number: ${c.companyNumber}`, checked: true });
+  }
+
+  // ── Bank transfer ────────────────────────────────────────────
+  if (methods.includes('bank') && c.bankAcc) {
+    const bankLines = ['Bank Transfer'];
+    if (c.bankAccHolder) bankLines.push(`Account Name: ${c.bankAccHolder}`);
+    if (c.bankName)      bankLines.push(`Bank: ${c.bankName}`);
+    if (c.bankSort)      bankLines.push(`Sort Code: ${c.bankSort}`);
+    bankLines.push(`Account Number: ${c.bankAcc}`);
+    sections.push({ id: 'bank', label: 'Bank Transfer details', text: bankLines.join('\n'), checked: true });
+  }
+
+  // ── PayPal ───────────────────────────────────────────────────
+  if (methods.includes('paypal') && c.paypalRef) {
+    sections.push({ id: 'paypal', label: `PayPal:  ${c.paypalRef}`, text: `PayPal: ${c.paypalRef}`, checked: true });
+  }
+
+  // ── Cash ─────────────────────────────────────────────────────
+  if (methods.includes('cash')) {
+    sections.push({ id: 'cash', label: 'Cash on Completion', text: 'Cash on Completion accepted', checked: false });
+  }
+
+  // ── Other payment method ─────────────────────────────────────
+  if (methods.includes('other') && c.payOther) {
+    sections.push({ id: 'other', label: c.payOther, text: c.payOther, checked: true });
+  }
+
+  return sections;
 }
 
-function openBankDetailsModal() {
-  setVal('bankDetailsShareText', buildPaymentShareText());
-  document.getElementById('bankDetailsModal').style.display = 'flex';
+function buildBizInfoText() {
+  const parts = [];
+  document.querySelectorAll('#bizInfoOptions input[type="checkbox"]:checked').forEach(cb => {
+    const text = cb.dataset.text;
+    if (text) parts.push(text);
+  });
+  return parts.join('\n\n') || 'No items selected.';
 }
 
-async function copyBankDetails() {
-  const text = getVal('bankDetailsShareText');
+function updateBizInfoPreview() {
+  setVal('bizInfoShareText', buildBizInfoText());
+}
+
+function openBizInfoModal() {
+  const sections = bizInfoSections();
+  const container = document.getElementById('bizInfoOptions');
+  if (!container) return;
+
+  container.innerHTML = sections.map(s => `
+    <label class="checkbox-label biz-info-check">
+      <input type="checkbox" name="bizInfo" value="${s.id}"
+             data-text="${s.text.replace(/"/g, '&quot;')}"
+             ${s.checked ? 'checked' : ''}>
+      ${s.label}
+    </label>`).join('');
+
+  updateBizInfoPreview();
+  document.getElementById('bizInfoModal').style.display = 'flex';
+}
+
+async function copyBizInfo() {
+  const text = getVal('bizInfoShareText');
   try {
     await navigator.clipboard.writeText(text);
-    toast('Payment details copied.', 'success');
+    toast('Copied to clipboard.', 'success');
   } catch {
-    toast('Select the details and copy them.', 'info');
+    toast('Select the text and copy manually.', 'info');
   }
 }
 
-async function shareBankDetails() {
-  const text = getVal('bankDetailsShareText');
+async function shareBizInfo() {
+  const text = getVal('bizInfoShareText');
   if (navigator.share) {
-    try { await navigator.share({ text, title: 'Payment details' }); return; } catch(e) {}
+    try { await navigator.share({ text, title: 'My Business Info' }); return; } catch(e) {}
   }
-  copyBankDetails();
+  copyBizInfo();
 }
 
 async function shareLexiApp() {
@@ -3771,6 +3954,8 @@ function executeCustomerEdit(editType, docId) {
       loadQuoteFromDoc(doc);
       state.editingDocId = docId;
       state.editingFromTerms = true;
+      const titleEl = document.querySelector('#page-completion .page-title');
+      if (titleEl) titleEl.textContent = 'Edit Job Terms';
       showPage('page-completion');
     }
   }
@@ -3847,9 +4032,9 @@ function openJobDetailsEdit(docId) {
   if (!doc) return;
   activeJobDetailsDocId = docId;
   const q = doc.quote || {};
-  const ref = q.ref || doc.ref || doc.invoiceRef || '';
-  const titleEl = document.getElementById('jobDetailsEditTitle');
-  if (titleEl) titleEl.textContent = ref ? `Job: ${ref}` : 'Job Details';
+  const custName = buildCustName(q) || doc.custName || '';
+  const subtitleEl = document.getElementById('jobDetailsEditSubtitle');
+  if (subtitleEl) subtitleEl.textContent = custName ? `Job: ${custName}` : '';
   renderJobDetailsForm(doc);
   document.getElementById('jobDetailsEditModal').style.display = 'flex';
 }
@@ -4077,8 +4262,8 @@ const DOC_CSS = `
   .doc-header{display:grid;grid-template-columns:110px 1fr 155px;align-items:center;gap:10px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc-logo{max-height:56px;max-width:100px;object-fit:contain}
   .doc-logo-placeholder{width:72px;height:46px;border:1.5px dashed rgba(255,255,255,0.45);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:rgba(255,255,255,0.65)}
-  .doc-biz-name{font-size:1.2rem;font-weight:700;text-align:center;line-height:1.25;color:#fff}
-  .doc-type-label{font-size:1.05rem;font-weight:700;text-align:right;text-decoration:none;text-transform:uppercase;letter-spacing:0.06em;line-height:1.3;color:#fff}
+  .doc-biz-name{font-size:2rem;font-weight:700;text-align:center;line-height:1.2}
+  .doc-type-label{font-size:1.33rem;font-weight:700;text-align:right;text-decoration:none;text-transform:uppercase;letter-spacing:0.05em;line-height:1.2}
 
   /* ── PREPARED BY / FOR (two cols, horizontal dividers, vertical centre line) ── */
   .doc-info{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #c4c4c4;border-bottom:1px solid #c4c4c4}
@@ -4174,8 +4359,8 @@ const DOC_CSS = `
     .doc-header{grid-template-columns:52px 1fr 82px;gap:6px;padding:10px 10px}
     .doc-logo{max-height:40px;max-width:48px}
     .doc-logo-placeholder{width:40px;height:32px;font-size:0.62rem}
-    .doc-biz-name{font-size:0.92rem}
-    .doc-type-label{font-size:0.78rem;letter-spacing:0.03em}
+    .doc-biz-name{font-size:1.3rem}
+    .doc-type-label{font-size:0.88rem;letter-spacing:0.03em}
 
     /* Prepared by/for: stack vertically */
     .doc-info{grid-template-columns:1fr}
@@ -4271,9 +4456,14 @@ function buildDocHtml(doc, docType, extra = {}) {
 
   // ── Logo — prefer doc snapshot, fall back to live state so it always shows ──
   const logoSrc = co.logo || state.company.logo || '';
+  // ── Header text colour — auto dark/light based on primary background ──
+  const headerTextCol = isColorLight(primary) ? '#1a1a1a' : '#ffffff';
+  const logoPlaceholderStyle = isColorLight(primary)
+    ? 'border:1.5px dashed rgba(0,0,0,0.3);color:rgba(0,0,0,0.5)'
+    : 'border:1.5px dashed rgba(255,255,255,0.45);color:rgba(255,255,255,0.65)';
   const logoHtml = logoSrc
     ? `<img src="${logoSrc}" alt="Logo" class="doc-logo">`
-    : `<div class="doc-logo-placeholder">Logo</div>`;
+    : `<div class="doc-logo-placeholder" style="${logoPlaceholderStyle}">Logo</div>`;
 
   // ── Valid for ────────────────────────────────────────────────────
   let validForText = '';
@@ -4292,21 +4482,16 @@ function buildDocHtml(doc, docType, extra = {}) {
     </tr>`).join('') ||
     `<tr><td colspan="4" style="text-align:center;color:#aaa;padding:14px;font-style:italic">No items added — go back and add jobs in Step 2</td></tr>`;
 
-  // ── Totals ───────────────────────────────────────────────────────
+  // ── Totals — labels in col 3 only, amounts in col 4, fully right-justified ──
   const discRow = disc > 0
-    ? `<tr class="totals-row"><td></td><td colspan="2" class="r" style="font-size:0.79rem">Discount (${disc}%):</td><td class="r">-${fmtPrice(sub*disc/100)}</td></tr>`
+    ? `<tr class="totals-row"><td></td><td></td><td class="r" style="font-size:0.79rem">Discount (${disc}%):</td><td class="r">-${fmtPrice(sub*disc/100)}</td></tr>`
     : '';
   const totalsRows = `
     <tr class="totals-sep"><td colspan="4"></td></tr>
-    <tr class="totals-row"><td></td><td colspan="2" class="r" style="font-size:0.79rem;font-weight:700">Subtotal:</td><td class="r">${fmtPrice(afterDisc)}</td></tr>
+    <tr class="totals-row"><td></td><td></td><td class="r" style="font-size:0.79rem;font-weight:700">Subtotal:</td><td class="r">${fmtPrice(afterDisc)}</td></tr>
     ${discRow}
-    <tr class="totals-row"><td></td><td colspan="2" class="r" style="font-size:0.79rem">VAT${vatRate>0?` (${vatRate}%)`:'  (if applicable)'}:</td><td class="r">${vatRate>0?fmtPrice(vatAmt):'—'}</td></tr>
-    <tr class="totals-total" style="background:${accent}"><td></td><td colspan="2" class="r">TOTAL:</td><td class="r">${fmtPrice(total)}</td></tr>`;
-
-  // ── Intro paragraph (quotes only) ───────────────────────────────
-  const introHtml = isQuote
-    ? `<p class="doc-intro">Thank you for allowing me to give you this free, no obligation ${(q.type||'quote').toLowerCase()} today. Please find below a full breakdown of the proposed work and costs. There is no pressure and no obligation to proceed. Please read through at your leisure, discuss it with anyone you need to, and let me know if you have any questions.</p>`
-    : '';
+    <tr class="totals-row"><td></td><td></td><td class="r" style="font-size:0.79rem">VAT${vatRate>0?` (${vatRate}%)`:'  (if applicable)'}:</td><td class="r">${vatRate>0?fmtPrice(vatAmt):'—'}</td></tr>
+    <tr class="totals-total" style="background:${accent}"><td colspan="2"></td><td class="r">TOTAL:</td><td class="r">${fmtPrice(total)}</td></tr>`;
 
   // ── Description of work — only shown when a description was entered ──
   const descHtml = q.notes
@@ -4368,8 +4553,8 @@ function buildDocHtml(doc, docType, extra = {}) {
     <div class="doc-wrap">
       <div class="doc-header" style="background:${primary}">
         ${logoHtml}
-        <div class="doc-biz-name">${esc(bizName)}</div>
-        <div class="doc-type-label">${esc(docLabel)}</div>
+        <div class="doc-biz-name" style="color:${headerTextCol}">${esc(bizName)}</div>
+        <div class="doc-type-label" style="color:${headerTextCol}">${esc(docLabel)}</div>
       </div>
       <div class="doc-info">
         <div class="doc-info-col">
@@ -4387,7 +4572,6 @@ function buildDocHtml(doc, docType, extra = {}) {
         <div class="doc-ref-cell"><span class="ref-label">Valid for:</span><span class="ref-value">${esc(validForText)}</span></div>
       </div>
       <div class="doc-body">
-        ${introHtml}
         ${descHtml}
         <div class="doc-section-heading">Itemised Breakdown</div>
         <table class="doc-items-table">
@@ -4600,30 +4784,41 @@ function printRaw(inner) {
   setTimeout(() => { win.print(); win.close(); }, 400);
 }
 
-async function sendDoc(html, filename) {
-  sendDocRaw(wrapDoc(html), filename);
+async function sendDoc(html, filename, message = '') {
+  sendDocRaw(wrapDoc(html), filename, message);
 }
 
-async function sendDocRaw(htmlStr, filename) {
+async function sendDocRaw(htmlStr, filename, message = '') {
   const blob = new Blob([htmlStr], { type: 'text/html' });
   const file = new File([blob], filename, { type: 'text/html' });
 
   if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'Document from Lexi Handles It' });
+      const shareData = { files: [file], title: 'Document from Lexi Handles It' };
+      if (message) shareData.text = message;
+      await navigator.share(shareData);
       return;
     } catch(e) {
       if (e.name !== 'AbortError') console.warn('Share failed', e);
     }
   }
 
-  // Fallback: download
+  // Fallback: download the file and (if possible) copy the message to clipboard
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
-  toast('Document downloaded. Open WhatsApp or email and attach this file.', '', 5000);
+  if (message && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(message);
+      toast('Document downloaded. Message copied to clipboard — paste it into WhatsApp or email.', '', 6000);
+    } catch(e) {
+      toast('Document downloaded. Open WhatsApp or email and attach this file.', '', 5000);
+    }
+  } else {
+    toast('Document downloaded. Open WhatsApp or email and attach this file.', '', 5000);
+  }
 }
 
 /* ===== BACKUP & RESTORE ===== */

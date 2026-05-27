@@ -829,6 +829,62 @@ input[type="text"].sig-text-input:focus {
   margin-bottom: 0;
 }
 
+/* ===== WELCOME BACK MODAL ===== */
+.wb-card {
+  /* Slightly wider than the standard ob-card to give the buttons room */
+  max-width: 420px;
+}
+
+.wb-greeting {
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--charcoal);
+  margin-top: 10px;
+}
+
+.wb-btn-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.wb-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--sage);
+  color: var(--white);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.2;
+  transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.wb-btn:hover  { background: #5a6a4c; }
+.wb-btn:active { transform: scale(0.97); }
+.wb-btn svg    { flex-shrink: 0; opacity: 0.85; }
+
+/* Primary CTA — walnut (brand primary colour) */
+.wb-btn-primary {
+  background: var(--walnut);
+  font-size: 0.85rem;
+}
+.wb-btn-primary:hover { background: var(--walnut-d); }
+
+@media (max-width: 420px) {
+  .wb-btn { padding: 9px 10px; font-size: 0.79rem; }
+  .wb-greeting { font-size: 0.86rem; }
+}
+
 /* ===== LOGO UPLOAD ===== */
 .logo-upload-area {
   border: 2px dashed var(--border);
@@ -2355,6 +2411,63 @@ input[type="text"].sig-text-input:focus {
   width: 100%;
   resize: vertical;
 }
+
+/* ===== SEND MY BUSINESS INFO MODAL ===== */
+.biz-info-intro {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.biz-info-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.biz-info-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  font-size: 0.83rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.biz-info-check:hover { background: #ece8e0; }
+.biz-info-check input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--sage);
+  width: 15px;
+  height: 15px;
+}
+
+.biz-info-preview-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+}
+
+.biz-info-preview {
+  background: #f9f9f7;
+  color: #444;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
 .customer-dashboard-card {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2770,14 +2883,14 @@ input[type="text"].sig-text-input:focus {
   color: var(--terra);
   background: var(--terra-tint);
 }
-/* Edit — outline walnut */
+/* Edit — outline sage (brand green) */
 .cdv-header-edit-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   background: transparent;
-  color: var(--walnut);
-  border: 1.5px solid var(--walnut);
+  color: var(--sage);
+  border: 1.5px solid var(--sage);
   border-radius: 8px;
   padding: 5px 10px;
   font-size: 0.78rem;
@@ -2789,7 +2902,7 @@ input[type="text"].sig-text-input:focus {
 }
 .cdv-header-edit-btn:hover,
 .cdv-header-edit-btn:focus-visible {
-  background: var(--walnut-tint);
+  background: rgba(107,124,92,0.1);
   outline: none;
 }
 .cdv-job-meta {
