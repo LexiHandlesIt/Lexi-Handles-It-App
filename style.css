@@ -1,5 +1,8 @@
 /* ===== CSS VARIABLES ===== */
 :root {
+  --gold: #B8860B;
+  --gold-mid: #E8B84B;
+  --gold-light: #FEF6DC;
   --walnut: #7D5730;
   --walnut-d: #5e3f22;
   --walnut-l: #a07548;
@@ -2196,49 +2199,25 @@ input[type="text"].sig-text-input:focus {
 .type-badge.paid { background: #dcfce7; color: #166534; }
 .type-badge.overdue { background: var(--danger-l); color: var(--danger); }
 
-.journey-btns {
-  display: flex;
-  gap: 6px;
+/* Journey dropdown — replaces A/B/C buttons on View Jobs cards */
+.journey-select-wrap {
   margin-bottom: 10px;
-  flex-wrap: wrap;
 }
-
-.journey-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 14px;
+.journey-select {
+  width: 100%;
+  padding: 10px 14px;
   border: 1.5px solid var(--walnut);
   border-radius: 8px;
   background: var(--white);
   color: var(--walnut);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  transition: background var(--transition), color var(--transition);
+  appearance: auto;
   min-height: 44px;
-  flex: 1;
-  justify-content: center;
-  min-width: 0;
 }
-
-.journey-btn:hover { background: var(--walnut-tint); }
-.journey-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.journey-btn:disabled:hover { background: var(--white); }
-
-.journey-btn .jb-circle {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--walnut);
-  color: white;
-  font-size: 0.7rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
+.journey-select:focus { outline: 2px solid var(--walnut); outline-offset: 2px; }
 
 .saved-doc-actions {
   display: flex;
@@ -2273,7 +2252,7 @@ input[type="text"].sig-text-input:focus {
 }
 .sdpt-payment-info { display: flex; align-items: center; gap: 6px; flex: 1; }
 .sdpt-paid { color: var(--success); }
-.sdpt-outstanding { color: var(--walnut); font-weight: 500; }
+.sdpt-outstanding { color: var(--gold); font-weight: 600; }
 .sdpt-full { color: var(--success); font-weight: 500; }
 .btn-view-customer {
   flex-shrink: 0;
@@ -2551,6 +2530,121 @@ input[type="text"].sig-text-input:focus {
   text-align: center;
   line-height: 1.2;
 }
+
+/* ===== JOB STATUS PROGRESSION ===== */
+.cdv-progression {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  background: #faf8f4;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.cdv-prog-label {
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #999;
+  margin-bottom: 8px;
+}
+.cdv-prog-btns {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+.cdv-prog-btn {
+  flex: 1;
+  padding: 7px 4px 5px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  color: #aaa;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.cdv-prog-btn:hover {
+  border-color: var(--sage);
+  color: var(--sage);
+  background: #eef4ea;
+}
+/* Current stage — sage green */
+.cdv-prog-btn.cdv-prog-active {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: #fff;
+}
+.cdv-prog-btn.cdv-prog-active:hover {
+  background: #5a6a4c;
+  border-color: #5a6a4c;
+  color: #fff;
+}
+/* Completed past stage — gold */
+.cdv-prog-btn.cdv-prog-done {
+  background: var(--gold-light);
+  border-color: var(--gold-mid);
+  color: var(--gold);
+}
+.cdv-prog-btn.cdv-prog-done:hover {
+  background: #fdefc0;
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.cdv-prog-letter {
+  font-size: 0.62rem;
+  font-weight: 800;
+  opacity: 0.7;
+}
+.cdv-prog-active .cdv-prog-letter,
+.cdv-prog-done .cdv-prog-letter { opacity: 1; }
+.cdv-prog-text { line-height: 1.1; }
+
+/* ===== JOB TERMS EDIT MODAL ===== */
+.jte-type-row {
+  display: flex;
+  gap: 20px;
+  margin-top: 4px;
+}
+.jte-type-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.jte-totals {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 12px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.jte-totals-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--charcoal);
+}
+.jte-grand {
+  font-weight: 700;
+  font-size: 0.95rem;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+.jte-discount-row { color: var(--terra); }
+.jte-vat-row      { color: #666; }
 
 /* Delete button — spans full width, terracotta */
 .cec-btn-delete {

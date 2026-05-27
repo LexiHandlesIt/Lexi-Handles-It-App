@@ -158,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupOnboarding();
   setupNewJobPicker();
   setupDescriptionHelp();
+  setupJobTermsEdit();
   setupNavigation();
   setupNavHint();
   setupPage1();
@@ -2312,16 +2313,14 @@ function refreshSavedDocs() {
           <span class="type-badge ${statusBadge}">${statusLabel}</span>
         </div>
       </div>
-      <div class="journey-btns">
-        <button type="button" class="journey-btn btn-send-quote" data-id="${doc.id}">
-          <span class="jb-circle">A</span> ${esc(docType)}
-        </button>
-        <button type="button" class="journey-btn btn-send-invoice" data-id="${doc.id}">
-          <span class="jb-circle">B</span> Invoice
-        </button>
-        <button type="button" class="journey-btn btn-send-receipt" data-id="${doc.id}">
-          <span class="jb-circle">C</span> Receipt
-        </button>
+      <div class="journey-select-wrap">
+        <select class="journey-select" data-id="${doc.id}">
+          <option value="">Create Document…</option>
+          <option value="quote">A &nbsp; Estimate</option>
+          <option value="quote-q">B &nbsp; Quote</option>
+          <option value="invoice">C &nbsp; Invoice</option>
+          <option value="receipt">D &nbsp; Receipt</option>
+        </select>
       </div>
       <div class="saved-doc-payment-tally">
         <span class="sdpt-payment-info">
@@ -2335,9 +2334,15 @@ function refreshSavedDocs() {
 
     container.appendChild(card);
 
-    card.querySelector('.btn-send-quote').addEventListener('click', () => openQuoteModal(doc.id));
-    card.querySelector('.btn-send-invoice').addEventListener('click', () => previewInvoice(doc.id));
-    card.querySelector('.btn-send-receipt').addEventListener('click', () => handleReceiptRequest(doc.id));
+    card.querySelector('.journey-select').addEventListener('change', e => {
+      const action = e.target.value;
+      e.target.value = ''; // reset to placeholder
+      if (!action) return;
+      if      (action === 'quote')   openQuoteModal(doc.id);
+      else if (action === 'quote-q') openQuoteModal(doc.id);
+      else if (action === 'invoice') previewInvoice(doc.id);
+      else if (action === 'receipt') handleReceiptRequest(doc.id);
+    });
     card.querySelector('.btn-view-customer').addEventListener('click', () => openCustomerDashboardForDoc(doc.id));
   });
 }
@@ -2440,7 +2445,7 @@ function editDoc(id) {
 }
 
 function deleteDoc(id) {
-  if (!confirm('Delete this document? This cannot be undone.')) return;
+  if (!confirm('Lexi says: Are you sure you want to delete this? Once it\'s gone, it\'s gone!')) return;
   state.saved = state.saved.filter(d => d.id !== id);
   save();
   updateSavedBadge();
@@ -2536,7 +2541,7 @@ function setupModals() {
   document.getElementById('custEditDeleteBtn')?.addEventListener('click', () => {
     const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
     if (!docId) return;
-    if (!confirm('Delete this document? This cannot be undone.')) return;
+    if (!confirm('Lexi says: Are you sure you want to delete this? Once it\'s gone, it\'s gone!')) return;
     // Only close modals after user confirms
     document.getElementById('customerEditChoiceModal').style.display = 'none';
     document.getElementById('customerDashboardModal').style.display = 'none';
@@ -2586,14 +2591,7 @@ function setupModals() {
     save();
     refreshSavedDocs();
     document.getElementById('jobDetailsEditModal').style.display = 'none';
-    document.getElementById('customerDashboardModal').style.display = 'none';
-    document.getElementById('customerEditChoiceModal').style.display = 'none';
-    loadQuoteFromDoc(doc);
-    state.editingDocId = docId;
-    state.editingFromTerms = true;
-    const titleEl = document.querySelector('#page-completion .page-title');
-    if (titleEl) titleEl.textContent = 'Edit Job Terms';
-    showPage('page-completion');
+    openJobTermsEdit(docId);
   });
   document.getElementById('clientPickerNewCustomerBtn')?.addEventListener('click', createNewCustomerFromPicker);
   document.getElementById('editChoiceMoneyBtn')?.addEventListener('click', () => {
@@ -3902,6 +3900,33 @@ function buildCustomerJobSection(d) {
       ${photoGroup('After', afterPhotos)}
     </div>` : '';
 
+  // Work out which stage rank this doc is currently at
+  const stageRank = d.paid ? 3 : d.invoiceSent ? 2 : (q.type || 'Estimate') === 'Quote' ? 1 : 0;
+  const stages = [
+    { letter: 'A', label: 'Estimate', action: 'quote'   },
+    { letter: 'B', label: 'Quote',    action: 'quote'   },
+    { letter: 'C', label: 'Invoice',  action: 'invoice' },
+    { letter: 'D', label: 'Receipt',  action: 'receipt' },
+  ];
+  const progressionHtml = `
+    <div class="cdv-progression">
+      <div class="cdv-prog-label">Job Status</div>
+      <div class="cdv-prog-btns">
+        ${stages.map((s, i) => {
+          const cls = i < stageRank ? 'cdv-prog-done'
+                    : i === stageRank ? 'cdv-prog-active'
+                    : '';
+          return `<button type="button"
+            class="cdv-prog-btn ${cls}"
+            data-prog-doc-id="${esc(d.id)}"
+            data-prog-action="${s.action}">
+            <span class="cdv-prog-letter">${s.letter}</span>
+            <span class="cdv-prog-text">${s.label}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`;
+
   return `
     <div class="cdv-job-card">
       <div class="cdv-job-header">
@@ -3913,6 +3938,7 @@ function buildCustomerJobSection(d) {
       </div>
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
+      ${progressionHtml}
       ${paymentsHtml}
       ${notesHtml}
       ${privateHtml}
@@ -3972,13 +3998,25 @@ function renderSingleCustomerDashboard(group, groups) {
 
   body.innerHTML = contentHtml;
 
-  // Wire modal-header action buttons (all set after contentHtml is ready)
+  // Wire modal-header action buttons
   const firstDocId = group.docs[0]?.id;
   const modal = document.getElementById('customerDashboardModal');
 
   const dashEditBtn = document.getElementById('custDashEditBtn');
   if (dashEditBtn) dashEditBtn.onclick = () =>
     openCustomerEditChoice(group.docs.length === 1 ? firstDocId : null);
+
+  // Job status progression — event delegation
+  body.addEventListener('click', e => {
+    const btn = e.target.closest('[data-prog-doc-id]');
+    if (!btn) return;
+    const docId  = btn.dataset.progDocId;
+    const action = btn.dataset.progAction;
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    if      (action === 'quote')   openQuoteModal(docId);
+    else if (action === 'invoice') previewInvoice(docId);
+    else if (action === 'receipt') handleReceiptRequest(docId);
+  });
 
 }
 
@@ -4039,15 +4077,7 @@ function executeCustomerEdit(editType, docId) {
     openMarkPaid(docId);
   } else if (editType === 'terms') {
     document.getElementById('customerDashboardModal').style.display = 'none';
-    const doc = state.saved.find(d => d.id === docId);
-    if (doc) {
-      loadQuoteFromDoc(doc);
-      state.editingDocId = docId;
-      state.editingFromTerms = true;
-      const titleEl = document.querySelector('#page-completion .page-title');
-      if (titleEl) titleEl.textContent = 'Edit Job Terms';
-      showPage('page-completion');
-    }
+    openJobTermsEdit(docId);
   }
 }
 
@@ -4112,6 +4142,218 @@ function saveCustomerDetails() {
   document.getElementById('customerDashboardModal').style.display = 'flex';
 
   showSavedPopup("I've saved the details.");
+}
+
+/* ===== JOB TERMS EDIT MODAL ===== */
+let activeJobTermsDocId = null;
+
+function openJobTermsEdit(docId) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  activeJobTermsDocId = docId;
+  const q = doc.quote || {};
+
+  // Subtitle
+  const custName = buildCustName(q) || doc.custName || '';
+  const subtitleEl = document.getElementById('jobTermsEditSubtitle');
+  if (subtitleEl) subtitleEl.textContent = custName ? `Job: ${custName}` : '';
+
+  // Doc type
+  const typeVal = (q.type || 'Estimate');
+  document.querySelectorAll('input[name="jteDocType"]').forEach(r => { r.checked = r.value === typeVal; });
+
+  // Discount
+  const discSel = document.getElementById('jteDiscount');
+  const discCustom = document.getElementById('jteDiscountCustom');
+  const discVal = q.discount || '0';
+  const standardDiscs = ['0','5','10','20'];
+  if (standardDiscs.includes(String(discVal))) {
+    discSel.value = discVal;
+    discCustom.style.display = 'none';
+  } else {
+    discSel.value = 'custom';
+    discCustom.style.display = '';
+    discCustom.value = discVal;
+  }
+
+  // VAT
+  const vatSel = document.getElementById('jteVat');
+  const vatCustomEl = document.getElementById('jteVatCustom');
+  const vatVal = q.vatRate || '0';
+  const standardVats = ['0','5','10','20'];
+  if (standardVats.includes(String(vatVal))) {
+    vatSel.value = vatVal;
+    vatCustomEl.style.display = 'none';
+  } else {
+    vatSel.value = 'custom';
+    vatCustomEl.style.display = '';
+    vatCustomEl.value = q.vatCustom || vatVal;
+  }
+
+  // Valid For
+  const validSel = document.getElementById('jteValidFor');
+  const validCustomGrp = document.getElementById('jteValidCustomGroup');
+  const validCustomEl = document.getElementById('jteValidCustom');
+  const validVal = q.validFor || '14';
+  if (['7','14','30'].includes(String(validVal))) {
+    validSel.value = validVal;
+    validCustomGrp.style.display = 'none';
+  } else {
+    validSel.value = 'custom';
+    validCustomGrp.style.display = '';
+    validCustomEl.value = q.validCustom || validVal;
+  }
+
+  // Terms checkboxes
+  const selectedTerms = q.selectedTerms || [];
+  document.querySelectorAll('input[name="jteTerms"]').forEach(cb => {
+    cb.checked = selectedTerms.includes(cb.value);
+  });
+
+  // Custom terms
+  document.getElementById('jteCustomTerms').value = q.customTerms || '';
+
+  // Signature
+  document.getElementById('jteAuthSig').value = q.authSig || state.company.firstName || '';
+
+  // Live totals
+  jteUpdateTotals();
+
+  document.getElementById('jobTermsEditModal').style.display = 'flex';
+}
+
+function jteGetSubtotal() {
+  const doc = state.saved.find(d => d.id === activeJobTermsDocId);
+  if (!doc) return 0;
+  const items = (doc.quote?.items || doc.items || []);
+  return items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
+}
+
+function jteUpdateTotals() {
+  const subtotal = jteGetSubtotal();
+  const discSel = document.getElementById('jteDiscount');
+  const discCustom = document.getElementById('jteDiscountCustom');
+  const vatSel = document.getElementById('jteVat');
+  const vatCustomEl = document.getElementById('jteVatCustom');
+
+  const discPct = discSel.value === 'custom' ? (parseFloat(discCustom.value) || 0) : (parseFloat(discSel.value) || 0);
+  const vatPct  = vatSel.value  === 'custom' ? (parseFloat(vatCustomEl.value) || 0) : (parseFloat(vatSel.value) || 0);
+
+  const discAmt  = subtotal * discPct / 100;
+  const afterDisc = subtotal - discAmt;
+  const vatAmt   = afterDisc * vatPct / 100;
+  const total    = afterDisc + vatAmt;
+
+  document.getElementById('jteSubtotal').textContent   = fmtPrice(subtotal);
+  document.getElementById('jteDiscountAmt').textContent = '-' + fmtPrice(discAmt);
+  document.getElementById('jteVatAmt').textContent      = fmtPrice(vatAmt);
+  document.getElementById('jteTotal').textContent       = fmtPrice(total);
+  document.getElementById('jteDiscountRow').style.display = discAmt > 0 ? '' : 'none';
+  document.getElementById('jteVatRow').style.display      = vatAmt > 0 ? '' : 'none';
+}
+
+function saveJobTermsEdit() {
+  const docId = activeJobTermsDocId;
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  if (!doc.quote) doc.quote = {};
+
+  // Doc type
+  const typeEl = document.querySelector('input[name="jteDocType"]:checked');
+  if (typeEl) { doc.quote.type = typeEl.value; doc.type = typeEl.value; }
+
+  // Discount
+  const discSel = document.getElementById('jteDiscount');
+  doc.quote.discount = discSel.value === 'custom'
+    ? (parseFloat(document.getElementById('jteDiscountCustom').value) || 0)
+    : parseFloat(discSel.value) || 0;
+
+  // VAT
+  const vatSel = document.getElementById('jteVat');
+  if (vatSel.value === 'custom') {
+    doc.quote.vatRate   = 'custom';
+    doc.quote.vatCustom = parseFloat(document.getElementById('jteVatCustom').value) || 0;
+  } else {
+    doc.quote.vatRate   = vatSel.value;
+    doc.quote.vatCustom = '';
+  }
+
+  // Valid For
+  const validSel = document.getElementById('jteValidFor');
+  if (validSel.value === 'custom') {
+    doc.quote.validFor   = 'custom';
+    doc.quote.validCustom = document.getElementById('jteValidCustom').value || '';
+  } else {
+    doc.quote.validFor   = validSel.value;
+    doc.quote.validCustom = '';
+  }
+
+  // Terms
+  doc.quote.selectedTerms = [...document.querySelectorAll('input[name="jteTerms"]:checked')].map(cb => cb.value);
+  doc.quote.customTerms   = document.getElementById('jteCustomTerms').value || '';
+
+  // Signature
+  doc.quote.authSig = document.getElementById('jteAuthSig').value || '';
+
+  // Recalculate total
+  const subtotal = jteGetSubtotal();
+  const discPct  = parseFloat(doc.quote.discount) || 0;
+  const afterDisc = subtotal * (1 - discPct / 100);
+  const vatRate   = doc.quote.vatRate === 'custom' ? (parseFloat(doc.quote.vatCustom) || 0) : (parseFloat(doc.quote.vatRate) || 0);
+  doc.total = afterDisc * (1 + vatRate / 100);
+
+  save();
+  refreshSavedDocs();
+  document.getElementById('jobTermsEditModal').style.display = 'none';
+
+  // Re-render and show customer dashboard
+  try {
+    const groups = buildCustomerGroups();
+    const updatedGroup = groups.find(g => g.docs.some(d => d.id === docId)) || activeCustomerGroup;
+    if (updatedGroup) {
+      activeCustomerGroup = updatedGroup;
+      renderSingleCustomerDashboard(updatedGroup, groups);
+    }
+  } catch(e) {}
+  document.getElementById('customerDashboardModal').style.display = 'flex';
+  showSavedPopup("I've saved your changes.");
+}
+
+function setupJobTermsEdit() {
+  document.getElementById('closeJobTermsEditBtn')?.addEventListener('click', () => {
+    document.getElementById('jobTermsEditModal').style.display = 'none';
+  });
+  document.getElementById('backToJobDetailsFromTermsBtn')?.addEventListener('click', () => {
+    document.getElementById('jobTermsEditModal').style.display = 'none';
+    if (activeJobTermsDocId) openJobDetailsEdit(activeJobTermsDocId);
+  });
+  document.getElementById('saveJobTermsEditBtn')?.addEventListener('click', saveJobTermsEdit);
+
+  // Live totals on discount/VAT change
+  ['jteDiscount','jteDiscountCustom','jteVat','jteVatCustom'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', jteUpdateTotals);
+    document.getElementById(id)?.addEventListener('change', jteUpdateTotals);
+  });
+
+  // Show/hide custom discount
+  document.getElementById('jteDiscount')?.addEventListener('change', () => {
+    const isCustom = document.getElementById('jteDiscount').value === 'custom';
+    document.getElementById('jteDiscountCustom').style.display = isCustom ? '' : 'none';
+    jteUpdateTotals();
+  });
+
+  // Show/hide custom VAT
+  document.getElementById('jteVat')?.addEventListener('change', () => {
+    const isCustom = document.getElementById('jteVat').value === 'custom';
+    document.getElementById('jteVatCustom').style.display = isCustom ? '' : 'none';
+    jteUpdateTotals();
+  });
+
+  // Show/hide custom valid for
+  document.getElementById('jteValidFor')?.addEventListener('change', () => {
+    const isCustom = document.getElementById('jteValidFor').value === 'custom';
+    document.getElementById('jteValidCustomGroup').style.display = isCustom ? '' : 'none';
+  });
 }
 
 /* ===== JOB DETAILS EDIT ===== */
