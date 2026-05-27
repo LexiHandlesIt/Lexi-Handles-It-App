@@ -2534,10 +2534,17 @@ function setupModals() {
     }
   });
   document.getElementById('custEditDeleteBtn')?.addEventListener('click', () => {
+    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
+    if (!docId) return;
+    if (!confirm('Delete this document? This cannot be undone.')) return;
+    // Only close modals after user confirms
     document.getElementById('customerEditChoiceModal').style.display = 'none';
     document.getElementById('customerDashboardModal').style.display = 'none';
-    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
-    if (docId) deleteDoc(docId);
+    state.saved = state.saved.filter(d => d.id !== docId);
+    save();
+    updateSavedBadge();
+    refreshSavedDocs();
+    toast('Document deleted.');
   });
   document.getElementById('closeCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('saveCustDetailsBtn')?.addEventListener('click', saveCustomerDetails);
