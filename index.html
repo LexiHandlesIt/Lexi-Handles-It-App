@@ -76,53 +76,6 @@
     </div><!-- /.ob-card -->
   </div>
 
-  <!-- WELCOME BACK MODAL -->
-  <div id="welcomeBackModal" class="ob-screen" style="display:none" role="dialog" aria-modal="true" aria-labelledby="welcomeBackTitle">
-    <div class="ob-card wb-card">
-
-      <div class="ob-header">
-        <img src="3 Lexi Handles It All.png" alt="Lexi Handles It All" class="ob-wordmark" onerror="this.style.display='none'">
-        <p class="ob-intro wb-greeting" id="welcomeBackTitle">Hello <span id="wbFirstName">there</span>, welcome back. What would you like to do today?</p>
-      </div>
-
-      <div class="ob-middle">
-        <div class="ob-left">
-          <div class="wb-btn-grid">
-            <button type="button" class="wb-btn wb-btn-primary" id="wbNewQuoteBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-              New Estimate or Quote
-            </button>
-            <button type="button" class="wb-btn" id="wbViewSavedBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-              View Saved Jobs
-            </button>
-            <button type="button" class="wb-btn" id="wbEditBusinessBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-              Edit My Business
-            </button>
-            <button type="button" class="wb-btn" id="wbEditPriceListBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-              Edit My Price List
-            </button>
-            <button type="button" class="wb-btn" id="wbBizInfoBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-              Send My Business Info
-            </button>
-            <button type="button" class="wb-btn" id="wbShareLexiBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-              Share Lexi
-            </button>
-          </div>
-        </div>
-
-        <div class="ob-right">
-          <img src="Lexi Portrait Transparent 4.png" alt="Lexi" class="ob-portrait" onerror="this.style.display='none'">
-        </div>
-      </div>
-
-    </div><!-- /.wb-card -->
-  </div>
-
   <!-- PRICE LIST ONBOARDING -->
   <div id="plOnboardingModal" class="ob-screen" style="display:none" role="dialog" aria-modal="true" aria-labelledby="plOnboardingTitle">
     <div class="ob-card pl-card">
@@ -199,7 +152,7 @@
     </button>
     <button class="nav-menu-item" data-target="page4" id="menuSavedDocs">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      View Saved Jobs
+      View Jobs
       <span class="nav-menu-badge" id="savedBadge" style="display:none">0</span>
     </button>
     <button class="nav-menu-item" id="menuBizInfo">
@@ -847,8 +800,11 @@
 
     <!-- PAGE 4: SAVED DOCUMENTS -->
     <section id="page4" class="page" data-page="4">
-      <div class="page-header">
-        <h1 class="page-title" id="savedJobsTitle">My Saved Jobs</h1>
+      <div class="page-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <h1 class="page-title" id="savedJobsTitle" style="flex:1;min-width:0">My Jobs</h1>
+        <button type="button" class="btn btn-primary btn-sm" id="newJobBtn" style="flex-shrink:0;font-size:0.82rem;padding:6px 14px">
+          + New Job
+        </button>
       </div>
       <!-- Nav hint popup (shown after first save) -->
       <div class="nav-hint-popup" id="navHintPopup" style="display:none" role="dialog" aria-modal="true">

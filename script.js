@@ -146,14 +146,13 @@ function personaliseText() {
     pageJobsSub.textContent = `What work are you quoting for, ${first}?`;
   }
   const savedTitle = document.getElementById('savedJobsTitle');
-  if (savedTitle) savedTitle.textContent = `${first}'s Saved Jobs`;
+  if (savedTitle) savedTitle.textContent = `${first}'s Jobs`;
 }
 
 /* ===== INIT ===== */
 document.addEventListener('DOMContentLoaded', () => {
   loadFromStorage();
   setupOnboarding();
-  setupWelcomeBack();
   setupNavigation();
   setupNavHint();
   setupPage1();
@@ -174,11 +173,9 @@ document.addEventListener('DOMContentLoaded', () => {
   populateAuthSig();
   personaliseText();
 
-  // Returning user — page3 sits underneath, welcome back modal appears on top
+  // Returning user lands on their jobs page; new users start onboarding
   if (hasRequiredSetup()) {
-    prepareNewQuote();
-    showPage('page3');
-    showWelcomeBack();
+    showPage('page4');
   } else {
     showPage('page1');
   }
@@ -517,52 +514,6 @@ function setupNavigation() {
     prepareNewQuote();
     showPage('page3');
   });
-}
-
-/* ===== WELCOME BACK MODAL ===== */
-function setupWelcomeBack() {
-  const modal = document.getElementById('welcomeBackModal');
-  if (!modal) return;
-
-  function dismiss() { modal.style.display = 'none'; }
-
-  // Wire each button — dismiss modal then navigate
-  document.getElementById('wbNewQuoteBtn')?.addEventListener('click', () => {
-    dismiss();
-    prepareNewQuote();
-    showPage('page3');
-  });
-  document.getElementById('wbViewSavedBtn')?.addEventListener('click', () => {
-    dismiss();
-    showPage('page4');
-  });
-  document.getElementById('wbEditBusinessBtn')?.addEventListener('click', () => {
-    dismiss();
-    showPage('page1');
-  });
-  document.getElementById('wbEditPriceListBtn')?.addEventListener('click', () => {
-    dismiss();
-    showPage('page2');
-  });
-  document.getElementById('wbBizInfoBtn')?.addEventListener('click', () => {
-    dismiss();
-    openBizInfoModal();
-  });
-  document.getElementById('wbShareLexiBtn')?.addEventListener('click', () => {
-    dismiss();
-    shareLexiApp();
-  });
-}
-
-function showWelcomeBack() {
-  const modal = document.getElementById('welcomeBackModal');
-  if (!modal) return;
-  // Personalise greeting with first name
-  const first = (state.company.firstName || '').trim();
-  const nameEl = document.getElementById('wbFirstName');
-  if (nameEl) nameEl.textContent = first || 'there';
-  modal.style.display = 'flex';
-  modal.classList.add('for-onboarding');
 }
 
 /* ===== ONBOARDING ===== */
@@ -2172,6 +2123,12 @@ function vnfSubmit(saveToList) {
 
 /* ===== PAGE 4 — SAVED DOCS ===== */
 function setupPage4() {
+  // "New Job" button in page header
+  document.getElementById('newJobBtn')?.addEventListener('click', () => {
+    prepareNewQuote();
+    showPage('page3');
+  });
+
   const sel = document.getElementById('savedFilterSelect');
   if (sel) sel.addEventListener('change', () => refreshSavedDocs());
 
