@@ -143,7 +143,10 @@ function personaliseText() {
   }
   const pageJobsSub = document.getElementById('pageJobsSub');
   if (pageJobsSub) {
-    pageJobsSub.textContent = `What work are you quoting for, ${first}?`;
+    const custFirst = (state.quote.custFirstName || '').trim();
+    pageJobsSub.textContent = custFirst
+      ? `What work are you doing for ${custFirst}?`
+      : 'What work are you doing for this customer?';
   }
   const savedTitle = document.getElementById('savedJobsTitle');
   if (savedTitle) savedTitle.textContent = `${first}'s Jobs`;
@@ -153,6 +156,8 @@ function personaliseText() {
 document.addEventListener('DOMContentLoaded', () => {
   loadFromStorage();
   setupOnboarding();
+  setupNewJobPicker();
+  setupDescriptionHelp();
   setupNavigation();
   setupNavHint();
   setupPage1();
@@ -330,7 +335,7 @@ function showPage(pageId) {
   // Update page3 title
   if (pageId === 'page3') {
     const titleEl = document.getElementById('page3Title');
-    if (titleEl) titleEl.textContent = 'Estimates and Quotes';
+    if (titleEl) titleEl.textContent = 'Add Customer';
   }
 
   // Ensure signature preview is always populated when reaching the completion page
@@ -2121,12 +2126,128 @@ function vnfSubmit(saveToList) {
   toast(saveToList ? 'Added to your price list and this job.' : 'Added to this job.', 'success');
 }
 
-/* ===== PAGE 4 — SAVED DOCS ===== */
-function setupPage4() {
-  // "New Job" button in page header
-  document.getElementById('newJobBtn')?.addEventListener('click', () => {
+/* ===== DESCRIPTION HELP POPUP ===== */
+function setupDescriptionHelp() {
+  const btn   = document.getElementById('descHelpBtn');
+  const popup = document.getElementById('descHelpPopup');
+  const close = document.getElementById('descHelpClose');
+  if (!btn || !popup) return;
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    popup.style.display = popup.style.display === 'none' ? 'block' : 'none';
+  });
+  close?.addEventListener('click', () => { popup.style.display = 'none'; });
+  document.addEventListener('click', e => {
+    if (!popup.contains(e.target) && e.target !== btn) {
+      popup.style.display = 'none';
+    }
+  });
+}
+
+/* ===== NEW JOB CUSTOMER PICKER ===== */
+function openNewJobPicker() {
+  document.getElementById('newJobPickerModal').style.display = 'flex';
+}
+function closeNewJobPicker() {
+  document.getElementById('newJobPickerModal').style.display = 'none';
+}
+function openExistingCustPicker() {
+  closeNewJobPicker();
+  const modal = document.getElementById('existingCustPickerModal');
+  modal.style.display = 'flex';
+  renderExistingCustList('');
+  const search = document.getElementById('existingCustSearch');
+  if (search) { search.value = ''; search.focus(); }
+}
+function closeExistingCustPicker() {
+  document.getElementById('existingCustPickerModal').style.display = 'none';
+}
+
+function renderExistingCustList(query) {
+  const q = (query || '').toLowerCase().trim();
+  // Collect unique customers from saved docs
+  const seen = new Map();
+  state.saved.forEach(doc => {
+    const quote = doc.quote || {};
+    const name  = buildCustName(quote) || doc.custName || '';
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (!seen.has(key)) seen.set(key, { name, doc, quote });
+  });
+  let entries = [...seen.values()];
+  if (q) entries = entries.filter(e => e.name.toLowerCase().includes(q));
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+
+  const list  = document.getElementById('existingCustList');
+  const empty = document.getElementById('existingCustEmpty');
+  list.innerHTML = '';
+
+  if (!entries.length) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  entries.forEach(({ name, doc }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-outline';
+    btn.style.cssText = 'text-align:left;padding:10px 14px;font-size:0.88rem;border-radius:10px';
+    btn.textContent = name;
+    btn.addEventListener('click', () => {
+      closeExistingCustPicker();
+      // Pre-fill the quote state with this customer's details then go to Add Jobs
+      const q = doc.quote || {};
+      prepareNewQuote();
+      state.quote.custTitle     = q.custTitle     || '';
+      state.quote.custFirstName = q.custFirstName || '';
+      state.quote.custLastName  = q.custLastName  || '';
+      state.quote.custAddr      = q.custAddr      || '';
+      state.quote.custPostcode  = q.custPostcode  || '';
+      state.quote.custPhone     = q.custPhone     || '';
+      state.quote.custEmail     = q.custEmail     || '';
+      populateQuoteForm();
+      showPage('page-jobs');
+    });
+    list.appendChild(btn);
+  });
+}
+
+function setupNewJobPicker() {
+  document.getElementById('closeNewJobPickerBtn')?.addEventListener('click', closeNewJobPicker);
+  document.getElementById('newJobExistingBtn')?.addEventListener('click', openExistingCustPicker);
+  document.getElementById('newJobNewBtn')?.addEventListener('click', () => {
+    closeNewJobPicker();
     prepareNewQuote();
     showPage('page3');
+  });
+  document.getElementById('closeExistingCustPickerBtn')?.addEventListener('click', closeExistingCustPicker);
+  document.getElementById('existingCustSearch')?.addEventListener('input', e => renderExistingCustList(e.target.value));
+  // Close on backdrop click
+  document.getElementById('newJobPickerModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeNewJobPicker();
+  });
+  document.getElementById('existingCustPickerModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeExistingCustPicker();
+  });
+}
+
+/* ===== PAGE 4 — SAVED DOCS ===== */
+function setupPage4() {
+  // "New Job" button in page header — opens customer picker
+  document.getElementById('newJobBtn')?.addEventListener('click', () => {
+    // If there are saved customers, offer the picker; otherwise go straight to Add Customer
+    const hasSavedCustomers = state.saved.some(d => {
+      const q = d.quote || {};
+      return (buildCustName(q) || d.custName || '').trim() !== '';
+    });
+    if (hasSavedCustomers) {
+      openNewJobPicker();
+    } else {
+      prepareNewQuote();
+      showPage('page3');
+    }
   });
 
   const sel = document.getElementById('savedFilterSelect');
@@ -2400,6 +2521,24 @@ function setupModals() {
   document.getElementById('custEditJobBtn')?.addEventListener('click', () => customerEditPickDoc('job'));
   document.getElementById('custEditMoneyBtn')?.addEventListener('click', () => customerEditPickDoc('money'));
   document.getElementById('custEditTermsBtn')?.addEventListener('click', () => customerEditPickDoc('terms'));
+  document.getElementById('custEditAddPhotoBtn')?.addEventListener('click', () => {
+    document.getElementById('customerEditChoiceModal').style.display = 'none';
+    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
+    if (docId) openPhotosModal(docId);
+  });
+  document.getElementById('custEditDownloadBtn')?.addEventListener('click', () => {
+    document.getElementById('customerEditChoiceModal').style.display = 'none';
+    if (activeCustomerGroup) {
+      const body = document.getElementById('customerDashboardBody');
+      downloadCustomerDashboard(activeCustomerGroup.name, body.innerHTML);
+    }
+  });
+  document.getElementById('custEditDeleteBtn')?.addEventListener('click', () => {
+    document.getElementById('customerEditChoiceModal').style.display = 'none';
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
+    if (docId) deleteDoc(docId);
+  });
   document.getElementById('closeCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('saveCustDetailsBtn')?.addEventListener('click', saveCustomerDetails);
   document.getElementById('nextToJobDetailsBtn')?.addEventListener('click', () => {
@@ -3727,7 +3866,7 @@ function buildCustomerJobSection(d) {
     </div>` : `
     <div class="cdv-section">
       <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</div>
-      <p class="cdv-empty">No payments recorded yet.</p>
+      <p class="cdv-empty">No payment recorded yet. To update payment click Update.</p>
     </div>`;
 
   const notesHtml = q.notes ? `
@@ -3832,21 +3971,6 @@ function renderSingleCustomerDashboard(group, groups) {
   if (dashEditBtn) dashEditBtn.onclick = () =>
     openCustomerEditChoice(group.docs.length === 1 ? firstDocId : null);
 
-  const dashPhotoBtn = document.getElementById('custDashPhotoBtn');
-  if (dashPhotoBtn) dashPhotoBtn.onclick = () => {
-    modal.style.display = 'none';
-    openPhotosModal(firstDocId);
-  };
-
-  const dashDownloadBtn = document.getElementById('custDashDownloadBtn');
-  if (dashDownloadBtn) dashDownloadBtn.onclick = () =>
-    downloadCustomerDashboard(group.name, contentHtml);
-
-  const dashDeleteBtn = document.getElementById('custDashDeleteBtn');
-  if (dashDeleteBtn) dashDeleteBtn.onclick = () => {
-    modal.style.display = 'none';
-    deleteDoc(firstDocId);
-  };
 }
 
 /* ===== CUSTOMER EDIT CHOICE ===== */

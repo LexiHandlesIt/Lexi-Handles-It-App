@@ -2356,6 +2356,55 @@ input[type="text"].sig-text-input:focus {
   resize: vertical;
 }
 
+/* ===== DESCRIPTION HELP BUTTON & POPUP ===== */
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 1.5px solid var(--sage);
+  background: transparent;
+  color: var(--sage);
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.help-btn:hover { background: var(--sage); color: #fff; }
+
+.help-popup {
+  position: absolute;
+  z-index: 200;
+  background: var(--charcoal);
+  color: #fff;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 10px 34px 10px 12px;
+  border-radius: 9px;
+  max-width: 260px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+  margin-top: 4px;
+}
+.help-popup-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.help-popup-close:hover { color: #fff; }
+
 /* ===== SEND MY BUSINESS INFO MODAL ===== */
 .biz-info-intro {
   font-size: 0.85rem;
@@ -2502,6 +2551,15 @@ input[type="text"].sig-text-input:focus {
   text-align: center;
   line-height: 1.2;
 }
+
+/* Delete button — spans full width, terracotta */
+.cec-btn-delete {
+  background: var(--terra);
+  color: #fff;
+  border-color: var(--terra);
+}
+.cec-btn-delete:hover  { background: #b84a3a; border-color: #b84a3a; }
+.cec-btn-delete:active { transform: scale(0.98); }
 
 /* Job picker inside edit choice modal */
 .cec-pick-label {
