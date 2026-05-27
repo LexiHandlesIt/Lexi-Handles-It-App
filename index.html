@@ -82,7 +82,7 @@
 
       <div class="pl-content">
         <img src="3 Lexi Handles It All.png" alt="Lexi Handles It All" class="ob-wordmark" onerror="this.style.display='none'">
-        <p class="ob-intro" id="plOnboardingTitle">Right, let's build your price list. There are three ways to get your jobs in...</p>
+        <p class="ob-intro" id="plOnboardingTitle">Right, there are three ways to build your price list. You can...</p>
 
         <div class="ob-steps">
           <div class="ob-step">
@@ -108,9 +108,7 @@
           </div>
         </div>
 
-        <p class="pl-tagline">Your price list, your way.</p>
-
-        <button id="plOnboardingBtn" class="btn btn-sage btn-full ob-start-btn">Let's Build it Lexi</button>
+        <button id="plOnboardingBtn" class="btn btn-sage btn-full ob-start-btn">Let's build my price list Lexi</button>
       </div>
 
       <div class="pl-portrait-wrap">
@@ -257,9 +255,19 @@
             <input type="text" id="p1LastName" autocomplete="family-name" required>
           </div>
         </div>
-        <div class="form-group">
-          <label for="p1BusinessName">Business Name</label>
-          <input type="text" id="p1BusinessName" autocomplete="organization">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="p1BusinessName">Business Name</label>
+            <input type="text" id="p1BusinessName" autocomplete="organization">
+          </div>
+          <div class="form-group">
+            <label for="p1CompanyNumber">Company Registration Number</label>
+            <input type="text" id="p1CompanyNumber" placeholder="e.g. 12345678">
+          </div>
+          <div class="form-group">
+            <label for="p1VatNumber">VAT Registration Number <span class="hint">(if VAT registered)</span></label>
+            <input type="text" id="p1VatNumber" placeholder="e.g. GB 123 456 789">
+          </div>
         </div>
         <div class="form-group">
           <label for="p1Address">Business Address</label>
@@ -285,12 +293,6 @@
             <input type="url" id="p1Website" autocomplete="url">
           </div>
         </div>
-        <div class="form-grid-2">
-          <div class="form-group">
-            <label for="p1CompanyNumber">Company / Reg Number <span style="font-weight:400;color:#888">(optional)</span></label>
-            <input type="text" id="p1CompanyNumber" placeholder="e.g. 12345678">
-          </div>
-        </div>
         <div class="form-group">
           <label for="p1Trade">Your Trade</label>
           <select id="p1Trade">
@@ -300,6 +302,11 @@
             <option value="Decorator">Decorator</option>
             <option value="Electrician">Electrician</option>
             <option value="Gardener">Gardener</option>
+            <option value="Gas Engineer">Gas Engineer</option>
+            <option value="Plasterer">Plasterer</option>
+            <option value="Plumber">Plumber</option>
+            <option value="Roofer">Roofer</option>
+            <option value="Tiler">Tiler</option>
             <option value="Other">Other</option>
           </select>
         </div>
@@ -463,9 +470,9 @@
       </div>
 
       <!-- Add Jobs -->
-      <div class="card sage-focus">
+      <div class="card sage-focus" style="border:2px solid var(--walnut)">
         <div class="bulk-header-row">
-          <h2 class="card-title" style="margin-bottom:0">Build in Bulk</h2>
+          <h2 class="card-title" style="margin-bottom:0">Either Build in Bulk</h2>
           <span class="bulk-counter"><span id="bulkJobCount">0</span> Jobs Added</span>
         </div>
 
@@ -499,7 +506,7 @@
 
         <!-- Individual Add -->
         <div class="individual-add">
-          <h3 class="card-title">Build One by One</h3>
+          <h3 class="card-title">Or Build One by One</h3>
           <div class="obo-grid">
             <div class="form-group obo-name">
               <label for="jobName">Job Name</label>
@@ -513,8 +520,8 @@
               </div>
             </div>
             <div class="form-group obo-unit">
-              <label for="jobUnit">Per Unit <span class="hint">(optional)</span></label>
-              <input type="text" id="jobUnit" placeholder="per room">
+              <label for="jobUnit">Per Unit</label>
+              <input type="text" id="jobUnit" placeholder="">
             </div>
             <div class="obo-add">
               <button type="button" class="btn btn-sage btn-sm" id="addJobBtn">Add</button>
@@ -548,7 +555,7 @@
         </div>
         <div id="priceListContainer" class="price-list-container">
           <div class="empty-state" id="priceListEmpty">
-            <p>No jobs added yet. Add your first job above.</p>
+            <p>Nothing on the list yet. Add the jobs you do most above.</p>
           </div>
         </div>
       </div>
@@ -678,7 +685,7 @@
         </div>
         <div id="quoteItemsContainer" class="quote-items-container">
           <div class="empty-state" id="quoteItemsEmpty">
-            <p>No jobs added yet.</p>
+            <p>Nothing picked yet.</p>
           </div>
         </div>
 
@@ -703,7 +710,7 @@
           <button type="button" class="tooltip-btn" id="estQuoteTooltipBtn" aria-label="What is the difference?">?</button>
         </div>
         <div id="estQuoteTooltip" class="tooltip-box" style="display:none">
-          <p>An estimate gives your customer an approximate cost that can change depending on materials, labour and what the job throws at you. A quote is a fixed price — only use this if you are completely sure the price won't change, no matter what.</p>
+          <p>An estimate gives your customer an approximate cost that can change depending on materials, labour and what the job throws at you. A quote is a fixed price. Only use this if you are completely sure the price won't change, no matter what.</p>
         </div>
       </div>
 
@@ -810,7 +817,7 @@
     <section id="page4" class="page" data-page="4">
       <div class="page-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <h1 class="page-title" id="savedJobsTitle" style="flex:1;min-width:0">My Jobs</h1>
-        <button type="button" class="btn btn-primary btn-sm" id="newJobBtn" style="flex-shrink:0;font-size:0.82rem;padding:6px 14px">
+        <button type="button" class="btn btn-sm" id="newJobBtn" style="flex-shrink:0;font-size:0.82rem;padding:6px 14px;background:var(--sage);border:1.5px solid var(--sage);color:#fff;font-weight:700">
           New Job
         </button>
       </div>
@@ -851,7 +858,7 @@
       <div id="savedDocsList" class="saved-docs-list">
         <div class="empty-state" id="savedDocsEmpty">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <p>No saved documents yet.</p>
+          <p>Nothing here yet. Go land yourself a job.</p>
           <button type="button" class="btn btn-primary" id="createFirstQuoteBtn">Create your first quote</button>
         </div>
       </div>
@@ -962,17 +969,7 @@
           <label for="invDueDate">Due Date</label>
           <input type="date" id="invDueDate">
         </div>
-        <div class="form-group">
-          <label for="invItemsText">Jobs and Prices</label>
-          <textarea id="invItemsText" rows="6" placeholder="One job per line, for example:&#10;Boiler service, 120&#10;Power flush, 350"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="invTotalOverride">Invoice Total</label>
-          <div class="input-pfx">
-            <span class="pfx-symbol">£</span>
-            <input type="number" id="invTotalOverride" min="0" step="any">
-          </div>
-        </div>
+        <div id="invJobsBody"></div>
         <div class="form-group">
           <label>Payment Methods <span class="hint">(tick all that apply)</span></label>
           <div class="inv-pay-methods">
@@ -1276,8 +1273,8 @@
         <textarea id="bizInfoShareText" rows="7" class="share-textarea biz-info-preview" readonly></textarea>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline" id="copyBizInfoBtn">Copy</button>
-        <button type="button" class="btn btn-primary" id="shareBizInfoBtn">Send</button>
+        <button type="button" class="btn btn-outline" id="copyBizInfoBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
+        <button type="button" class="btn btn-primary" id="shareBizInfoBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Send</button>
       </div>
     </div>
   </div>
@@ -1319,6 +1316,14 @@
         <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditTermsBtn">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           Job Terms
+        </button>
+        <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditInvoiceBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Convert to Invoice
+        </button>
+        <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditReceiptBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          Convert to Receipt
         </button>
         <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditAddPhotoBtn">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -1412,6 +1417,152 @@
         <button type="button" class="btn btn-sage" id="backToCustDetailsBtn">Back</button>
         <button type="button" class="btn btn-primary" id="saveJobDetailsBtn">Save</button>
         <button type="button" class="btn btn-sage" id="nextToJobTermsBtn">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JOB TERMS EDIT MODAL -->
+  <div id="jobTermsEditModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Edit Job Terms">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title">Edit Job Terms</h2>
+          <p id="jobTermsEditSubtitle" style="font-size:0.82rem;color:#888;margin-top:2px"></p>
+        </div>
+        <button type="button" class="modal-close" id="closeJobTermsEditBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Doc type -->
+        <div class="form-group">
+          <label>Document Type</label>
+          <div class="jte-type-row">
+            <label class="jte-type-opt"><input type="radio" name="jteDocType" id="jteEstimate" value="Estimate"> Estimate</label>
+            <label class="jte-type-opt"><input type="radio" name="jteDocType" id="jteQuote" value="Quote"> Quote</label>
+          </div>
+        </div>
+
+        <!-- Live totals -->
+        <div class="jte-totals">
+          <div class="jte-totals-row"><span>Subtotal</span><span id="jteSubtotal">£0.00</span></div>
+          <div class="jte-totals-row jte-discount-row" id="jteDiscountRow" style="display:none"><span>Discount</span><span id="jteDiscountAmt">-£0.00</span></div>
+          <div class="jte-totals-row jte-vat-row" id="jteVatRow" style="display:none"><span>VAT</span><span id="jteVatAmt">£0.00</span></div>
+          <div class="jte-totals-row jte-grand"><span>Total</span><span id="jteTotal">£0.00</span></div>
+        </div>
+
+        <!-- Discount / VAT / Valid For -->
+        <div class="dvv-grid" style="margin-top:12px">
+          <div class="form-group" style="margin-bottom:0">
+            <label for="jteDiscount">Discount</label>
+            <select id="jteDiscount" class="vat-select">
+              <option value="0">0%</option>
+              <option value="5">5%</option>
+              <option value="10">10%</option>
+              <option value="20">20%</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input type="number" id="jteDiscountCustom" min="0" max="100" step="1" placeholder="%" class="vat-custom" style="display:none">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label for="jteVat">VAT</label>
+            <select id="jteVat" class="vat-select">
+              <option value="0">0%</option>
+              <option value="5">5%</option>
+              <option value="10">10%</option>
+              <option value="20">20%</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input type="number" id="jteVatCustom" min="0" max="100" step="1" placeholder="%" class="vat-custom" style="display:none">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label for="jteValidFor">Valid For</label>
+            <select id="jteValidFor">
+              <option value="7">7 days</option>
+              <option value="14">14 days</option>
+              <option value="30">30 days</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" id="jteValidCustomGroup" style="display:none;margin-top:8px">
+          <label for="jteValidCustom">Custom validity (days)</label>
+          <input type="number" id="jteValidCustom" min="1" placeholder="60">
+        </div>
+
+        <!-- Terms & Conditions -->
+        <div style="margin-top:16px">
+          <label>Terms &amp; Conditions</label>
+          <div class="terms-options">
+            <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="payment30"> Payment due within 30 days of invoice date.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="depositRequired"> A 50% deposit is required before work commences.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="quotationValid"> This quotation is valid for 30 days from the date shown.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="materialsExtra"> Materials are not included unless stated above.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="cancellation"> Cancellation within 48 hours of scheduled start date may incur a charge.</label>
+          </div>
+          <div class="form-group" style="margin-top:10px">
+            <label for="jteCustomTerms">Additional Terms</label>
+            <textarea id="jteCustomTerms" rows="2" placeholder=""></textarea>
+          </div>
+        </div>
+
+        <!-- Signature -->
+        <div class="form-group" style="margin-top:16px">
+          <label for="jteAuthSig">Authorised Signature</label>
+          <input type="text" id="jteAuthSig" placeholder="">
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sage" id="backToJobDetailsFromTermsBtn">Back</button>
+        <button type="button" class="btn btn-primary" id="saveJobTermsEditBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUSINESS DETAILS CHOICE MODAL -->
+  <div id="bizChoiceModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="bizChoiceTitle">
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title" id="bizChoiceTitle">Which business details would you like to use?</h2>
+          <p class="modal-subtitle" style="margin:0;font-size:0.82rem;color:#888">Your business details have been updated since this document was created.</p>
+        </div>
+        <button type="button" class="modal-close" id="closeBizChoiceBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Option A: Old details -->
+        <label class="biz-choice-card" id="bizChoiceOldCard">
+          <input type="radio" name="bizChoice" value="old" checked>
+          <div class="biz-choice-body">
+            <div class="biz-choice-title">Use original details</div>
+            <div class="biz-choice-sub" id="bizChoiceOldSub"></div>
+          </div>
+        </label>
+        <label class="biz-choice-all-wrap">
+          <input type="checkbox" id="bizChoiceOldAll">
+          <span>Do this for all my existing documents</span>
+        </label>
+
+        <div class="biz-choice-divider"></div>
+
+        <!-- Option B: New details -->
+        <label class="biz-choice-card" id="bizChoiceNewCard">
+          <input type="radio" name="bizChoice" value="new">
+          <div class="biz-choice-body">
+            <div class="biz-choice-title">Use my current business details</div>
+            <div class="biz-choice-sub" id="bizChoiceNewSub"></div>
+          </div>
+        </label>
+        <label class="biz-choice-all-wrap">
+          <input type="checkbox" id="bizChoiceNewAll">
+          <span>Do this for all my existing documents</span>
+        </label>
+
+      </div>
+      <div class="modal-footer" style="display:flex;gap:10px;padding:16px 20px;border-top:1px solid var(--border)">
+        <button type="button" class="btn btn-outline btn-lg" id="bizChoiceCancelBtn" style="flex:1">Cancel</button>
+        <button type="button" class="btn btn-primary btn-lg" id="bizChoiceContinueBtn" style="flex:2">Continue →</button>
       </div>
     </div>
   </div>

@@ -37,6 +37,7 @@ let state = {
     trade: '',
     phone: '', email: '', website: '', address: '', postcode: '',
     companyNumber: '',
+    vatNumber: '',
     logo: '',
     payMethods: [],
     bankAccHolder: '', bankName: '', bankSort: '', bankAcc: '',
@@ -107,7 +108,7 @@ function recalcDocPayments(doc) {
 }
 
 function businessNameCompliment(name) {
-  return "I've saved your details.";
+  return "All saved. Let's make some money.";
 }
 
 function traderFirstName() {
@@ -134,8 +135,8 @@ function personaliseText() {
   if (p1Sub && document.getElementById('page1')?.classList.contains('active')) {
     const hasSetUp = (state.company.lastName || '').trim() !== '';
     p1Sub.textContent = hasSetUp
-      ? `Brilliant ${first}, your business is progressing. Let's get your details up to date.`
-      : `So what's your trade? Tell me about your business so I can customise your documents.`;
+      ? `Brilliant ${first}, your business is progressing. Let's keep it up to date.`
+      : `Right then. Tell me about your business and I'll get your documents looking the part.`;
   }
   const p3Sub = document.getElementById('page3Sub');
   if (p3Sub) {
@@ -159,6 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupNewJobPicker();
   setupDescriptionHelp();
   setupJobTermsEdit();
+  setupBizChoiceModal();
   setupNavigation();
   setupNavHint();
   setupPage1();
@@ -310,11 +312,11 @@ function showPage(pageId) {
     }
     if (p1Sub) {
       if (hasSetUp) {
-        p1Sub.textContent = `Brilliant ${traderFirstName()}, your business is progressing. Let's get your details up to date.`;
+        p1Sub.textContent = `Brilliant ${traderFirstName()}, your business is progressing. Let's keep it up to date.`;
         p1Sub.style.display = '';
         p1Sub.style.textAlign = 'left';
       } else {
-        p1Sub.textContent = `So what's your trade? Tell me about your business so I can customise your documents.`;
+        p1Sub.textContent = `Right then. Tell me about your business and I'll get your documents looking the part.`;
         p1Sub.style.display = '';
         p1Sub.style.textAlign = '';
       }
@@ -374,12 +376,15 @@ function updatePage2Header() {
   if (state.priceList.length > 0) {
     if (title) title.textContent = 'Edit My Price List';
     if (sub) {
-      sub.textContent = `${traderFirstName()}, expanding your offer or focusing on a niche? Make sure you charge the price you deserve for your expertise.`;
+      sub.innerHTML = `${esc(traderFirstName())}, your jobs, your prices. Make sure you're charging what you're worth.<br><span style="display:inline-flex;align-items:center;gap:6px;margin-top:6px">Not sure what to charge? Check out Lexi's Pricing Guide <a href="Lexi's Pricing Guide.xlsx" download class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v13M5 16l7 7 7-7"/><path d="M3 21h18"/></svg> Download</a></span>`;
       sub.style.display = '';
     }
   } else {
     if (title) title.innerHTML = '<span class="page-num">2.</span> Build Your Price List';
-    if (sub) { sub.textContent = `${traderFirstName()}, add the jobs you do most. You can always edit these later.`; sub.style.display = ''; }
+    if (sub) {
+      sub.innerHTML = `${esc(traderFirstName())}, what do you do most? Add those jobs here. Picking them later takes seconds.<br><span style="display:inline-flex;align-items:center;gap:6px;margin-top:6px">Not sure what to charge? Check out Lexi's Pricing Guide <a href="Lexi's Pricing Guide.xlsx" download class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v13M5 16l7 7 7-7"/><path d="M3 21h18"/></svg> Download</a></span>`;
+      sub.style.display = '';
+    }
   }
 }
 
@@ -496,7 +501,7 @@ function setupNavigation() {
   });
   document.getElementById('goToQuoteBtn').addEventListener('click', () => {
     if (state.priceList.length === 0) {
-      showSavedPopup("Add at least one job to your price list before creating an estimate or quote.");
+      showSavedPopup("Add at least one job to your price list first, then we're good to go.");
       return;
     }
     showPage('page3');
@@ -673,7 +678,7 @@ function handleLogoUpload(e) {
     if (document.getElementById('useLogoColours')?.checked) {
       extractLogoColours();
     } else {
-      showSavedPopup("Great Logo, you'll really stand out", null, 5000);
+      showSavedPopup("Great Logo, you'll really stand out!", null, 5000);
     }
   };
   reader.readAsDataURL(file);
@@ -697,6 +702,7 @@ function populatePage1Fields() {
   setVal('p1Email',         c.email);
   setVal('p1Website',       c.website);
   setVal('p1CompanyNumber', c.companyNumber || '');
+  setVal('p1VatNumber',     c.vatNumber || '');
   setVal('p1Trade',         c.trade || '');
 
   showLogoState();
@@ -778,6 +784,7 @@ function saveBusinessDetails(showToast = true) {
 
   state.company = {
     ...state.company,
+    bizChoiceMade: null,   // reset so modal appears again for any docs that differ from new details
     firstName:    firstName,
     lastName:     lastName,
     businessName: getVal('p1BusinessName'),
@@ -788,6 +795,7 @@ function saveBusinessDetails(showToast = true) {
     email:        getVal('p1Email'),
     website:       getVal('p1Website'),
     companyNumber: getVal('p1CompanyNumber'),
+    vatNumber:     getVal('p1VatNumber'),
     payMethods:    methods,
     bankAccHolder: getVal('bankAccHolder'),
     bankName:     getVal('bankName'),
@@ -1108,7 +1116,7 @@ function extractLogoColours() {
     setColour('accent', rgbToHex(accent.r, accent.g, accent.b));
     setColour('bg',     rgbToHex(bgR, bgG, bgB));
     updateColourPreview();
-    showSavedPopup('Done! Colours extracted from your logo.');
+    showSavedPopup("Done! I've extracted those great colours from your logo.");
   };
   img.src = logo;
 }
@@ -1298,7 +1306,7 @@ function addIndividualJob() {
       setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
       refreshPriceList();
       updateJobPicker();
-      showSavedPopup('Added', null, 3000);
+      showSavedPopup('On the list.', null, 3000);
     });
     return;
   }
@@ -1425,7 +1433,7 @@ function editJobInline(row, job) {
     save();
     refreshPriceList();
     updateJobPicker();
-    showSavedPopup("I've updated that job for you.");
+    showSavedPopup("Updated. Good to go.");
   };
 
   row.querySelector('.save-edit').addEventListener('click', saveEdit);
@@ -1876,7 +1884,8 @@ function saveQuote() {
         company: { ...state.company },
         custName: buildCustName(q),
         total: calcTotal(q),
-        type: q.type
+        type: q.type,
+        invoiceSent: q.type === 'Invoice' || q.type === 'Receipt'
       };
     }
     state.editingDocId = null;
@@ -1894,7 +1903,7 @@ function saveQuote() {
       type: q.type,
       date: q.date,
       ref: q.ref,
-      invoiceSent: false,
+      invoiceSent: q.type === 'Invoice' || q.type === 'Receipt',
       paid: false,
       paidAmount: 0,
       paidDate: '',
@@ -1911,7 +1920,7 @@ function saveQuote() {
   save();
   updateSavedBadge();
   refreshSavedDocs();
-  const popupLabel = isEditing ? "I've saved your changes." : `I've saved your ${docType.toLowerCase()}.`;
+  const popupLabel = isEditing ? "Changes saved. Nice one." : `${docType} saved. Another one sorted.`;
 
   if (returningFromTerms && activeCustomerGroup) {
     // Came from Job Terms edit via customer dashboard — go back to dashboard
@@ -2310,7 +2319,7 @@ function refreshSavedDocs() {
         </div>
         <div style="text-align:right">
           <div class="saved-doc-total">${fmtPrice(doc.total || 0)}</div>
-          <span class="type-badge ${statusBadge}">${statusLabel}</span>
+          <button type="button" class="type-badge ${statusBadge}" data-badge-id="${doc.id}" data-badge-status="${statusBadge}">${statusLabel}</button>
         </div>
       </div>
       <div class="journey-select-wrap">
@@ -2321,6 +2330,7 @@ function refreshSavedDocs() {
           <option value="invoice">C &nbsp; Invoice</option>
           <option value="receipt">D &nbsp; Receipt</option>
         </select>
+        <button type="button" class="btn-view-customer" data-id="${doc.id}">View Customer</button>
       </div>
       <div class="saved-doc-payment-tally">
         <span class="sdpt-payment-info">
@@ -2328,7 +2338,6 @@ function refreshSavedDocs() {
             ? `<span class="sdpt-paid">Paid ${fmtPrice(totalPaid)}</span>${totalPaid < (doc.total || 0) ? `<span class="sdpt-outstanding">&middot; ${fmtPrice(Math.max(0, (doc.total || 0) - totalPaid))} outstanding</span>` : '<span class="sdpt-full">&#10003; Paid in full</span>'}`
             : ''}
         </span>
-        <button type="button" class="btn-view-customer" data-id="${doc.id}">View Customer</button>
       </div>
     `;
 
@@ -2344,6 +2353,15 @@ function refreshSavedDocs() {
       else if (action === 'receipt') handleReceiptRequest(doc.id);
     });
     card.querySelector('.btn-view-customer').addEventListener('click', () => openCustomerDashboardForDoc(doc.id));
+
+    card.querySelector('.type-badge')?.addEventListener('click', () => {
+      const status = statusBadge;
+      if      (status === 'estimate')                    openQuoteModal(doc.id);
+      else if (status === 'quote')                       openQuoteModal(doc.id);
+      else if (status === 'invoiced' || status === 'invoice' || status === 'overdue') previewInvoice(doc.id);
+      else if (status === 'paid')                        handleReceiptRequest(doc.id);
+      else if (status === 'receipt')                     handleReceiptRequest(doc.id);
+    });
   });
 }
 
@@ -2482,8 +2500,14 @@ function setupModals() {
 
   document.getElementById('closePreviewBtn').addEventListener('click', closePreview);
   document.getElementById('closeQuoteBtn').addEventListener('click', () => document.getElementById('quoteModal').style.display = 'none');
-  document.getElementById('closeInvoiceBtn').addEventListener('click', () => document.getElementById('invoiceModal').style.display = 'none');
-  document.getElementById('closeReceiptBtn').addEventListener('click', () => document.getElementById('receiptModal').style.display = 'none');
+  document.getElementById('closeInvoiceBtn').addEventListener('click', () => {
+    document.getElementById('invoiceModal').style.display = 'none';
+    if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  document.getElementById('closeReceiptBtn').addEventListener('click', () => {
+    document.getElementById('receiptModal').style.display = 'none';
+    if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
   document.getElementById('closeMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
   document.getElementById('cancelMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
   document.getElementById('mpAmount').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('confirmMarkPaidBtn').click(); } });
@@ -2498,6 +2522,7 @@ function setupModals() {
   document.getElementById('outstandingYesBtn')?.addEventListener('click', () => {
     const docId = pendingReceiptDocId;
     closeOutstandingReceipt();
+    document.getElementById('customerDashboardModal').style.display = 'none';
     if (docId) previewReceipt(docId);
   });
   document.getElementById('closePreviewFirstBtn')?.addEventListener('click', closePreviewFirstModal);
@@ -2520,12 +2545,25 @@ function setupModals() {
   document.getElementById('closeCustomerDashboardBtn')?.addEventListener('click', () => {
     document.getElementById('customerDashboardModal').style.display = 'none';
     activeCustomerGroup = null;
+    if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   document.getElementById('closeCustEditChoiceBtn')?.addEventListener('click', () => document.getElementById('customerEditChoiceModal').style.display = 'none');
   document.getElementById('custEditDetailsBtn')?.addEventListener('click', () => customerEditPickDoc('details'));
   document.getElementById('custEditJobBtn')?.addEventListener('click', () => customerEditPickDoc('job'));
   document.getElementById('custEditMoneyBtn')?.addEventListener('click', () => customerEditPickDoc('money'));
   document.getElementById('custEditTermsBtn')?.addEventListener('click', () => customerEditPickDoc('terms'));
+  document.getElementById('custEditInvoiceBtn')?.addEventListener('click', () => {
+    document.getElementById('customerEditChoiceModal').style.display = 'none';
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
+    if (docId) previewInvoice(docId);
+  });
+  document.getElementById('custEditReceiptBtn')?.addEventListener('click', () => {
+    document.getElementById('customerEditChoiceModal').style.display = 'none';
+    // Keep customer dashboard open — warning modal overlays on top; X returns to dashboard
+    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
+    if (docId) handleReceiptRequest(docId);
+  });
   document.getElementById('custEditAddPhotoBtn')?.addEventListener('click', () => {
     document.getElementById('customerEditChoiceModal').style.display = 'none';
     const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
@@ -2636,8 +2674,14 @@ function setupModals() {
   document.getElementById('previewEditBtn').addEventListener('click', () => {
     closePreview();
     const { type, docId } = previewContext;
+    // If in a customer dashboard context, open the full edit menu (gives access to Jobs, Terms, Signature etc.)
+    if (activeCustomerGroup && docId) {
+      document.getElementById('customerDashboardModal').style.display = 'flex';
+      openCustomerEditChoice(docId);
+      return;
+    }
+    // Otherwise fall back to direct edit
     if (type === 'quote' && docId) {
-      // Open the full job details edit modal for saved estimates/quotes
       openJobDetailsEdit(docId);
     } else if (type === 'quote' && !docId) {
       // New quote in progress — already on page3, nothing needed
@@ -2696,7 +2740,7 @@ function setupModals() {
       document.getElementById('receiptModal').style.display = 'none';
     }
     closePreview();
-    showSavedPopup("I've saved that.");
+    showSavedPopup("Saved. Another one off your plate.");
   });
 
   document.getElementById('previewSendBtn').addEventListener('click', () => {
@@ -2817,10 +2861,13 @@ function setupModals() {
     toast('Receipt sent!', 'success');
   }
 
-  // Quote modal — Edit (go to full page3 builder) and Save (save without sending)
+  // Quote modal — Edit opens full edit menu if in dashboard context, otherwise page3 builder
   document.getElementById('quoteEditBtn')?.addEventListener('click', () => {
     document.getElementById('quoteModal').style.display = 'none';
-    if (activeDocId) {
+    if (activeCustomerGroup && activeDocId) {
+      document.getElementById('customerDashboardModal').style.display = 'flex';
+      openCustomerEditChoice(activeDocId);
+    } else if (activeDocId) {
       editDoc(activeDocId);
     }
   });
@@ -2838,13 +2885,18 @@ function setupModals() {
       }
     }
     document.getElementById('quoteModal').style.display = 'none';
-    showSavedPopup("I've saved that.");
+    showSavedPopup("Done. I've got it.");
   });
 
-  // Invoice modal — Edit (open quoteModal for same doc) and Save (save without sending)
+  // Invoice modal — Edit opens full edit menu if in dashboard context, otherwise quote modal
   document.getElementById('invEditBtn')?.addEventListener('click', () => {
     document.getElementById('invoiceModal').style.display = 'none';
-    if (activeDocId) openQuoteModal(activeDocId);
+    if (activeCustomerGroup && activeDocId) {
+      document.getElementById('customerDashboardModal').style.display = 'flex';
+      openCustomerEditChoice(activeDocId);
+    } else if (activeDocId) {
+      openQuoteModal(activeDocId);
+    }
   });
   document.getElementById('invSaveBtn')?.addEventListener('click', () => {
     const doc = state.saved.find(d => d.id === activeDocId);
@@ -2860,7 +2912,7 @@ function setupModals() {
     // Return to preview with updated invoice
     const html = buildDocHtml(doc, 'invoice', invData);
     openPreview(html, 'invoice', activeDocId);
-    showSavedPopup("I've saved that.");
+    showSavedPopup("Invoice saved. Nice one.");
   });
 
   // Receipt modal — Edit (open quoteModal for same doc) and Save (save without sending)
@@ -2882,7 +2934,7 @@ function setupModals() {
     // Return to preview with updated receipt
     const html = buildDocHtml(doc, 'receipt', recData);
     openPreview(html, 'receipt', activeDocId);
-    showSavedPopup("I've saved that.");
+    showSavedPopup("Receipt saved. Job done.");
   });
 
   // Add Payment button inside editPaymentsModal
@@ -2929,7 +2981,7 @@ function setupModals() {
         renderSingleCustomerDashboard(updatedGroup, groups);
       } catch(e) { console.error('Dashboard re-render error:', e); }
     }
-    showSavedPopup(doc.paid ? 'Brilliant, that one is now paid in full.' : "I've saved that payment.");
+    showSavedPopup(doc.paid ? 'Get in. That one is paid in full.' : "Payment logged. I've got it.");
   });
 }
 
@@ -2947,6 +2999,9 @@ function closePreview() {
   const modal = document.getElementById('previewModal');
   modal.style.display = 'none';
   modal.classList.remove('modal-front');
+  if (document.getElementById('page4')?.classList.contains('active')) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
 /* ===== CLIENT PICKER (New Invoice / New Receipt from menu) ===== */
@@ -3044,19 +3099,21 @@ function showPickerWarning(docId, message) {
 }
 
 function previewReceipt(docId) {
-  activeDocId = docId;
-  const doc = state.saved.find(d => d.id === docId);
-  if (!doc) return;
-  const payments  = getDocPayments(doc);
-  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
-  const recRef = doc.receiptRef || nextRef('REC', KEY_REC);
-  const html = buildDocHtml(doc, 'receipt', {
-    recRef,
-    date:   doc.receiptDate || todayStr(),
-    amount: totalPaid > 0 ? totalPaid : (doc.total || 0),
-    method: doc.receiptMethod || ''
+  withBizCheck(docId, id => {
+    activeDocId = id;
+    const doc = state.saved.find(d => d.id === id);
+    if (!doc) return;
+    const payments  = getDocPayments(doc);
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const recRef = doc.receiptRef || nextRef('REC', KEY_REC);
+    const html = buildDocHtml(doc, 'receipt', {
+      recRef,
+      date:   doc.receiptDate || todayStr(),
+      amount: totalPaid > 0 ? totalPaid : (doc.total || 0),
+      method: doc.receiptMethod || ''
+    });
+    openPreview(html, 'receipt', id);
   });
-  openPreview(html, 'receipt', docId);
 }
 
 function handleReceiptRequest(docId) {
@@ -3107,13 +3164,14 @@ function openQuoteModalFromCurrentForm() {
 }
 
 function openQuoteModal(docId) {
-  activeDocId = docId;
-  activeQuoteDraftDoc = null;
-  const doc = state.saved.find(d => d.id === docId);
-  if (!doc) return;
-  // Show a live preview of the estimate/quote — Edit button will open job details edit
-  const html = buildDocHtml(doc, 'quote');
-  openPreview(html, 'quote', docId);
+  withBizCheck(docId, id => {
+    activeDocId = id;
+    activeQuoteDraftDoc = null;
+    const doc = state.saved.find(d => d.id === id);
+    if (!doc) return;
+    const html = buildDocHtml(doc, 'quote');
+    openPreview(html, 'quote', id);
+  });
 }
 
 function populateQuoteSendModal(doc) {
@@ -3143,13 +3201,15 @@ function getActiveQuoteDoc() {
 }
 
 function previewInvoice(docId) {
-  activeDocId = docId;
-  const doc = state.saved.find(d => d.id === docId);
-  if (!doc) return;
-  const invRef  = doc.invoiceRef || doc.ref || nextRef('INV', KEY_INV);
-  const dueDate = doc.invoiceDueDate || addDays(todayStr(), 30);
-  const html = buildDocHtml(doc, 'invoice', { invRef, invDate: todayStr(), dueDate });
-  openPreview(html, 'invoice', docId);
+  withBizCheck(docId, id => {
+    activeDocId = id;
+    const doc = state.saved.find(d => d.id === id);
+    if (!doc) return;
+    const invRef  = doc.invoiceRef || doc.ref || nextRef('INV', KEY_INV);
+    const dueDate = doc.invoiceDueDate || addDays(todayStr(), 30);
+    const html = buildDocHtml(doc, 'invoice', { invRef, invDate: todayStr(), dueDate });
+    openPreview(html, 'invoice', id);
+  });
 }
 
 function openInvoiceModal(docId) {
@@ -3163,8 +3223,6 @@ function openInvoiceModal(docId) {
   setVal('invDueDate', doc.invoiceDueDate || addDays(todayStr(), 30));
   setVal('invCustFirst', q.custFirstName || '');
   setVal('invCustLast', q.custLastName || '');
-  setVal('invItemsText', (q.items || []).map(i => `${i.name}, ${Number(i.unitPrice || 0).toFixed(2)}`).join('\n'));
-  setVal('invTotalOverride', (doc.total || 0).toFixed(2));
   const storedMethods = Array.isArray(doc.invoicePayMethods) ? doc.invoicePayMethods
     : (doc.invoicePayMethod ? [doc.invoicePayMethod] : []);
   document.querySelectorAll('input[name="invPayMethod"]').forEach(cb => {
@@ -3173,6 +3231,7 @@ function openInvoiceModal(docId) {
   document.getElementById('invIncludePhotos').checked = false;
   setVal('invNotes',   '');
   document.getElementById('invoiceModal').style.display = 'flex';
+  renderInvJobPicker(doc);
 }
 
 function openReceiptModal(docId) {
@@ -3329,7 +3388,7 @@ function renderMpPrevInfo() {
       // Clear the "Add payment" form — the deletion is already saved.
       // Leaving it pre-filled risks the user accidentally logging a duplicate payment.
       setVal('mpAmount', '');
-      showSavedPopup('Payment removed and saved.');
+      showSavedPopup('Removed. All updated.');
     });
   });
 
@@ -3412,13 +3471,19 @@ function renderEditPaymentsList(doc) {
 
 function collectInvoiceForm() {
   const payMethods = [...document.querySelectorAll('input[name="invPayMethod"]:checked')].map(cb => cb.value);
+  const items = [];
+  document.querySelectorAll('#invItemsList .jde-item-row').forEach(row => {
+    const name  = (row.querySelector('.jde-item-name')?.value || '').trim();
+    const price = parseFloat(row.querySelector('.jde-item-price')?.value) || 0;
+    if (name || price) items.push({ id: uid(), name, unitPrice: price, unit: '', qty: 1 });
+  });
   return {
     invRef:    getVal('invRef'),
     invDate:   getVal('invDate'),
     dueDate:   getVal('invDueDate'),
     custFirstName: getVal('invCustFirst'),
     custLastName:  getVal('invCustLast'),
-    itemsText: getVal('invItemsText'),
+    items,
     totalOverride: getVal('invTotalOverride'),
     payMethods,
     payMethod: payMethods[0] || '',   // legacy single-value compat
@@ -3482,7 +3547,9 @@ function applyDocEdits(doc, data = {}) {
   if ('quoteNotes' in data) q.notes = data.quoteNotes || '';
   edited.custName = buildCustName(q);
 
-  if (data.itemsText != null) {
+  if (data.items != null && Array.isArray(data.items) && data.items.length) {
+    q.items = data.items;
+  } else if (data.itemsText != null) {
     const parsed = parseEditableItems(data.itemsText);
     if (parsed.length) q.items = parsed;
   }
@@ -3651,17 +3718,22 @@ function bizInfoSections() {
     id: 'contact',
     label: `Business Name & Address${c.email ? ' / Email' : ''}${c.website ? ' / Website' : ''}`,
     text: contactLines.filter(Boolean).join('\n'),
-    checked: true
+    checked: false
   });
 
   // ── Phone ────────────────────────────────────────────────────
   if (c.phone) {
-    sections.push({ id: 'phone', label: `Phone:  ${c.phone}`, text: `Phone: ${c.phone}`, checked: true });
+    sections.push({ id: 'phone', label: `Phone:  ${c.phone}`, text: `Phone: ${c.phone}`, checked: false });
   }
 
   // ── Company / Registration number ────────────────────────────
   if (c.companyNumber) {
-    sections.push({ id: 'companyNum', label: `Company Number:  ${c.companyNumber}`, text: `Company / Registration Number: ${c.companyNumber}`, checked: true });
+    sections.push({ id: 'companyNum', label: `Company Number:  ${c.companyNumber}`, text: `Company / Registration Number: ${c.companyNumber}`, checked: false });
+  }
+
+  // ── VAT Registration number ──────────────────────────────────
+  if (c.vatNumber) {
+    sections.push({ id: 'vatNum', label: `VAT Reg No:  ${c.vatNumber}`, text: `VAT Registration Number: ${c.vatNumber}`, checked: false });
   }
 
   // ── Bank transfer ────────────────────────────────────────────
@@ -3671,12 +3743,12 @@ function bizInfoSections() {
     if (c.bankName)      bankLines.push(`Bank: ${c.bankName}`);
     if (c.bankSort)      bankLines.push(`Sort Code: ${c.bankSort}`);
     bankLines.push(`Account Number: ${c.bankAcc}`);
-    sections.push({ id: 'bank', label: 'Bank Transfer details', text: bankLines.join('\n'), checked: true });
+    sections.push({ id: 'bank', label: 'Bank Transfer details', text: bankLines.join('\n'), checked: false });
   }
 
   // ── PayPal ───────────────────────────────────────────────────
   if (methods.includes('paypal') && c.paypalRef) {
-    sections.push({ id: 'paypal', label: `PayPal:  ${c.paypalRef}`, text: `PayPal: ${c.paypalRef}`, checked: true });
+    sections.push({ id: 'paypal', label: `PayPal:  ${c.paypalRef}`, text: `PayPal: ${c.paypalRef}`, checked: false });
   }
 
   // ── Cash ─────────────────────────────────────────────────────
@@ -3686,7 +3758,7 @@ function bizInfoSections() {
 
   // ── Other payment method ─────────────────────────────────────
   if (methods.includes('other') && c.payOther) {
-    sections.push({ id: 'other', label: c.payOther, text: c.payOther, checked: true });
+    sections.push({ id: 'other', label: c.payOther, text: c.payOther, checked: false });
   }
 
   return sections;
@@ -3710,13 +3782,26 @@ function openBizInfoModal() {
   const container = document.getElementById('bizInfoOptions');
   if (!container) return;
 
-  container.innerHTML = sections.map(s => `
+  container.innerHTML = `
+    <label class="checkbox-label biz-info-check biz-info-select-all">
+      <input type="checkbox" id="bizSelectAll"> Select All
+    </label>
+    <hr style="border:none;border-top:1px solid #eee;margin:4px 0 8px">
+    ${sections.map(s => `
     <label class="checkbox-label biz-info-check">
       <input type="checkbox" name="bizInfo" value="${s.id}"
              data-text="${s.text.replace(/"/g, '&quot;')}"
              ${s.checked ? 'checked' : ''}>
       ${s.label}
-    </label>`).join('');
+    </label>`).join('')}`;
+
+  const selectAll = document.getElementById('bizSelectAll');
+  if (selectAll) {
+    selectAll.addEventListener('change', () => {
+      container.querySelectorAll('input[name="bizInfo"]').forEach(cb => cb.checked = selectAll.checked);
+      updateBizInfoPreview();
+    });
+  }
 
   updateBizInfoPreview();
   document.getElementById('bizInfoModal').style.display = 'flex';
@@ -3901,7 +3986,14 @@ function buildCustomerJobSection(d) {
     </div>` : '';
 
   // Work out which stage rank this doc is currently at
-  const stageRank = d.paid ? 3 : d.invoiceSent ? 2 : (q.type || 'Estimate') === 'Quote' ? 1 : 0;
+  // Cross-check the saved flags AND q.type so docs created directly as Invoice/Receipt
+  // still show the correct step even if the invoiceSent flag wasn't set via the modal.
+  const qTypeLower = (q.type || 'Estimate').toLowerCase();
+  const stageRank = d.paid                                   ? 3
+    : (d.receiptRef  || qTypeLower === 'receipt')            ? 3
+    : (d.invoiceSent || qTypeLower === 'invoice')            ? 2
+    : (qTypeLower === 'quote')                               ? 1
+    :                                                          0;
   const stages = [
     { letter: 'A', label: 'Estimate', action: 'quote'   },
     { letter: 'B', label: 'Quote',    action: 'quote'   },
@@ -3913,11 +4005,12 @@ function buildCustomerJobSection(d) {
       <div class="cdv-prog-label">Job Status</div>
       <div class="cdv-prog-btns">
         ${stages.map((s, i) => {
+          const stageNames = ['stage-estimate','stage-quote','stage-invoice','stage-receipt'];
           const cls = i < stageRank ? 'cdv-prog-done'
                     : i === stageRank ? 'cdv-prog-active'
                     : '';
           return `<button type="button"
-            class="cdv-prog-btn ${cls}"
+            class="cdv-prog-btn ${cls} ${stageNames[i]}"
             data-prog-doc-id="${esc(d.id)}"
             data-prog-action="${s.action}">
             <span class="cdv-prog-letter">${s.letter}</span>
@@ -4012,10 +4105,14 @@ function renderSingleCustomerDashboard(group, groups) {
     if (!btn) return;
     const docId  = btn.dataset.progDocId;
     const action = btn.dataset.progAction;
-    document.getElementById('customerDashboardModal').style.display = 'none';
-    if      (action === 'quote')   openQuoteModal(docId);
-    else if (action === 'invoice') previewInvoice(docId);
-    else if (action === 'receipt') handleReceiptRequest(docId);
+    if (action === 'receipt') {
+      // Keep dashboard open — warning modal overlays on top; X returns to dashboard
+      handleReceiptRequest(docId);
+    } else {
+      document.getElementById('customerDashboardModal').style.display = 'none';
+      if      (action === 'quote')   openQuoteModal(docId);
+      else if (action === 'invoice') previewInvoice(docId);
+    }
   });
 
 }
@@ -4141,7 +4238,7 @@ function saveCustomerDetails() {
   renderSingleCustomerDashboard(updatedGroup, updatedGroups);
   document.getElementById('customerDashboardModal').style.display = 'flex';
 
-  showSavedPopup("I've saved the details.");
+  showSavedPopup("Got it. Details saved.");
 }
 
 /* ===== JOB TERMS EDIT MODAL ===== */
@@ -4316,7 +4413,7 @@ function saveJobTermsEdit() {
     }
   } catch(e) {}
   document.getElementById('customerDashboardModal').style.display = 'flex';
-  showSavedPopup("I've saved your changes.");
+  showSavedPopup("Saved. Looking good.");
 }
 
 function setupJobTermsEdit() {
@@ -4354,6 +4451,288 @@ function setupJobTermsEdit() {
     const isCustom = document.getElementById('jteValidFor').value === 'custom';
     document.getElementById('jteValidCustomGroup').style.display = isCustom ? '' : 'none';
   });
+}
+
+/* ===== BUSINESS DETAILS CHOICE ===== */
+
+const BIZ_COMPARE_KEYS = ['businessName', 'firstName', 'lastName', 'address', 'postcode', 'phone', 'email', 'website', 'companyNumber', 'logo'];
+
+function bizDetailsChanged(doc) {
+  if (!doc || !doc.company) return false; // no snapshot = always uses current state
+  if (state.company.bizChoiceMade === 'old') return false; // user said "always use old"
+  const old = doc.company;
+  const cur = state.company;
+  return BIZ_COMPARE_KEYS.some(k => (old[k] || '') !== (cur[k] || ''));
+}
+
+let _bizChoiceCallback = null;
+let _bizChoiceDocId    = null;
+
+function withBizCheck(docId, callback) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc || !bizDetailsChanged(doc)) {
+    callback(docId);
+    return;
+  }
+  _bizChoiceDocId    = docId;
+  _bizChoiceCallback = callback;
+  // Populate modal with old vs new name for context
+  const oldBiz = doc.company;
+  const oldName = (oldBiz.businessName || [oldBiz.firstName, oldBiz.lastName].filter(Boolean).join(' ') || 'Original details').trim();
+  const newName = (state.company.businessName || [state.company.firstName, state.company.lastName].filter(Boolean).join(' ') || 'Current details').trim();
+  document.getElementById('bizChoiceOldSub').textContent = oldName;
+  document.getElementById('bizChoiceNewSub').textContent = newName;
+  // Reset radio + checkboxes
+  const oldRadio = document.querySelector('input[name="bizChoice"][value="old"]');
+  if (oldRadio) oldRadio.checked = true;
+  document.getElementById('bizChoiceOldAll').checked = false;
+  document.getElementById('bizChoiceNewAll').checked = false;
+  document.getElementById('bizChoiceModal').style.display = 'flex';
+}
+
+function applyBizChoice(docId, useNew, forAll, callback) {
+  if (useNew) {
+    const companySnapshot = { ...state.company };
+    // Derive the new authorised name (first+last, or business name as fallback)
+    const newAuthName = [(companySnapshot.firstName||''), (companySnapshot.lastName||'')].filter(Boolean).join(' ')
+      || companySnapshot.businessName || '';
+
+    const updateDoc = d => {
+      d.company = { ...companySnapshot };
+      if (d.quote) {
+        // Update the printed auth name
+        d.quote.authSig = newAuthName;
+        // Update the cursive signature text only if it was already set
+        // (don't stamp a name onto a blank signature field)
+        if (d.quote.custSigText) d.quote.custSigText = newAuthName;
+      }
+    };
+
+    if (forAll) {
+      state.saved.forEach(updateDoc);
+      toast('All documents updated with your current business details.');
+    } else {
+      const doc = state.saved.find(d => d.id === docId);
+      if (doc) updateDoc(doc);
+    }
+    save();
+  } else {
+    // Use old — no data change needed
+    if (forAll) {
+      state.company.bizChoiceMade = 'old';
+      save();
+      toast('Your existing documents will keep their original business details.');
+    }
+  }
+  if (callback) callback(docId);
+}
+
+function setupBizChoiceModal() {
+  const closeModal = () => {
+    document.getElementById('bizChoiceModal').style.display = 'none';
+    _bizChoiceCallback = null;
+    _bizChoiceDocId    = null;
+  };
+
+  document.getElementById('closeBizChoiceBtn')?.addEventListener('click', closeModal);
+  document.getElementById('bizChoiceCancelBtn')?.addEventListener('click', closeModal);
+
+  document.getElementById('bizChoiceContinueBtn')?.addEventListener('click', () => {
+    const useNew  = document.querySelector('input[name="bizChoice"]:checked')?.value === 'new';
+    const forAll  = useNew
+      ? document.getElementById('bizChoiceNewAll').checked
+      : document.getElementById('bizChoiceOldAll').checked;
+    document.getElementById('bizChoiceModal').style.display = 'none';
+    const cb  = _bizChoiceCallback;
+    const id  = _bizChoiceDocId;
+    _bizChoiceCallback = null;
+    _bizChoiceDocId    = null;
+    applyBizChoice(id, useNew, forAll, cb);
+  });
+
+  // Clicking the "do this for all" checkbox auto-selects its matching radio
+  document.getElementById('bizChoiceOldAll')?.addEventListener('change', () => {
+    const r = document.querySelector('input[name="bizChoice"][value="old"]');
+    if (r) r.checked = true;
+  });
+  document.getElementById('bizChoiceNewAll')?.addEventListener('change', () => {
+    const r = document.querySelector('input[name="bizChoice"][value="new"]');
+    if (r) r.checked = true;
+  });
+
+  // Click outside to close
+  document.getElementById('bizChoiceModal')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('bizChoiceModal')) closeModal();
+  });
+}
+
+/* ===== INVOICE JOB PICKER ===== */
+
+function renderInvJobPicker(doc) {
+  const q = doc.quote || {};
+  const items = (q.items && q.items.length) ? q.items : ((doc.items && doc.items.length) ? doc.items : []);
+  const calcedTotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
+  const displayTotal = items.length ? calcedTotal : (doc.total || 0);
+  const body = document.getElementById('invJobsBody');
+  if (!body) return;
+  const hasPriceList = state.priceList && state.priceList.length > 0;
+  body.innerHTML = `
+    ${hasPriceList ? `
+    <p class="jde-section-label">Add from Price List</p>
+    <input type="text" id="invPickerSearch" class="search-input" placeholder="Search your price list…" style="margin-bottom:6px">
+    <div id="invPickerList" class="jde-picker-list picker-list"></div>
+    <div class="jde-divider"></div>` : ''}
+    <p class="jde-section-label">Job Items</p>
+    <div class="jde-item-headers"><span>Description</span><span>Price</span><span></span></div>
+    <div id="invItemsList" class="jde-items-list">
+      ${items.length
+        ? items.map(item => jdeItemRowHtml(item)).join('')
+        : '<p class="jde-empty-hint">No items yet. Add from your price list above or use the button below.</p>'}
+    </div>
+    <button type="button" class="btn btn-sage btn-sm" id="invAddItemBtn" style="margin-top:8px">+ One-off Item</button>
+    <div class="form-group" style="margin-top:14px">
+      <label for="invTotalOverride">Total <span class="jde-total-hint">(auto-calculated, or set manually)</span></label>
+      <div class="input-pfx" style="margin:0">
+        <span class="pfx-symbol">£</span>
+        <input type="number" id="invTotalOverride" min="0" step="any" placeholder="0.00" value="${displayTotal > 0 ? displayTotal.toFixed(2) : ''}">
+      </div>
+    </div>`;
+
+  wireInvRemoveButtons();
+  document.getElementById('invAddItemBtn').addEventListener('click', invAddItem);
+  body.addEventListener('input', e => {
+    if (e.target.classList.contains('jde-item-price')) invUpdateTotal();
+  });
+
+  if (hasPriceList) {
+    invRenderPicker('');
+    document.getElementById('invPickerSearch').addEventListener('input', e => invRenderPicker(e.target.value));
+    document.getElementById('invPickerList').addEventListener('click', e => {
+      const actionBtn = e.target.closest('[data-action]');
+      if (actionBtn) {
+        const jobId  = actionBtn.dataset.jobId;
+        const action = actionBtn.dataset.action;
+        if (action === 'add')         invAddFromPriceList(jobId);
+        else if (action === 'remove') invRemoveFromPriceList(jobId);
+        return;
+      }
+      const item = e.target.closest('.pick-item:not(.added)');
+      if (item) invAddFromPriceList(item.dataset.jobId);
+    });
+  }
+}
+
+function invRenderPicker(searchVal) {
+  const q = (searchVal || '').toLowerCase();
+  const filtered = state.priceList.filter(j => j.name.toLowerCase().includes(q));
+  const container = document.getElementById('invPickerList');
+  if (!container) return;
+  if (!filtered.length) {
+    container.innerHTML = '<p style="color:#888;font-size:0.85rem;padding:6px 0">No jobs match your search.</p>';
+    return;
+  }
+  const qtyCounts = {};
+  document.querySelectorAll('#invItemsList .jde-item-name').forEach(el => {
+    const name = el.value.trim().toLowerCase();
+    if (name) qtyCounts[name] = (qtyCounts[name] || 0) + 1;
+  });
+  container.innerHTML = filtered.map(item => {
+    const qty = qtyCounts[item.name.toLowerCase()] || 0;
+    const counterHtml = qty === 0
+      ? `<button type="button" class="pick-add-btn" data-action="add" data-job-id="${esc(item.id)}" aria-label="Add ${esc(item.name)}">+</button>`
+      : `<div class="pick-counter">
+           <button type="button" class="pick-qty-btn pick-qty-minus" data-action="remove" data-job-id="${esc(item.id)}" aria-label="Remove one">−</button>
+           <span class="pick-qty-num">${qty}</span>
+           <button type="button" class="pick-qty-btn pick-qty-plus" data-action="add" data-job-id="${esc(item.id)}" aria-label="Add one more">+</button>
+         </div>`;
+    return `
+      <div class="pick-item${qty > 0 ? ' added' : ''}" data-job-id="${esc(item.id)}">
+        <div class="pick-name">${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}</div>
+        <span class="pick-price">${fmtPrice(item.price)}</span>
+        ${counterHtml}
+      </div>`;
+  }).join('');
+}
+
+function invAddFromPriceList(jobId) {
+  const job = state.priceList.find(j => j.id === jobId);
+  if (!job) return;
+  const list = document.getElementById('invItemsList');
+  const hint = list.querySelector('.jde-empty-hint');
+  if (hint) hint.remove();
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = jdeItemRowHtml({ name: job.name, unitPrice: job.price });
+  const row = wrapper.firstElementChild;
+  list.appendChild(row);
+  row.querySelector('.jde-item-remove').addEventListener('click', () => {
+    row.remove();
+    if (!list.querySelector('.jde-item-row')) {
+      list.innerHTML = '<p class="jde-empty-hint">No items yet. Add from your price list above or use the button below.</p>';
+    }
+    invUpdateTotal();
+    invRenderPicker(document.getElementById('invPickerSearch')?.value || '');
+  });
+  invUpdateTotal();
+  invRenderPicker(document.getElementById('invPickerSearch')?.value || '');
+  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function invRemoveFromPriceList(jobId) {
+  const job = state.priceList.find(j => j.id === jobId);
+  if (!job) return;
+  const list = document.getElementById('invItemsList');
+  if (!list) return;
+  const rows = [...list.querySelectorAll('.jde-item-row')];
+  const matching = rows.filter(r => r.querySelector('.jde-item-name')?.value.trim().toLowerCase() === job.name.toLowerCase());
+  if (!matching.length) return;
+  matching[matching.length - 1].remove();
+  if (!list.querySelector('.jde-item-row')) {
+    list.innerHTML = '<p class="jde-empty-hint">No items yet. Add from your price list above or use the button below.</p>';
+  }
+  invUpdateTotal();
+  invRenderPicker(document.getElementById('invPickerSearch')?.value || '');
+}
+
+function invUpdateTotal() {
+  const prices = [...document.querySelectorAll('#invItemsList .jde-item-price')].map(el => parseFloat(el.value) || 0);
+  if (prices.length > 0) {
+    const totalEl = document.getElementById('invTotalOverride');
+    if (totalEl) totalEl.value = prices.reduce((s, p) => s + p, 0).toFixed(2);
+  }
+}
+
+function wireInvRemoveButtons() {
+  document.querySelectorAll('#invItemsList .jde-item-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('.jde-item-row');
+      if (row) row.remove();
+      const list = document.getElementById('invItemsList');
+      if (list && !list.querySelector('.jde-item-row')) {
+        list.innerHTML = '<p class="jde-empty-hint">No items yet. Add one below.</p>';
+      }
+      invUpdateTotal();
+      invRenderPicker(document.getElementById('invPickerSearch')?.value || '');
+    });
+  });
+}
+
+function invAddItem() {
+  const list = document.getElementById('invItemsList');
+  const hint = list.querySelector('.jde-empty-hint');
+  if (hint) hint.remove();
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = jdeItemRowHtml({ name: '', unitPrice: '' });
+  const row = wrapper.firstElementChild;
+  list.appendChild(row);
+  row.querySelector('.jde-item-remove').addEventListener('click', () => {
+    row.remove();
+    if (!list.querySelector('.jde-item-row')) {
+      list.innerHTML = '<p class="jde-empty-hint">No items yet. Add one below.</p>';
+    }
+    invUpdateTotal();
+    invRenderPicker(document.getElementById('invPickerSearch')?.value || '');
+  });
+  row.querySelector('.jde-item-name').focus();
 }
 
 /* ===== JOB DETAILS EDIT ===== */
@@ -4431,7 +4810,17 @@ function renderJobDetailsForm(doc) {
     jdeRenderPicker('');
     document.getElementById('jdePickerSearch').addEventListener('input', e => jdeRenderPicker(e.target.value));
     document.getElementById('jdePickerList').addEventListener('click', e => {
-      const item = e.target.closest('.pick-item');
+      // Check for explicit +/− action buttons first
+      const actionBtn = e.target.closest('[data-action]');
+      if (actionBtn) {
+        const jobId  = actionBtn.dataset.jobId;
+        const action = actionBtn.dataset.action;
+        if (action === 'add')    jdeAddFromPriceList(jobId);
+        else if (action === 'remove') jdeRemoveFromPriceList(jobId);
+        return;
+      }
+      // Clicking the name/price area of a 0-qty item also adds it
+      const item = e.target.closest('.pick-item:not(.added)');
       if (item) jdeAddFromPriceList(item.dataset.jobId);
     });
   }
@@ -4446,18 +4835,27 @@ function jdeRenderPicker(searchVal) {
     container.innerHTML = '<p style="color:#888;font-size:0.85rem;padding:6px 0">No jobs match your search.</p>';
     return;
   }
-  // Get names already in the items list to show as "added"
-  const addedNames = new Set(
-    [...document.querySelectorAll('#jdeItemsList .jde-item-name')].map(el => el.value.trim().toLowerCase())
-  );
+  // Count how many times each job appears in the current items list
+  const qtyCounts = {};
+  document.querySelectorAll('#jdeItemsList .jde-item-name').forEach(el => {
+    const name = el.value.trim().toLowerCase();
+    if (name) qtyCounts[name] = (qtyCounts[name] || 0) + 1;
+  });
+
   container.innerHTML = filtered.map(item => {
-    const isAdded = addedNames.has(item.name.toLowerCase());
+    const qty = qtyCounts[item.name.toLowerCase()] || 0;
+    const counterHtml = qty === 0
+      ? `<button type="button" class="pick-add-btn" data-action="add" data-job-id="${esc(item.id)}" aria-label="Add ${esc(item.name)}">+</button>`
+      : `<div class="pick-counter">
+           <button type="button" class="pick-qty-btn pick-qty-minus" data-action="remove" data-job-id="${esc(item.id)}" aria-label="Remove one">−</button>
+           <span class="pick-qty-num">${qty}</span>
+           <button type="button" class="pick-qty-btn pick-qty-plus" data-action="add" data-job-id="${esc(item.id)}" aria-label="Add one more">+</button>
+         </div>`;
     return `
-      <div class="pick-item${isAdded ? ' added' : ''}" data-job-id="${esc(item.id)}" role="button" tabindex="0"
-           aria-label="Add ${esc(item.name)}">
+      <div class="pick-item${qty > 0 ? ' added' : ''}" data-job-id="${esc(item.id)}">
         <div class="pick-name">${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}</div>
         <span class="pick-price">${fmtPrice(item.price)}</span>
-        <span class="pick-add-btn">${isAdded ? '✓' : '+'}</span>
+        ${counterHtml}
       </div>`;
   }).join('');
 }
@@ -4487,6 +4885,23 @@ function jdeAddFromPriceList(jobId) {
   jdeRenderPicker(document.getElementById('jdePickerSearch')?.value || '');
   // Scroll new row into view
   row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function jdeRemoveFromPriceList(jobId) {
+  const job = state.priceList.find(j => j.id === jobId);
+  if (!job) return;
+  const list = document.getElementById('jdeItemsList');
+  if (!list) return;
+  const rows = [...list.querySelectorAll('.jde-item-row')];
+  // Remove the last matching row (most recently added)
+  const matching = rows.filter(r => r.querySelector('.jde-item-name')?.value.trim().toLowerCase() === job.name.toLowerCase());
+  if (matching.length === 0) return;
+  matching[matching.length - 1].remove();
+  if (!list.querySelector('.jde-item-row')) {
+    list.innerHTML = '<p class="jde-empty-hint">No items yet - add from your price list above or use the button below.</p>';
+  }
+  jdeUpdateTotal();
+  jdeRenderPicker(document.getElementById('jdePickerSearch')?.value || '');
 }
 
 function jdeUpdateTotal() {
@@ -4591,23 +5006,25 @@ const DOC_CSS = `
   .doc-wrap{max-width:760px;margin:0 auto;background:#fff;border:1px solid #b8b8b8}
 
   /* ── HEADER BAND (brand primary — set via inline style) ── */
-  .doc-header{display:grid;grid-template-columns:110px 1fr 155px;align-items:center;gap:10px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .doc-logo{max-height:56px;max-width:100px;object-fit:contain}
-  .doc-logo-placeholder{width:72px;height:46px;border:1.5px dashed rgba(255,255,255,0.45);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:rgba(255,255,255,0.65)}
-  .doc-biz-name{font-size:2rem;font-weight:700;text-align:center;line-height:1.2}
-  .doc-type-label{font-size:1.33rem;font-weight:700;text-align:right;text-decoration:none;text-transform:uppercase;letter-spacing:0.05em;line-height:1.2}
+  .doc-header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:12px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /* Logo cell stretches to full header height */
+  .doc-logo-cell{display:flex;align-items:center;align-self:stretch;min-width:48px;max-width:140px}
+  .doc-logo{display:block;height:100%;width:auto;max-width:140px;min-height:40px;object-fit:contain}
+  .doc-logo-placeholder{width:64px;height:100%;min-height:48px;border:1.5px dashed rgba(255,255,255,0.45);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:rgba(255,255,255,0.65)}
+  /* Business name — always one line, font scales down to fit */
+  .doc-biz-name{font-weight:700;text-align:center;line-height:1.15;white-space:nowrap;overflow:hidden;font-size:2rem}
+  /* Doc type badge — background set inline with accent colour */
+  .doc-type-label{font-size:1.05rem;font-weight:800;text-align:center;text-transform:uppercase;letter-spacing:0.07em;line-height:1.2;padding:8px 14px;border-radius:7px;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
-  /* ── PREPARED BY / FOR (two cols, horizontal dividers, vertical centre line) ── */
-  .doc-info{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #c4c4c4;border-bottom:1px solid #c4c4c4}
+  /* ── PREPARED BY / FOR (two cols, no dividers) ── */
+  .doc-info{display:grid;grid-template-columns:1fr 1fr}
   .doc-info-col{padding:10px 18px}
-  .doc-info-col+.doc-info-col{border-left:1px solid #c4c4c4}
   .doc-info-col h3{font-size:0.83rem;font-weight:700;margin-bottom:5px;text-transform:none;letter-spacing:0}
   .doc-info-col p{font-size:0.83rem;line-height:1.6;white-space:pre-wrap;color:#333}
 
-  /* ── REFERENCE ROW (three bordered cells, label on top / value below) ── */
+  /* ── REFERENCE ROW — no internal borders; border-bottom = line above Itemised Breakdown ── */
   .doc-ref-row{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #c4c4c4}
   .doc-ref-cell{padding:6px 18px;font-size:0.83rem;display:flex;flex-direction:column;gap:2px}
-  .doc-ref-cell+.doc-ref-cell{border-left:1px solid #c4c4c4}
   .ref-label{font-weight:700;white-space:nowrap}
   .ref-value{color:#333}
 
@@ -4634,8 +5051,8 @@ const DOC_CSS = `
   .doc-items-table tbody td:last-child{text-align:right;font-weight:600;border-right:none}
   .doc-items-table tbody td.r{text-align:right}
   .item-unit{display:block;font-size:0.71rem;color:#888;margin-top:1px}
-  .totals-sep td{border-top:1.5px solid #bbb!important;border-bottom:none!important;border-right:none!important;padding:6px 0 0!important;background:#fff}
-  .totals-row td{padding:3px 10px;font-size:0.82rem;border:none!important;background:#fff}
+  .totals-sep td{border-top:1.5px solid #bbb!important;border-bottom:none!important;border-right:none!important;padding:6px 0 0!important;background:transparent}
+  .totals-row td{padding:3px 10px;font-size:0.82rem;border:none!important;background:transparent}
   .totals-row td.r{text-align:right}
   .totals-total{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .totals-total td{padding:8px 10px;font-size:0.9rem;font-weight:700;border:none!important;color:#fff}
@@ -4667,10 +5084,10 @@ const DOC_CSS = `
   /* ── ACCEPTANCE PAGE (quotes/estimates — same bordered box) ── */
   .doc-accept{max-width:760px;margin:20px auto 0;background:#fff;border:1px solid #b8b8b8;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:13px;color:#1a1a1a;page-break-before:always}
   .doc-accept-body{padding:22px 18px 20px}
-  .doc-accept-heading{font-size:0.88rem;font-weight:700;padding-bottom:4px;border-bottom:1px solid #888;margin-bottom:16px;text-transform:none;letter-spacing:0}
+  .doc-accept-heading{font-size:0.88rem;font-weight:700;padding-bottom:4px;margin-bottom:16px;text-transform:none;letter-spacing:0}
   .doc-accept-body>p{font-size:0.83rem;line-height:1.3;color:#333;margin-bottom:32px}
   .doc-sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:32px}
-  .doc-sig-box{padding-top:48px;border-top:1px solid #999}
+  .doc-sig-box{min-height:72px;display:flex;flex-direction:column;justify-content:flex-end}
   .doc-sig-label{font-size:0.73rem;color:#666;margin-top:5px}
   .doc-sig-typed{font-family:'Dancing Script',cursive;font-size:1.4rem;color:#1a1a1a;display:block;margin-bottom:2px}
   .doc-sig-name{font-size:0.83rem;font-weight:600;color:#1a1a1a}
@@ -4687,12 +5104,12 @@ const DOC_CSS = `
     body{padding:0;background:#fff}
     .doc-wrap{border-left:none;border-right:none;max-width:100%}
 
-    /* Header: shrink logo column, keep type label on right */
-    .doc-header{grid-template-columns:52px 1fr 82px;gap:6px;padding:10px 10px}
-    .doc-logo{max-height:40px;max-width:48px}
-    .doc-logo-placeholder{width:40px;height:32px;font-size:0.62rem}
-    .doc-biz-name{font-size:1.3rem}
-    .doc-type-label{font-size:0.88rem;letter-spacing:0.03em}
+    /* Header: tighten at small widths */
+    .doc-header{gap:6px;padding:8px 10px}
+    .doc-logo-cell{max-width:72px}
+    .doc-logo{max-width:72px}
+    .doc-biz-name{font-size:1.2rem}
+    .doc-type-label{font-size:0.8rem;padding:5px 8px;letter-spacing:0.04em}
 
     /* Prepared by/for: stack vertically */
     .doc-info{grid-template-columns:1fr}
@@ -4777,25 +5194,32 @@ function buildDocHtml(doc, docType, extra = {}) {
 
   const isQuote = (docType !== 'invoice' && docType !== 'receipt');
 
-  // ── Names ────────────────────────────────────────────────────────
-  const authFullName = [(co.firstName||''), (co.lastName||'')].filter(Boolean).join(' ');
-  const bizName      = co.businessName || authFullName;
+  // ── Names — prefer live state so name changes always show immediately ──
+  const liveFullName = [(state.company.firstName||''), (state.company.lastName||'')].filter(Boolean).join(' ');
+  const snapFullName = [(co.firstName||''), (co.lastName||'')].filter(Boolean).join(' ');
+  const authFullName = liveFullName || snapFullName;
+  const bizName      = state.company.businessName || co.businessName || authFullName;
   const custName     = [q.custTitle, q.custFirstName, q.custLastName].filter(Boolean).join(' ');
 
   // ── Address blocks ───────────────────────────────────────────────
-  const bizLines  = [co.address, co.postcode, co.phone, co.email, co.website].filter(Boolean).join('\n');
+  const vatNum    = state.company.vatNumber || co.vatNumber || '';
+  const bizLines  = [authFullName, co.address, co.postcode, co.phone, co.email, co.website, vatNum ? `VAT Reg No: ${vatNum}` : ''].filter(Boolean).join('\n');
   const custLines = [custName, q.custAddr, q.custPostcode, q.custEmail, q.custPhone].filter(Boolean).join('\n');
 
   // ── Logo — prefer doc snapshot, fall back to live state so it always shows ──
   const logoSrc = co.logo || state.company.logo || '';
-  // ── Header text colour — auto dark/light based on primary background ──
-  const headerTextCol = isColorLight(primary) ? '#1a1a1a' : '#ffffff';
+  // ── Header text colours — auto dark/light based on header and accent backgrounds ──
+  const headerTextCol  = isColorLight(primary) ? '#1a1a1a' : '#ffffff';
+  const accentTextCol  = isColorLight(accent)  ? '#1a1a1a' : '#ffffff';
   const logoPlaceholderStyle = isColorLight(primary)
     ? 'border:1.5px dashed rgba(0,0,0,0.3);color:rgba(0,0,0,0.5)'
     : 'border:1.5px dashed rgba(255,255,255,0.45);color:rgba(255,255,255,0.65)';
-  const logoHtml = logoSrc
-    ? `<img src="${logoSrc}" alt="Logo" class="doc-logo">`
-    : `<div class="doc-logo-placeholder" style="${logoPlaceholderStyle}">Logo</div>`;
+  // Logo wrapped in a flex cell so it stretches to the full header height
+  const logoHtml = `<div class="doc-logo-cell">${
+    logoSrc
+      ? `<img src="${logoSrc}" alt="Logo" class="doc-logo">`
+      : `<div class="doc-logo-placeholder" style="${logoPlaceholderStyle}">Logo</div>`
+  }</div>`;
 
   // ── Valid for ────────────────────────────────────────────────────
   let validForText = '';
@@ -4812,18 +5236,25 @@ function buildDocHtml(doc, docType, extra = {}) {
       <td class="r">${fmtPrice(item.unitPrice)}</td>
       <td class="r">${fmtPrice(item.unitPrice * item.qty)}</td>
     </tr>`).join('') ||
-    `<tr><td colspan="4" style="text-align:center;color:#aaa;padding:14px;font-style:italic">No items added — go back and add jobs in Step 2</td></tr>`;
+    `<tr><td colspan="4" style="text-align:center;color:#aaa;padding:14px;font-style:italic">No items added. Go back and add jobs in Step 2.</td></tr>`;
 
-  // ── Totals — labels in col 3 only, amounts in col 4, fully right-justified ──
-  const discRow = disc > 0
-    ? `<tr class="totals-row"><td></td><td></td><td class="r" style="font-size:0.79rem">Discount (${disc}%):</td><td class="r">-${fmtPrice(sub*disc/100)}</td></tr>`
-    : '';
+  // ── Totals — label in col 3 (right-aligned), amount in col 4 (right-aligned) ──
+  const tCell = (label, value, bold = false) =>
+    `<tr class="totals-row">
+      <td colspan="2" style="border:none;padding:0"></td>
+      <td style="text-align:right;padding:3px 10px;font-size:0.79rem;${bold?'font-weight:700':''}">${label}</td>
+      <td style="text-align:right;padding:3px 10px;font-size:0.82rem;">${value}</td>
+    </tr>`;
+  const discRow = disc > 0 ? tCell(`Discount (${disc}%):`, `-${fmtPrice(sub*disc/100)}`) : '';
   const totalsRows = `
     <tr class="totals-sep"><td colspan="4"></td></tr>
-    <tr class="totals-row"><td></td><td></td><td class="r" style="font-size:0.79rem;font-weight:700">Subtotal:</td><td class="r">${fmtPrice(afterDisc)}</td></tr>
+    ${tCell('Subtotal:', fmtPrice(afterDisc), true)}
     ${discRow}
-    <tr class="totals-row"><td></td><td></td><td class="r" style="font-size:0.79rem">VAT${vatRate>0?` (${vatRate}%)`:'  (if applicable)'}:</td><td class="r">${vatRate>0?fmtPrice(vatAmt):'—'}</td></tr>
-    <tr class="totals-total" style="background:${accent}"><td colspan="2"></td><td class="r">TOTAL:</td><td class="r">${fmtPrice(total)}</td></tr>`;
+    ${tCell(`VAT${vatRate>0?` (${vatRate}%)`:'  (if applicable)'}:`, vatRate>0?fmtPrice(vatAmt):'-')}
+    <tr class="totals-total" style="background:${accent}">
+      <td colspan="3" style="text-align:right;padding:8px 10px;font-size:0.9rem;font-weight:700;color:#fff;border:none">TOTAL:</td>
+      <td style="text-align:right;padding:8px 10px;font-size:0.9rem;font-weight:700;color:#fff;border:none">${fmtPrice(total)}</td>
+    </tr>`;
 
   // ── Description of work — only shown when a description was entered ──
   const descHtml = q.notes
@@ -4831,8 +5262,8 @@ function buildDocHtml(doc, docType, extra = {}) {
        <div class="doc-desc-box filled" style="background:${bgCol};-webkit-print-color-adjust:exact;print-color-adjust:exact">${esc(q.notes)}</div>`
     : '';
 
-  // ── Terms table ──────────────────────────────────────────────────
-  const termsHtml = buildNewTermsHtml(q);
+  // ── Terms table — not shown on receipts ─────────────────────────
+  const termsHtml = docType !== 'receipt' ? buildNewTermsHtml(q) : '';
 
   // ── Invoice / receipt extras ────────────────────────────────────
   let extraHtml = '';
@@ -4841,7 +5272,8 @@ function buildDocHtml(doc, docType, extra = {}) {
     extraHtml += buildPaymentSection(co, docType, extra.payMethod);
     if (extra.notes)   extraHtml += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
   } else if (docType === 'receipt') {
-    extraHtml = `<div class="section"><h3>Payment Received</h3><p>Amount: <strong>${fmtPrice(parseFloat(extra.amount)||0)}</strong><br>Date: ${formatDate(extra.date||todayStr())}<br>Method: ${esc(extra.method||'')}</p></div>`;
+    const methodLine = extra.method ? `<br>Paid by: ${esc(extra.method)}` : '';
+    extraHtml = `<div class="section"><h3>Payment Received</h3><p>Amount: <strong>${fmtPrice(parseFloat(extra.amount)||0)}</strong><br>Date: ${formatDate(extra.date||todayStr())}${methodLine}</p></div>`;
     if (extra.notes) extraHtml += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
   }
 
@@ -4858,7 +5290,7 @@ function buildDocHtml(doc, docType, extra = {}) {
     const authName   = q.authSig || authFullName || bizName;
     const sigContent = sigText ? `<span class="doc-sig-typed">${esc(sigText)}</span>` : '';
     acceptancePage = `
-      <div class="doc-accept">
+      <div class="doc-accept" style="background:${bgCol};-webkit-print-color-adjust:exact;print-color-adjust:exact">
         <div class="doc-accept-body">
           <div class="doc-accept-heading">Acceptance</div>
           <p>Please let me know if this meets your needs. To accept this ${(q.type||'quote').toLowerCase()} please sign below or reply confirming your acceptance.</p>
@@ -4882,11 +5314,11 @@ function buildDocHtml(doc, docType, extra = {}) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
     <style>${DOC_CSS}</style>
-    <div class="doc-wrap">
-      <div class="doc-header" style="background:${primary}">
+    <div class="doc-wrap" style="background:${bgCol};-webkit-print-color-adjust:exact;print-color-adjust:exact">
+      <div class="doc-header" style="background:${primary};-webkit-print-color-adjust:exact;print-color-adjust:exact">
         ${logoHtml}
-        <div class="doc-biz-name" style="color:${headerTextCol}">${esc(bizName)}</div>
-        <div class="doc-type-label" style="color:${headerTextCol}">${esc(docLabel)}</div>
+        <div class="doc-biz-name" style="color:${headerTextCol}" id="docBizName">${esc(bizName)}</div>
+        <div class="doc-type-label" style="background:${accent};color:${accentTextCol}">${esc(docLabel)}</div>
       </div>
       <div class="doc-info">
         <div class="doc-info-col">
@@ -4901,7 +5333,7 @@ function buildDocHtml(doc, docType, extra = {}) {
       <div class="doc-ref-row">
         <div class="doc-ref-cell"><span class="ref-label">Reference No:</span><span class="ref-value">${esc(refLabel)}</span></div>
         <div class="doc-ref-cell"><span class="ref-label">Date:</span><span class="ref-value">${dateLabel ? formatDate(dateLabel) : ''}</span></div>
-        <div class="doc-ref-cell"><span class="ref-label">Valid for:</span><span class="ref-value">${esc(validForText)}</span></div>
+        <div class="doc-ref-cell">${isQuote ? `<span class="ref-label">Valid for:</span><span class="ref-value">${esc(validForText)}</span>` : ''}</div>
       </div>
       <div class="doc-body">
         ${descHtml}
@@ -4922,7 +5354,25 @@ function buildDocHtml(doc, docType, extra = {}) {
       </div>
       ${isQuote ? '' : '<div class="doc-footer">Powered by LexiHandlesIt.com</div>'}
     </div>
-    ${acceptancePage}`;
+    ${acceptancePage}
+    <script>
+    (function(){
+      var el = document.getElementById('docBizName');
+      if(!el) return;
+      var run = function(){
+        var fs = 32;
+        el.style.fontSize = fs + 'px';
+        var parent = el.parentElement;
+        while(el.scrollWidth > el.offsetWidth + 1 && fs > 8){
+          fs -= 0.5;
+          el.style.fontSize = fs + 'px';
+        }
+      };
+      if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', run);
+      } else { run(); }
+    })();
+    </script>`;
 }
 
 function buildPaymentSection(co, docType, preferredMethod = '') {
@@ -5011,13 +5461,28 @@ function buildNewTermsHtml(q) {
 }
 
 function buildSigSection(q, co, docType) {
-  // Prefer saved custSigText; only read live DOM for new page3 quotes (where custSigText not yet saved)
+  const liveFullName = [(state.company.firstName||''), (state.company.lastName||'')].filter(Boolean).join(' ');
+  const snapFullName = [(co.firstName||''), (co.lastName||'')].filter(Boolean).join(' ');
+  const authFullName = liveFullName || snapFullName;
+
+  // Receipts: just show the authorised name in cursive — no stored sig text, no customer box
+  if (docType === 'receipt') {
+    if (!authFullName) return '';
+    return `
+      <div class="sig-block">
+        <div class="sig-box">
+          <span class="sig-typed">${esc(authFullName)}</span>
+          <div style="font-size:0.9rem;font-weight:600">${esc(authFullName)}</div>
+          <div class="sig-label">Authorised Signature</div>
+        </div>
+      </div>`;
+  }
+
+  // Invoice / quote: use stored sig text
   const sigText = q.custSigText || document.getElementById('custSigText')?.value || '';
-  if (!q.authSig && !sigText) return '';
-  const authName = q.authSig || co.businessName || '';
-  const authSigContent = sigText
-    ? `<span class="sig-typed">${esc(sigText)}</span>`
-    : '';
+  if (!q.authSig && !sigText && !authFullName) return '';
+  const authName = authFullName || q.authSig || co.businessName || '';
+  const authSigContent = sigText ? `<span class="sig-typed">${esc(sigText)}</span>` : '';
 
   return `
     <div class="sig-block">
