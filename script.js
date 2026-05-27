@@ -2586,6 +2586,8 @@ function setupModals() {
     save();
     refreshSavedDocs();
     document.getElementById('jobDetailsEditModal').style.display = 'none';
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    document.getElementById('customerEditChoiceModal').style.display = 'none';
     loadQuoteFromDoc(doc);
     state.editingDocId = docId;
     state.editingFromTerms = true;
