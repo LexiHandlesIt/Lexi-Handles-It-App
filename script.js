@@ -162,6 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupJobTermsEdit();
   setupBizChoiceModal();
   setupNavigation();
+  setupCalendar();
   setupNavHint();
   setupPage1();
   setupPage2();
@@ -341,6 +342,11 @@ function showPage(pageId) {
     if (titleEl) titleEl.textContent = 'Add Customer';
   }
 
+  // Render calendar when navigating to it
+  if (pageId === 'page-calendar') {
+    renderCalendar();
+  }
+
   // Ensure signature preview is always populated when reaching the completion page
   if (pageId === 'page-completion') {
     const authSig = document.getElementById('authSig');
@@ -431,6 +437,33 @@ function setupNavigation() {
       if (target === 'page3') prepareNewQuote();
       showPage(target);
     });
+  });
+
+  // New Document submenu toggle
+  const menuNewDoc   = document.getElementById('menuNewDoc');
+  const newDocSubmenu = document.getElementById('navNewDocSubmenu');
+  if (menuNewDoc && newDocSubmenu) {
+    menuNewDoc.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = newDocSubmenu.classList.contains('open');
+      newDocSubmenu.classList.toggle('open', !isOpen);
+      menuNewDoc.classList.toggle('open', !isOpen);
+    });
+  }
+
+  // Reference ? popup
+  document.querySelectorAll('.ref-info-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('refInfoPopup').style.display = 'flex';
+    });
+  });
+  document.getElementById('closeRefInfoBtn')?.addEventListener('click', () => {
+    document.getElementById('refInfoPopup').style.display = 'none';
+  });
+  document.getElementById('refInfoPopup')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) document.getElementById('refInfoPopup').style.display = 'none';
   });
 
   // New Invoice from menu
@@ -1943,7 +1976,14 @@ function saveQuote() {
 }
 
 function buildCustName(q) {
-  return [q.custTitle, q.custFirstName, q.custLastName].filter(Boolean).join(' ');
+  // Display format: Last, First Title  (e.g. "Jones, James Dr")
+  const last  = (q.custLastName  || '').trim();
+  const first = (q.custFirstName || '').trim();
+  const title = (q.custTitle     || '').trim();
+  if (last && first) return last + ', ' + first + (title ? ' ' + title : '');
+  if (last)          return last + (title ? ' ' + title : '');
+  if (first)         return first + (title ? ' ' + title : '');
+  return title || '';
 }
 
 function calcTotal(q) {
@@ -2263,6 +2303,9 @@ function setupPage4() {
   const sel = document.getElementById('savedFilterSelect');
   if (sel) sel.addEventListener('change', () => refreshSavedDocs());
 
+  const sortSel = document.getElementById('savedSortSelect');
+  if (sortSel) sortSel.addEventListener('change', () => refreshSavedDocs());
+
   const expSel = document.getElementById('exportSelect');
   if (expSel) {
     expSel.addEventListener('change', () => {
@@ -2276,6 +2319,8 @@ function setupPage4() {
 function refreshSavedDocs() {
   const sel    = document.getElementById('savedFilterSelect');
   const filter = sel ? sel.value : 'all';
+  const sortSel = document.getElementById('savedSortSelect');
+  const sort   = sortSel ? sortSel.value : 'date-newest';
   const container = document.getElementById('savedDocsList');
   const empty     = document.getElementById('savedDocsEmpty');
 
@@ -2287,6 +2332,31 @@ function refreshSavedDocs() {
   else if (filter === 'paid')     docs = docs.filter(d => d.paid);
   else if (filter === 'unpaid')   docs = docs.filter(d => !d.paid);
   else if (filter === 'accepted') docs = docs.filter(d => d.accepted);
+
+  // Sort
+  const sortKey = d => {
+    const q = d.quote || {};
+    const last  = (q.custLastName  || '').toLowerCase();
+    const first = (q.custFirstName || '').toLowerCase();
+    return last + ' ' + first;
+  };
+  if (sort === 'name-az') {
+    docs.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  } else if (sort === 'name-za') {
+    docs.sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+  } else if (sort === 'date-oldest') {
+    docs.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  } else if (sort === 'next-job') {
+    // Accepted jobs with start dates first (soonest), then no-start-date docs at end
+    docs.sort((a, b) => {
+      const aDate = (a.jobAccepted && a.jobStartDate) ? a.jobStartDate : '9999';
+      const bDate = (b.jobAccepted && b.jobStartDate) ? b.jobStartDate : '9999';
+      return aDate.localeCompare(bDate);
+    });
+  } else {
+    // date-newest (default): newest date first
+    docs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }
 
   // Remove all doc cards but keep the empty-state element in the DOM
   Array.from(container.children).forEach(child => {
@@ -2314,7 +2384,7 @@ function refreshSavedDocs() {
     card.innerHTML = `
       <div class="saved-doc-header">
         <div>
-          <span class="saved-doc-name">${esc(doc.custName || 'Unknown Customer')}</span>
+          <span class="saved-doc-name">${esc(buildCustName(doc.quote || {}) || doc.custName || 'Unknown Customer')}</span>
           <div class="saved-doc-ref">${esc(doc.ref || '')} &bull; ${formatDate(doc.date)}</div>
         </div>
         <div style="text-align:right">
@@ -2592,44 +2662,22 @@ function setupModals() {
   document.getElementById('closeCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('saveCustDetailsBtn')?.addEventListener('click', saveCustomerDetails);
   document.getElementById('nextToJobDetailsBtn')?.addEventListener('click', () => {
+    persistCustomerDetailsForm();                                        // save before leaving
     document.getElementById('customerDetailsEditModal').style.display = 'none';
     const docId = activeEditDocId || (activeCustomerGroup?.docs[0]?.id);
     if (docId) openJobDetailsEdit(docId);
   });
   document.getElementById('closeJobDetailsEditBtn')?.addEventListener('click', () => document.getElementById('jobDetailsEditModal').style.display = 'none');
   document.getElementById('backToCustDetailsBtn')?.addEventListener('click', () => {
+    persistJobDetailsForm();                                           // save before leaving
     document.getElementById('jobDetailsEditModal').style.display = 'none';
     if (activeJobDetailsDocId) openCustomerDetailsEdit(activeJobDetailsDocId);
   });
   document.getElementById('saveJobDetailsBtn')?.addEventListener('click', saveJobDetails);
   document.getElementById('nextToJobTermsBtn')?.addEventListener('click', () => {
-    const docId = activeJobDetailsDocId;
-    const doc = state.saved.find(d => d.id === docId);
-    if (!doc) return;
-    // Silently save job details before navigating
-    const items = [];
-    document.querySelectorAll('#jdeItemsList .jde-item-row').forEach(row => {
-      const name = (row.querySelector('.jde-item-name')?.value || '').trim();
-      const price = parseFloat(row.querySelector('.jde-item-price')?.value) || 0;
-      if (name || price) items.push({ id: uid(), name, unitPrice: price, unit: '', qty: 1 });
-    });
-    const notes = document.getElementById('jdeNotes')?.value || '';
-    const totalOverride = parseFloat(document.getElementById('jdeTotalOverride')?.value) || 0;
-    if (!doc.quote) doc.quote = {};
-    doc.quote.items = items;
-    doc.quote.notes = notes;
-    if (items.length > 0) {
-      const subtotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
-      const vatPct = parseFloat(doc.quote.vatRate) || 0;
-      doc.total = subtotal * (1 + vatPct / 100);
-    } else if (totalOverride > 0) {
-      doc.total = totalOverride;
-    }
-    doc.custName = buildCustName(doc.quote);
-    save();
-    refreshSavedDocs();
+    persistJobDetailsForm();                                           // save before leaving
     document.getElementById('jobDetailsEditModal').style.display = 'none';
-    openJobTermsEdit(docId);
+    if (activeJobDetailsDocId) openJobTermsEdit(activeJobDetailsDocId);
   });
   document.getElementById('clientPickerNewCustomerBtn')?.addEventListener('click', createNewCustomerFromPicker);
   document.getElementById('editChoiceMoneyBtn')?.addEventListener('click', () => {
@@ -2960,12 +3008,13 @@ function setupModals() {
   document.getElementById('confirmMarkPaidBtn').addEventListener('click', () => {
     const doc = state.saved.find(d => d.id === activeDocId);
     if (!doc) return;
-    const amount = parseFloat(getVal('mpAmount')) || 0;
-    const date   = getVal('mpDate') || todayStr();
+    const amount      = parseFloat(getVal('mpAmount')) || 0;
+    const date        = getVal('mpDate') || todayStr();
+    const paymentType = getVal('mpPaymentType') || 'Full Payment';
     if (amount <= 0) { toast('Enter an amount received.', 'error'); return; }
     // Migrate legacy single-payment docs
     if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
-    doc.payments.push({ amount, date });
+    doc.payments.push({ amount, date, type: paymentType });
     sortPaymentsByDate(doc.payments);
     recalcDocPayments(doc);
     save();
@@ -3205,8 +3254,11 @@ function previewInvoice(docId) {
     activeDocId = id;
     const doc = state.saved.find(d => d.id === id);
     if (!doc) return;
-    const invRef  = doc.invoiceRef || doc.ref || nextRef('INV', KEY_INV);
-    const dueDate = doc.invoiceDueDate || addDays(todayStr(), 30);
+    const invRef     = doc.invoiceRef || doc.ref || nextRef('INV', KEY_INV);
+    const _t         = (doc.quote?.selectedTerms || []);
+    const _tDays     = _t.includes('payment30') ? 30 : _t.includes('payment14') ? 14 : _t.includes('payment7') ? 7 : 30;
+    const _base      = doc.jobCompletedDate || todayStr();
+    const dueDate    = doc.invoiceDueDate || addDays(_base, _tDays);
     const html = buildDocHtml(doc, 'invoice', { invRef, invDate: todayStr(), dueDate });
     openPreview(html, 'invoice', id);
   });
@@ -3220,7 +3272,11 @@ function openInvoiceModal(docId) {
   const q = doc.quote || {};
   setVal('invRef',     invRef);
   setVal('invDate',    todayStr());
-  setVal('invDueDate', doc.invoiceDueDate || addDays(todayStr(), 30));
+  // Auto-calculate due date: completion date + payment terms days (falls back to today + 30)
+  const _terms      = (doc.quote?.selectedTerms || []);
+  const _termDays   = _terms.includes('payment30') ? 30 : _terms.includes('payment14') ? 14 : _terms.includes('payment7') ? 7 : 30;
+  const _baseDate   = doc.jobCompletedDate || todayStr();
+  setVal('invDueDate', doc.invoiceDueDate || addDays(_baseDate, _termDays));
   setVal('invCustFirst', q.custFirstName || '');
   setVal('invCustLast', q.custLastName || '');
   const storedMethods = Array.isArray(doc.invoicePayMethods) ? doc.invoicePayMethods
@@ -3943,9 +3999,26 @@ function buildCustomerJobSection(d) {
       <div class="cdv-total-row cdv-grand-total"><span>Total</span><span>${fmtPrice(d.total || 0)}</span></div>
     </div>`;
 
+  // Payment due date & dynamic status badge
+  const payTerms    = (q.selectedTerms || []);
+  const payTermDays = payTerms.includes('payment30') ? 30 : payTerms.includes('payment14') ? 14 : payTerms.includes('payment7') ? 7 : 30;
+  const payDueStr   = d.invoiceDueDate || (d.jobCompletedDate ? addDays(d.jobCompletedDate, payTermDays) : '');
+  const todayNow    = todayStr();
+  let payStatusHtml = '';
+  if (outstanding === 0 && totalPaid > 0) {
+    payStatusHtml = `<span class="cdv-pay-status cdv-pay-status-paid">Paid in full</span>`;
+  } else if (payDueStr && todayNow > payDueStr) {
+    payStatusHtml = `<span class="cdv-pay-status cdv-pay-status-overdue">Payment overdue</span>`;
+  } else if (payDueStr) {
+    payStatusHtml = `<span class="cdv-pay-status cdv-pay-status-due">Due ${formatDate(payDueStr)}</span>`;
+  }
+
+  const payIcon = `<svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`;
+  const payLabelRow = `<div class="cdv-section-label cdv-section-label-row"><span>${payIcon} Payments <span class="nav-beta-badge">Beta</span></span>${payStatusHtml}</div>`;
+
   const paymentsHtml = payments.length ? `
     <div class="cdv-section">
-      <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</div>
+      ${payLabelRow}
       ${payments.map((p, i) => `
         <div class="cdv-payment-row">
           <span class="cdv-pay-num">Payment ${i + 1}</span>
@@ -3957,7 +4030,7 @@ function buildCustomerJobSection(d) {
         : `<div class="cdv-paid-stamp">✓ Paid in full</div>`}
     </div>` : `
     <div class="cdv-section">
-      <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Payments</div>
+      ${payLabelRow}
       <p class="cdv-empty">No payment recorded yet. To update payment click Update.</p>
     </div>`;
 
@@ -3994,29 +4067,66 @@ function buildCustomerJobSection(d) {
     : (d.invoiceSent || qTypeLower === 'invoice')            ? 2
     : (qTypeLower === 'quote')                               ? 1
     :                                                          0;
-  const stages = [
-    { letter: 'A', label: 'Estimate', action: 'quote'   },
-    { letter: 'B', label: 'Quote',    action: 'quote'   },
-    { letter: 'C', label: 'Invoice',  action: 'invoice' },
-    { letter: 'D', label: 'Receipt',  action: 'receipt' },
+  const tubeStages = [
+    { letter: 'A', label: 'Estimate', action: 'quote',   cls: 'stage-estimate' },
+    { letter: 'B', label: 'Quote',    action: 'quote',   cls: 'stage-quote'    },
+    { letter: 'C', label: 'Invoice',  action: 'invoice', cls: 'stage-invoice'  },
+    { letter: 'D', label: 'Receipt',  action: 'receipt', cls: 'stage-receipt'  },
   ];
   const progressionHtml = `
-    <div class="cdv-progression">
+    <div class="cdv-tube-map">
       <div class="cdv-prog-label">Job Status</div>
-      <div class="cdv-prog-btns">
-        ${stages.map((s, i) => {
-          const stageNames = ['stage-estimate','stage-quote','stage-invoice','stage-receipt'];
-          const cls = i < stageRank ? 'cdv-prog-done'
-                    : i === stageRank ? 'cdv-prog-active'
-                    : '';
-          return `<button type="button"
-            class="cdv-prog-btn ${cls} ${stageNames[i]}"
-            data-prog-doc-id="${esc(d.id)}"
-            data-prog-action="${s.action}">
-            <span class="cdv-prog-letter">${s.letter}</span>
-            <span class="cdv-prog-text">${s.label}</span>
-          </button>`;
+      <div class="cdv-tube-row">
+        ${tubeStages.map((s, i) => {
+          const isDone   = i < stageRank;
+          const isActive = i === stageRank;
+          const dotCls   = isDone ? 'done' : isActive ? `active ${s.cls}` : '';
+          const lblCls   = (isDone || isActive) ? 'lit' : '';
+          const seg      = i < tubeStages.length - 1
+            ? `<div class="cdv-tube-seg${isDone ? ' done' : ''}"></div>`
+            : '';
+          return `<div class="cdv-tube-station">
+            <button type="button" class="cdv-tube-dot ${dotCls}"
+              data-prog-doc-id="${esc(d.id)}"
+              data-prog-action="${s.action}">${s.letter}</button>
+            <span class="cdv-tube-lbl ${lblCls}">${s.label}</span>
+          </div>${seg}`;
         }).join('')}
+        <div class="cdv-tube-arrow-end">&#8250;</div>
+      </div>
+    </div>`;
+
+  const scheduleHtml = `
+    <div class="cdv-job-schedule">
+      <div class="cdv-schedule-row">
+        <label class="cdv-accepted-label">
+          <input type="checkbox" class="cdv-accepted-cb" data-doc-id="${esc(d.id)}"${d.jobAccepted ? ' checked' : ''}>
+          Job Accepted
+        </label>
+        <div class="cdv-start-date-wrap"${!d.jobAccepted ? ' style="display:none"' : ''}>
+          <span class="cdv-start-date-label">Date Started</span>
+          <input type="date" class="cdv-start-date-input" data-doc-id="${esc(d.id)}"
+            value="${esc(d.jobStartDate || '')}">
+        </div>
+      </div>
+      <div class="cdv-schedule-row">
+        <label class="cdv-accepted-label">
+          <input type="checkbox" class="cdv-completed-cb" data-doc-id="${esc(d.id)}"${d.jobCompleted ? ' checked' : ''}>
+          Job Completed
+        </label>
+        <div class="cdv-start-date-wrap"${!(d.jobCompleted && d.jobCompletedDate) ? ' style="display:none"' : ''}>
+          <span class="cdv-start-date-label">Date Completed</span>
+          <input type="date" class="cdv-completed-date-input" data-doc-id="${esc(d.id)}"
+            value="${esc(d.jobCompletedDate || '')}">
+        </div>
+      </div>
+      <div class="cdv-completed-prompt" data-doc-id="${esc(d.id)}"${!(d.jobCompleted && !d.jobCompletedDate) ? ' style="display:none"' : ''}>
+        <p class="cdv-prompt-msg">Please tell me when the job was completed so I can help you track when payment is due.</p>
+        <div class="cdv-prompt-actions">
+          <button type="button" class="cdv-today-btn" data-doc-id="${esc(d.id)}">Today</button>
+          <span class="cdv-prompt-or">or select a date</span>
+          <input type="date" class="cdv-prompt-date" data-doc-id="${esc(d.id)}">
+        </div>
       </div>
     </div>`;
 
@@ -4032,6 +4142,7 @@ function buildCustomerJobSection(d) {
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
       ${progressionHtml}
+      ${scheduleHtml}
       ${paymentsHtml}
       ${notesHtml}
       ${privateHtml}
@@ -4060,10 +4171,31 @@ function renderSingleCustomerDashboard(group, groups) {
   const titleEl = document.getElementById('customerDashboardTitle');
   if (titleEl) titleEl.textContent = group.name;
 
+  // Contact action buttons (Email / WhatsApp / Phone)
+  const dashPhone = q.custPhone || '';
+  const dashEmail = q.custEmail || '';
+  const dashDocId = firstDoc.id;
+  const DSVG_EMAIL = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
+  const DSVG_WA    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  const DSVG_PHONE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.44 2 2 0 0 1 3.57 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.29 6.29l1.12-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+  const contactBtns = `
+    <div class="cdv-contact-btns">
+      <button type="button" class="cal-icon-btn cal-icon-email cdv-labeled${!dashEmail ? ' cal-btn-disabled' : ''}"
+        ${dashEmail ? `onclick="openCalEmailComposer('${esc(dashDocId)}','dashboard','email')"` : ''}
+        title="${dashEmail ? 'Email ' + esc(group.name) : 'No email address saved'}">${DSVG_EMAIL}<span>Email</span></button>
+      <button type="button" class="cal-icon-btn cal-icon-whatsapp cdv-labeled${!dashPhone ? ' cal-btn-disabled' : ''}"
+        ${dashPhone ? `onclick="openCalEmailComposer('${esc(dashDocId)}','dashboard','whatsapp')"` : ''}
+        title="${dashPhone ? 'WhatsApp ' + esc(group.name) : 'No phone number saved'}">${DSVG_WA}<span>WhatsApp</span></button>
+      ${dashPhone
+        ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Phone</span></a>`
+        : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Phone</span></button>`}
+    </div>`;
+
   // contentHtml = pure dashboard content (used for download — no buttons)
   const contentHtml = `
     <div class="customer-dashboard-card printable-customer-dashboard">
       <div class="cdv-header">
+        ${contactBtns}
         ${contactLines ? `<div class="cdv-contact">${contactLines}</div>` : ''}
       </div>
       <div class="cdv-summary-bar">
@@ -4113,6 +4245,105 @@ function renderSingleCustomerDashboard(group, groups) {
       if      (action === 'quote')   openQuoteModal(docId);
       else if (action === 'invoice') previewInvoice(docId);
     }
+  });
+
+  // Job Accepted checkbox — show/hide date, auto-fill today, save
+  body.addEventListener('change', e => {
+    const cb = e.target.closest('.cdv-accepted-cb');
+    if (!cb) return;
+    const doc = state.saved.find(d => d.id === cb.dataset.docId);
+    if (!doc) return;
+    doc.jobAccepted = cb.checked;
+    const wrap = cb.closest('.cdv-schedule-row')?.querySelector('.cdv-start-date-wrap');
+    if (wrap) {
+      wrap.style.display = cb.checked ? '' : 'none';
+      if (cb.checked) {
+        const inp = wrap.querySelector('.cdv-start-date-input');
+        if (inp && !inp.value) { inp.value = todayStr(); doc.jobStartDate = inp.value; }
+      }
+    }
+    save();
+  });
+
+  // Helper: date confirmed — hide prompt, show compact date wrap
+  function applyCompletedDate(docId, dateStr) {
+    const doc = state.saved.find(d => d.id === docId);
+    if (!doc) return;
+    doc.jobCompleted      = true;
+    doc.jobCompletedDate  = dateStr;
+    save();
+    const prompt   = body.querySelector(`.cdv-completed-prompt[data-doc-id="${docId}"]`);
+    const cb       = body.querySelector(`.cdv-completed-cb[data-doc-id="${docId}"]`);
+    const dateWrap = cb?.closest('.cdv-schedule-row')?.querySelector('.cdv-start-date-wrap');
+    if (prompt)   prompt.style.display   = 'none';
+    if (dateWrap) {
+      dateWrap.style.display = '';
+      const inp = dateWrap.querySelector('.cdv-completed-date-input');
+      if (inp) inp.value = dateStr;
+    }
+  }
+
+  // Job Completed checkbox
+  body.addEventListener('change', e => {
+    const cb = e.target.closest('.cdv-completed-cb');
+    if (!cb) return;
+    const docId = cb.dataset.docId;
+    const doc   = state.saved.find(d => d.id === docId);
+    if (!doc) return;
+    doc.jobCompleted = cb.checked;
+    const prompt   = body.querySelector(`.cdv-completed-prompt[data-doc-id="${docId}"]`);
+    const dateWrap = cb.closest('.cdv-schedule-row')?.querySelector('.cdv-start-date-wrap');
+    if (cb.checked) {
+      if (doc.jobCompletedDate) {
+        // Date already stored — just show the compact wrap
+        if (dateWrap) dateWrap.style.display = '';
+        if (prompt)   prompt.style.display   = 'none';
+      } else {
+        // No date yet — show the prompt
+        if (dateWrap) dateWrap.style.display = 'none';
+        if (prompt)   prompt.style.display   = '';
+      }
+    } else {
+      // Unchecked — hide everything
+      if (dateWrap) dateWrap.style.display = 'none';
+      if (prompt)   prompt.style.display   = 'none';
+      doc.jobCompletedDate = '';
+    }
+    save();
+  });
+
+  // "Today" button inside the completion prompt
+  body.addEventListener('click', e => {
+    const btn = e.target.closest('.cdv-today-btn');
+    if (!btn) return;
+    applyCompletedDate(btn.dataset.docId, todayStr());
+  });
+
+  // Manual date pick from the prompt calendar
+  body.addEventListener('change', e => {
+    const inp = e.target.closest('.cdv-prompt-date');
+    if (!inp || !inp.value) return;
+    applyCompletedDate(inp.dataset.docId, inp.value);
+  });
+
+  // Start Date input — save on change
+  body.addEventListener('change', e => {
+    const inp = e.target.closest('.cdv-start-date-input');
+    if (!inp) return;
+    const doc = state.saved.find(d => d.id === inp.dataset.docId);
+    if (!doc) return;
+    doc.jobStartDate = inp.value || '';
+    save();
+  });
+
+  // Completed Date input (compact view) — save on change
+  body.addEventListener('change', e => {
+    const inp = e.target.closest('.cdv-completed-date-input');
+    if (!inp) return;
+    const doc = state.saved.find(d => d.id === inp.dataset.docId);
+    if (!doc) return;
+    doc.jobCompletedDate = inp.value || '';
+    save();
   });
 
 }
@@ -4195,10 +4426,11 @@ function openCustomerDetailsEdit(docId) {
   document.getElementById('customerDetailsEditModal').style.display = 'flex';
 }
 
-function saveCustomerDetails() {
+// Persist whatever is currently in the Customer Details form — no UI side-effects.
+// Called by both the Save button and any Next button that moves past this screen.
+function persistCustomerDetailsForm() {
   const group = activeCustomerGroup;
   if (!group) return;
-  // Customer-level fields — applied to every doc in the group
   const sharedUpdates = {
     custTitle:     getVal('cdeCustTitle'),
     custFirstName: getVal('cdeCustFirst'),
@@ -4208,32 +4440,30 @@ function saveCustomerDetails() {
     custPhone:     getVal('cdeCustPhone'),
     custEmail:     getVal('cdeCustEmail'),
   };
-  // Private notes are per-job — only save to the specific doc that was edited
   const privateNotes = getVal('cdeCustPrivateNotes');
-  const targetDocId = activeEditDocId || (group.docs[0] && group.docs[0].id);
-
+  const targetDocId  = activeEditDocId || (group.docs[0] && group.docs[0].id);
   group.docs.forEach(doc => {
     if (!doc.quote) doc.quote = {};
     Object.assign(doc.quote, sharedUpdates);
-    // Only update private notes on the specific job that was clicked
-    if (doc.id === targetDocId) {
-      doc.quote.privateNotes = privateNotes;
-    }
+    if (doc.id === targetDocId) doc.quote.privateNotes = privateNotes;
     doc.custName = buildCustName(doc.quote);
   });
-  // Update in-memory group name for re-render
-  const newName = buildCustName(sharedUpdates).trim() || group.name;
-  group.name = newName;
+  group.name = buildCustName(sharedUpdates).trim() || group.name;
   save();
   refreshSavedDocs();
+}
+
+function saveCustomerDetails() {
+  persistCustomerDetailsForm();
 
   // Close edit modals and return to dashboard
   document.getElementById('customerDetailsEditModal').style.display = 'none';
-  document.getElementById('customerEditChoiceModal').style.display = 'none';
+  document.getElementById('customerEditChoiceModal').style.display  = 'none';
 
   // Re-render and show the customer dashboard
+  const group        = activeCustomerGroup;
   const updatedGroups = buildCustomerGroups();
-  const updatedGroup = updatedGroups.find(g => g.docs.some(d => group.docs.some(gd => gd.id === d.id))) || group;
+  const updatedGroup  = updatedGroups.find(g => g.docs.some(d => group.docs.some(gd => gd.id === d.id))) || group;
   activeCustomerGroup = updatedGroup;
   renderSingleCustomerDashboard(updatedGroup, updatedGroups);
   document.getElementById('customerDashboardModal').style.display = 'flex';
@@ -4349,23 +4579,18 @@ function jteUpdateTotals() {
   document.getElementById('jteVatRow').style.display      = vatAmt > 0 ? '' : 'none';
 }
 
-function saveJobTermsEdit() {
+// Pure data-save for the Job Terms form — no UI side-effects.
+function persistJobTermsForm() {
   const docId = activeJobTermsDocId;
-  const doc = state.saved.find(d => d.id === docId);
+  const doc   = state.saved.find(d => d.id === docId);
   if (!doc) return;
   if (!doc.quote) doc.quote = {};
-
-  // Doc type
   const typeEl = document.querySelector('input[name="jteDocType"]:checked');
   if (typeEl) { doc.quote.type = typeEl.value; doc.type = typeEl.value; }
-
-  // Discount
   const discSel = document.getElementById('jteDiscount');
   doc.quote.discount = discSel.value === 'custom'
     ? (parseFloat(document.getElementById('jteDiscountCustom').value) || 0)
     : parseFloat(discSel.value) || 0;
-
-  // VAT
   const vatSel = document.getElementById('jteVat');
   if (vatSel.value === 'custom') {
     doc.quote.vatRate   = 'custom';
@@ -4374,33 +4599,32 @@ function saveJobTermsEdit() {
     doc.quote.vatRate   = vatSel.value;
     doc.quote.vatCustom = '';
   }
-
-  // Valid For
   const validSel = document.getElementById('jteValidFor');
   if (validSel.value === 'custom') {
-    doc.quote.validFor   = 'custom';
+    doc.quote.validFor    = 'custom';
     doc.quote.validCustom = document.getElementById('jteValidCustom').value || '';
   } else {
-    doc.quote.validFor   = validSel.value;
+    doc.quote.validFor    = validSel.value;
     doc.quote.validCustom = '';
   }
-
-  // Terms
   doc.quote.selectedTerms = [...document.querySelectorAll('input[name="jteTerms"]:checked')].map(cb => cb.value);
   doc.quote.customTerms   = document.getElementById('jteCustomTerms').value || '';
-
-  // Signature
-  doc.quote.authSig = document.getElementById('jteAuthSig').value || '';
-
-  // Recalculate total
-  const subtotal = jteGetSubtotal();
-  const discPct  = parseFloat(doc.quote.discount) || 0;
+  doc.quote.authSig       = document.getElementById('jteAuthSig').value || '';
+  const subtotal  = jteGetSubtotal();
+  const discPct   = parseFloat(doc.quote.discount) || 0;
   const afterDisc = subtotal * (1 - discPct / 100);
   const vatRate   = doc.quote.vatRate === 'custom' ? (parseFloat(doc.quote.vatCustom) || 0) : (parseFloat(doc.quote.vatRate) || 0);
   doc.total = afterDisc * (1 + vatRate / 100);
-
   save();
   refreshSavedDocs();
+}
+
+function saveJobTermsEdit() {
+  persistJobTermsForm();
+  const docId = activeJobTermsDocId;
+  const doc   = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+
   document.getElementById('jobTermsEditModal').style.display = 'none';
 
   // Re-render and show customer dashboard
@@ -4421,6 +4645,7 @@ function setupJobTermsEdit() {
     document.getElementById('jobTermsEditModal').style.display = 'none';
   });
   document.getElementById('backToJobDetailsFromTermsBtn')?.addEventListener('click', () => {
+    persistJobTermsForm();                                             // save before leaving
     document.getElementById('jobTermsEditModal').style.display = 'none';
     if (activeJobTermsDocId) openJobDetailsEdit(activeJobTermsDocId);
   });
@@ -4946,42 +5171,42 @@ function jdeAddItem() {
   row.querySelector('.jde-item-name').focus();
 }
 
-function saveJobDetails() {
+// Pure data-save for the Job Details form — no UI side-effects.
+function persistJobDetailsForm() {
   const docId = activeJobDetailsDocId;
   const doc = state.saved.find(d => d.id === docId);
   if (!doc) return;
-
-  // Collect items
   const items = [];
   document.querySelectorAll('#jdeItemsList .jde-item-row').forEach(row => {
-    const name = (row.querySelector('.jde-item-name')?.value || '').trim();
+    const name  = (row.querySelector('.jde-item-name')?.value  || '').trim();
     const price = parseFloat(row.querySelector('.jde-item-price')?.value) || 0;
-    if (name || price) {
-      items.push({ id: uid(), name, unitPrice: price, unit: '', qty: 1 });
-    }
+    if (name || price) items.push({ id: uid(), name, unitPrice: price, unit: '', qty: 1 });
   });
-
-  const notes = document.getElementById('jdeNotes')?.value || '';
+  const notes         = document.getElementById('jdeNotes')?.value || '';
   const totalOverride = parseFloat(document.getElementById('jdeTotalOverride')?.value) || 0;
-
   if (!doc.quote) doc.quote = {};
   doc.quote.items = items;
   doc.quote.notes = notes;
-
-  // Use item totals if items present; otherwise use the manual total override
   if (items.length > 0) {
-    const subtotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
-    const discPct = parseFloat(doc.quote.discount) || 0;
+    const subtotal  = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
+    const discPct   = parseFloat(doc.quote.discount) || 0;
     const afterDisc = subtotal * (1 - discPct / 100);
-    const vatPct = parseFloat(doc.quote.vatRate) || 0;
+    const vatPct    = parseFloat(doc.quote.vatRate)   || 0;
     doc.total = afterDisc * (1 + vatPct / 100);
   } else if (totalOverride > 0) {
     doc.total = totalOverride;
   }
   doc.custName = buildCustName(doc.quote);
-
   save();
   refreshSavedDocs();
+}
+
+function saveJobDetails() {
+  persistJobDetailsForm();
+  const docId = activeJobDetailsDocId;
+  const doc   = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+
   document.getElementById('jobDetailsEditModal').style.display = 'none';
 
   // Keep customer dashboard data fresh in the background
@@ -5012,7 +5237,7 @@ const DOC_CSS = `
   .doc-logo{display:block;height:100%;width:auto;max-width:140px;min-height:40px;object-fit:contain}
   .doc-logo-placeholder{width:64px;height:100%;min-height:48px;border:1.5px dashed rgba(255,255,255,0.45);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:rgba(255,255,255,0.65)}
   /* Business name — always one line, font scales down to fit */
-  .doc-biz-name{font-weight:700;text-align:center;line-height:1.15;white-space:nowrap;overflow:hidden;font-size:2rem}
+  .doc-biz-name{font-weight:700;text-align:center;line-height:1.2;white-space:normal;word-break:break-word;font-size:2rem}
   /* Doc type badge — background set inline with accent colour */
   .doc-type-label{font-size:1.05rem;font-weight:800;text-align:center;text-transform:uppercase;letter-spacing:0.07em;line-height:1.2;padding:8px 14px;border-radius:7px;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
@@ -5268,7 +5493,18 @@ function buildDocHtml(doc, docType, extra = {}) {
   // ── Invoice / receipt extras ────────────────────────────────────
   let extraHtml = '';
   if (docType === 'invoice') {
-    if (extra.dueDate) extraHtml += `<div class="section"><h3>Payment Due</h3><p>${formatDate(extra.dueDate)}</p></div>`;
+    // Prior payments (deposits / part payments made before invoice was generated)
+    const priorPayments = getDocPayments(doc).filter(p => p.amount > 0);
+    if (priorPayments.length > 0) {
+      const totalPrior = priorPayments.reduce((s, p) => s + (p.amount || 0), 0);
+      const balance    = Math.max(0, (doc.total || 0) - totalPrior);
+      const payLines   = priorPayments.map(p => {
+        const label = p.type && p.type !== 'Full Payment' ? p.type : 'Payment Received';
+        return `${label}: <strong>${fmtPrice(p.amount)}</strong> on ${formatDate(p.date)}`;
+      }).join('<br>');
+      extraHtml += `<div class="section"><h3>Payments Already Received</h3><p>${payLines}</p><p style="margin-top:6px">Total Received: <strong>${fmtPrice(totalPrior)}</strong><br>Balance Due: <strong>${fmtPrice(balance)}</strong></p></div>`;
+    }
+    if (extra.dueDate) extraHtml += `<div class="section"><h3>Payment Due</h3><p>${formatDate(extra.dueDate)}</p>${refLabel ? `<p style="margin-top:6px;font-size:0.85em;color:#666">Please use <strong>${esc(refLabel)}</strong> as your payment reference to help us process your payment quickly.</p>` : '<p style="margin-top:6px;font-size:0.85em;color:#666">Please use the invoice number as your payment reference to help us process your payment quickly.</p>'}</div>`;
     extraHtml += buildPaymentSection(co, docType, extra.payMethod);
     if (extra.notes)   extraHtml += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
   } else if (docType === 'receipt') {
@@ -5708,4 +5944,578 @@ function addDays(dateStr, days) {
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+function formatWhatsAppNumber(phone) {
+  // Strip spaces, dashes, brackets, plus signs
+  let n = (phone || '').replace(/[\s\-().+]/g, '');
+  // UK number: leading 0 -> replace with country code 44
+  if (n.startsWith('0')) n = '44' + n.slice(1);
+  return n;
+}
+
+/* ===================================================
+   CALENDAR
+   =================================================== */
+
+const CAL_COLORS = {
+  startDate:  '#7D5730',  // walnut  — accepted job start date
+  completed:  '#6B7C5C',  // sage    — job completed
+  estimate:   '#E8B84B',  // gold    — estimate/quote awaiting response
+  invoiceDue: '#E67E22',  // orange  — invoice due soon
+  overdue:    '#C0392B',  // red     — invoice overdue
+  paid:       '#2E7D32',  // green   — payment received
+};
+
+let calCurrentYear  = new Date().getFullYear();
+let calCurrentMonth = new Date().getMonth(); // 0-indexed
+let calSelectedDate = null;
+
+// ---- Events map ----
+function getCalendarEvents() {
+  // Returns: { 'YYYY-MM-DD': [ { docId, type, color, label, custName, ref, doc } ] }
+  const events = {};
+
+  function addEvent(dateStr, ev) {
+    if (!dateStr || dateStr.length < 8) return;
+    if (!events[dateStr]) events[dateStr] = [];
+    events[dateStr].push(ev);
+  }
+
+  const today = todayStr();
+
+  (state.saved || []).forEach(d => {
+    const q = d.quote || {};
+    const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Unknown Customer';
+    const ref = d.invoiceRef || d.receiptRef || q.ref || d.ref || '-';
+    const base = { docId: d.id, custName, ref, doc: d };
+
+    // 1. Job start date (accepted jobs with a start date set)
+    if (d.jobAccepted && d.jobStartDate) {
+      addEvent(d.jobStartDate, { ...base, type: 'startDate', color: CAL_COLORS.startDate, label: 'Job Starts' });
+    }
+
+    // 1b. Job completion date
+    if (d.jobCompletedDate) {
+      addEvent(d.jobCompletedDate, { ...base, type: 'completed', color: CAL_COLORS.completed, label: 'Job Completed' });
+      // If invoice not yet sent, also mark the expected payment due date as a reminder
+      if (!d.invoiceSent && !d.paid) {
+        const terms    = (q.selectedTerms || []);
+        const termDays = terms.includes('payment30') ? 30 : terms.includes('payment14') ? 14 : terms.includes('payment7') ? 7 : 30;
+        const expDue   = addDays(d.jobCompletedDate, termDays);
+        addEvent(expDue, { ...base, type: 'invoiceDue', color: CAL_COLORS.invoiceDue, label: 'Invoice Not Yet Raised' });
+      }
+    }
+
+    // 2. Estimate / Quote — gold dot on doc creation date if not yet invoiced
+    if (!d.invoiceSent && !d.paid) {
+      const qType = (q.type || 'Estimate').toLowerCase();
+      if (qType === 'estimate' || qType === 'quote') {
+        const dateStr = q.date || d.date;
+        if (dateStr) {
+          addEvent(dateStr, { ...base, type: 'estimate', color: CAL_COLORS.estimate, label: qType === 'quote' ? 'Quote Sent' : 'Estimate Created' });
+        }
+      }
+    }
+
+    // 3. Invoice due date
+    if (d.invoiceSent && !d.paid && d.invoiceDueDate) {
+      const isOverdue = today > d.invoiceDueDate;
+      addEvent(d.invoiceDueDate, {
+        ...base,
+        type: isOverdue ? 'overdue' : 'invoiceDue',
+        color: isOverdue ? CAL_COLORS.overdue : CAL_COLORS.invoiceDue,
+        label: isOverdue ? 'Invoice Overdue' : 'Invoice Due',
+      });
+    }
+
+    // 4. Payment received dates — green dot
+    getDocPayments(d).forEach(p => {
+      if (p.amount > 0 && p.date) {
+        const lbl = p.type && p.type !== 'Full Payment' ? p.type + ' Received' : 'Payment Received';
+        addEvent(p.date, { ...base, type: 'paid', color: CAL_COLORS.paid, label: lbl });
+      }
+    });
+  });
+
+  return events;
+}
+
+// ---- Render the full calendar page ----
+function renderCalendar() {
+  const wrap = document.getElementById('calPageWrap');
+  if (!wrap) return;
+
+  const events  = getCalendarEvents();
+  const today   = todayStr();
+  const year    = calCurrentYear;
+  const month   = calCurrentMonth;
+
+  // --- Needs Attention panel ---
+  const attentionItems = [];
+  (state.saved || []).forEach(d => {
+    const q = d.quote || {};
+    const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Unknown Customer';
+    const ref = d.invoiceRef || d.receiptRef || q.ref || d.ref || '-';
+
+    if (d.invoiceSent && !d.paid && d.invoiceDueDate && today > d.invoiceDueDate) {
+      const days = Math.floor((new Date(today) - new Date(d.invoiceDueDate)) / 86400000);
+      attentionItems.push({ docId: d.id, custName, ref, color: CAL_COLORS.overdue, desc: `Invoice ${days} day${days === 1 ? '' : 's'} overdue`, doc: d, type: 'overdue' });
+    } else if (!d.invoiceSent && !d.paid && d.jobCompletedDate) {
+      // Job finished but no invoice sent — check if expected due date has passed
+      const terms    = (q.selectedTerms || []);
+      const termDays = terms.includes('payment30') ? 30 : terms.includes('payment14') ? 14 : terms.includes('payment7') ? 7 : 30;
+      const expDue   = addDays(d.jobCompletedDate, termDays);
+      if (today >= expDue) {
+        const days = Math.floor((new Date(today) - new Date(expDue)) / 86400000);
+        attentionItems.push({ docId: d.id, custName, ref, color: CAL_COLORS.invoiceDue, desc: `Job completed. Invoice not yet raised (${days === 0 ? 'due today' : days + ' day' + (days === 1 ? '' : 's') + ' overdue'})`, doc: d, type: 'invoiceDue' });
+      }
+    } else if (!d.invoiceSent && !d.paid) {
+      const qType = (q.type || '').toLowerCase();
+      const docDate = q.date || d.date;
+      if ((qType === 'estimate' || qType === 'quote') && docDate) {
+        const age = Math.floor((new Date(today) - new Date(docDate)) / 86400000);
+        if (age >= 7) {
+          attentionItems.push({ docId: d.id, custName, ref, color: CAL_COLORS.estimate, desc: `${qType === 'quote' ? 'Quote' : 'Estimate'} sent ${age} day${age === 1 ? '' : 's'} ago with no response yet`, doc: d, type: 'estimate' });
+        }
+      }
+    }
+  });
+
+  const attentionHtml = attentionItems.length ? `
+    <div class="cal-attention">
+      <div class="cal-attention-header" onclick="toggleCalAttention()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span class="cal-attention-title">Needs Attention</span>
+        <span class="cal-attention-badge">${attentionItems.length}</span>
+      </div>
+      <div class="cal-attention-body" id="calAttentionBody">
+        ${attentionItems.map(item => {
+          const phone = item.doc?.quote?.custPhone || '';
+          const email = item.doc?.quote?.custEmail || '';
+          const SVG_EMAIL_A = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
+          const SVG_WA_A    = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+          const SVG_PHONE_A = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.44 2 2 0 0 1 3.57 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.29 6.29l1.12-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+          return `<div class="cal-attention-item">
+            <div class="cal-attn-dot" style="background:${item.color}"></div>
+            <div class="cal-attn-content">
+              <div class="cal-attn-ref">${esc(item.ref)}</div>
+              <div class="cal-attn-name">${esc(item.custName)}</div>
+              <div class="cal-attn-desc">${esc(item.desc)}</div>
+            </div>
+            <div class="cal-attn-actions">
+              <button type="button" class="cal-icon-btn cal-icon-email${!email ? ' cal-btn-disabled' : ''}"
+                ${email ? `onclick="openCalEmailComposer('${esc(item.docId)}','${item.type}','email')"` : ''}
+                title="${email ? 'Email customer' : 'No email address saved'}">${SVG_EMAIL_A}</button>
+              <button type="button" class="cal-icon-btn cal-icon-whatsapp${!phone ? ' cal-btn-disabled' : ''}"
+                ${phone ? `onclick="openCalEmailComposer('${esc(item.docId)}','${item.type}','whatsapp')"` : ''}
+                title="${phone ? 'WhatsApp customer' : 'No phone number saved'}">${SVG_WA_A}</button>
+              ${phone
+                ? `<a href="tel:${esc(phone)}" class="cal-icon-btn cal-icon-phone" title="Call customer">${SVG_PHONE_A}</a>`
+                : `<button type="button" class="cal-icon-btn cal-icon-phone cal-btn-disabled" title="No phone number saved">${SVG_PHONE_A}</button>`}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  // --- Month grid ---
+  const monthName = new Date(year, month, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  // UK weeks start Monday: Sun=0 -> offset 6, Mon=1 -> offset 0
+  let firstDow = new Date(year, month, 1).getDay();
+  firstDow = (firstDow + 6) % 7;
+  const daysInMonth    = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const dayHeaders     = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  const cells = [];
+  for (let i = firstDow - 1; i >= 0; i--) {
+    const d   = daysInPrevMonth - i;
+    const pm  = month === 0 ? 11 : month - 1;
+    const py  = month === 0 ? year - 1 : year;
+    cells.push({ day: d, dateStr: `${py}-${String(pm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`, other: true });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ day: d, dateStr: `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`, other: false });
+  }
+  const rem = cells.length % 7;
+  if (rem > 0) {
+    const fill = 7 - rem;
+    for (let d = 1; d <= fill; d++) {
+      const nm = month === 11 ? 0 : month + 1;
+      const ny = month === 11 ? year + 1 : year;
+      cells.push({ day: d, dateStr: `${ny}-${String(nm+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`, other: true });
+    }
+  }
+
+  const gridHtml = cells.map(cell => {
+    const evs        = events[cell.dateStr] || [];
+    const isToday    = cell.dateStr === today;
+    const isSelected = cell.dateStr === calSelectedDate;
+    // Deduplicate dot colours so we don't show 5 green dots for 5 payments
+    const uniqueColors = [...new Set(evs.map(e => e.color))];
+    const dots = uniqueColors.map(c => `<div class="cal-dot" style="background:${c}"></div>`).join('');
+    return `<div class="cal-cell${cell.other ? ' other-month' : ''}${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}${evs.length ? ' has-events' : ''}"
+      onclick="openCalDayPanel('${cell.dateStr}')">
+      <div class="cal-day-num">${cell.day}</div>
+      ${dots ? `<div class="cal-dots">${dots}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const monthHtml = `
+    <div class="cal-month-card">
+      <div class="cal-month-nav">
+        <button class="cal-nav-btn" onclick="calChangeMonth(-1)" aria-label="Previous month">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span class="cal-month-title">${monthName}</span>
+        <button class="cal-nav-btn" onclick="calChangeMonth(1)" aria-label="Next month">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+      <div class="cal-grid-wrap">
+        <div class="cal-day-headers">${dayHeaders.map(h => `<div class="cal-day-header">${h}</div>`).join('')}</div>
+        <div class="cal-grid">${gridHtml}</div>
+      </div>
+    </div>`;
+
+  // --- Day panel ---
+  const dayPanelHtml = calSelectedDate
+    ? buildCalDayPanel(calSelectedDate, events[calSelectedDate] || [])
+    : '';
+
+  // --- Legend ---
+  const legendHtml = `
+    <div class="cal-legend">
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:${CAL_COLORS.startDate}"></div> Job Start</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:${CAL_COLORS.completed}"></div> Job Completed</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:${CAL_COLORS.estimate}"></div> Estimate/Quote</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:${CAL_COLORS.invoiceDue}"></div> Invoice Due</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:${CAL_COLORS.overdue}"></div> Overdue</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:${CAL_COLORS.paid}"></div> Payment</div>
+    </div>`;
+
+  wrap.innerHTML = attentionHtml + monthHtml + dayPanelHtml + legendHtml;
+}
+
+function toggleCalAttention() {
+  const body = document.getElementById('calAttentionBody');
+  if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
+}
+
+function calChangeMonth(delta) {
+  calCurrentMonth += delta;
+  if (calCurrentMonth > 11) { calCurrentMonth = 0; calCurrentYear++; }
+  if (calCurrentMonth < 0)  { calCurrentMonth = 11; calCurrentYear--; }
+  renderCalendar();
+}
+
+function openCalDayPanel(dateStr) {
+  calSelectedDate = (calSelectedDate === dateStr) ? null : dateStr;
+  renderCalendar();
+  if (calSelectedDate) {
+    const panel = document.querySelector('.cal-day-panel');
+    if (panel) setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+  }
+}
+
+function buildCalDayPanel(dateStr, evs) {
+  const displayDate = new Date(dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  const SVG_EMAIL = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
+  const SVG_WA    = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  const SVG_PHONE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.44 2 2 0 0 1 3.57 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.29 6.29l1.12-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+
+  const eventsHtml = evs.length
+    ? evs.map(ev => {
+        const phone = ev.doc?.quote?.custPhone || '';
+        const email = ev.doc?.quote?.custEmail || '';
+        let desc = '';
+        if (ev.type === 'estimate')   desc = 'Follow up to check they have seen it';
+        if (ev.type === 'completed')  desc = 'Work finished. Raise invoice if not yet done';
+        if (ev.type === 'invoiceDue') desc = ev.label === 'Invoice Not Yet Raised' ? 'Job complete but invoice not yet sent' : 'Payment due today';
+        if (ev.type === 'overdue')    desc = 'Payment overdue';
+        if (ev.type === 'startDate')  desc = 'Job confirmed to start today';
+
+        const phoneBtn = phone
+          ? `<a href="tel:${esc(phone)}" class="cal-icon-btn cal-icon-phone" title="Call customer">${SVG_PHONE}</a>`
+          : `<button type="button" class="cal-icon-btn cal-icon-phone cal-btn-disabled" title="No phone number saved">${SVG_PHONE}</button>`;
+
+        return `<div class="cal-day-event">
+          <div class="cal-event-stripe" style="background:${ev.color}"></div>
+          <div class="cal-event-content">
+            <div class="cal-event-type">${esc(ev.label)}</div>
+            <div class="cal-event-name">${esc(ev.custName)}</div>
+            <div class="cal-event-ref">${esc(ev.ref)}</div>
+            ${desc ? `<div class="cal-event-desc">${esc(desc)}</div>` : ''}
+          </div>
+          <div class="cal-event-btns">
+            <div class="cal-icon-btns">
+              <button type="button" class="cal-icon-btn cal-icon-email${!email ? ' cal-btn-disabled' : ''}"
+                ${email ? `onclick="openCalEmailComposer('${esc(ev.docId)}','${ev.type}','email')"` : ''}
+                title="${email ? 'Email customer' : 'No email address saved'}">${SVG_EMAIL}</button>
+              <button type="button" class="cal-icon-btn cal-icon-whatsapp${!phone ? ' cal-btn-disabled' : ''}"
+                ${phone ? `onclick="openCalEmailComposer('${esc(ev.docId)}','${ev.type}','whatsapp')"` : ''}
+                title="${phone ? 'WhatsApp customer' : 'No phone number saved'}">${SVG_WA}</button>
+              ${phoneBtn}
+            </div>
+            <button type="button" class="cal-view-cust-btn" onclick="openCustomerDashboardForDoc('${esc(ev.docId)}')">View Customer</button>
+          </div>
+        </div>`;
+      }).join('')
+    : `<p class="cal-day-empty">Nothing on this day.</p>`;
+
+  return `<div class="cal-day-panel">
+    <div class="cal-day-panel-header">
+      <span class="cal-day-panel-title">${esc(displayDate)}</span>
+      <button class="cal-day-panel-close" onclick="openCalDayPanel('${esc(dateStr)}')">&times;</button>
+    </div>
+    ${eventsHtml}
+  </div>`;
+}
+
+// ---- Email / WhatsApp composer ----
+let calEmailDocId = null;
+let calEmailSelectedTemplate = null;
+let calEmailAddr = '';
+let calEmailChannel = 'email';   // 'email' | 'whatsapp'
+let calEmailPhone = '';
+
+function openCalEmailComposer(docId, eventType, channel) {
+  const doc = (state.saved || []).find(d => d.id === docId);
+  if (!doc) return;
+
+  calEmailDocId  = docId;
+  calEmailChannel = channel || 'email';
+
+  const q          = doc.quote || {};
+  const co         = state.company || {};
+  const custFirst  = q.custFirstName || 'there';
+  const custName   = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Customer';
+  const traderName = [co.firstName, co.lastName].filter(Boolean).join(' ') || (co.firstName || 'your tradesperson');
+  const ref        = doc.invoiceRef || doc.receiptRef || q.ref || doc.ref || '';
+  const dueDate    = doc.invoiceDueDate ? formatDate(doc.invoiceDueDate) : 'as agreed';
+  const total      = fmtPrice(doc.total || 0);
+  const jobDesc    = (q.items || []).map(i => i.name).filter(Boolean).join(', ') || 'your recent work';
+  const qTypeName  = (q.type || 'Estimate').toLowerCase();
+  calEmailAddr     = q.custEmail || '';
+  calEmailPhone    = formatWhatsAppNumber(q.custPhone || '');
+
+  const templates = [
+    {
+      id: 'follow_up',
+      title: 'Quote Follow-up',
+      desc: 'Check if they\'ve had a chance to look it over',
+      subject: `Following up on your ${qTypeName} — ${ref}`,
+      body:
+`Hi ${custFirst},
+
+Just following up on the ${qTypeName} I sent over for ${jobDesc}.
+
+Reference: ${ref}
+Total: ${total}
+
+Have you had a chance to look it over? Happy to answer any questions or tweak anything.
+
+Looking forward to hearing from you.
+
+Thanks,
+${traderName}`,
+    },
+    {
+      id: 'invoice_reminder',
+      title: 'Invoice Reminder',
+      desc: 'A friendly nudge that payment is due or overdue',
+      subject: `Invoice reminder — ${ref}`,
+      body:
+`Hi ${custFirst},
+
+Just a friendly reminder that invoice ${ref} for ${total} is due ${dueDate}.
+
+If you've already sent payment please ignore this. Any questions, just give me a shout.
+
+Thanks for your business,
+${traderName}`,
+    },
+    {
+      id: 'job_confirmed',
+      title: 'Job Confirmation',
+      desc: 'Let them know the job is confirmed and you\'re ready',
+      subject: `Your job is confirmed — ${ref}`,
+      body:
+`Hi ${custFirst},
+
+Great news — I'm confirmed to carry out the work for ${jobDesc}.
+
+Reference: ${ref}
+Total: ${total}
+
+I'll be in touch with the exact start details. If you need anything before then, just reply here or give me a call.
+
+Looking forward to working with you.
+
+${traderName}`,
+    },
+    {
+      id: 'payment_thanks',
+      title: 'Payment Thanks',
+      desc: 'A warm thank-you once the money comes in',
+      subject: `Payment received, thank you! (${ref})`,
+      body:
+`Hi ${custFirst},
+
+Thank you for your payment for ${ref}. Really appreciate it.
+
+It was a pleasure working with you. If you ever need anything else, don't hesitate to get in touch.
+
+Thanks again,
+${traderName}`,
+    },
+  ];
+
+  // Pre-select the most relevant template
+  const defaultMap = {
+    estimate:   'follow_up',
+    invoiceDue: 'invoice_reminder',
+    overdue:    'invoice_reminder',
+    paid:       'payment_thanks',
+    startDate:  'job_confirmed',
+  };
+  const defaultId = defaultMap[eventType] || 'follow_up';
+  calEmailSelectedTemplate = templates.find(t => t.id === defaultId) || templates[0];
+
+  // Update modal title and send button based on channel
+  const titleEl = document.getElementById('calEmailModalTitle');
+  const sendBtn = document.getElementById('sendCalEmailBtn');
+  if (calEmailChannel === 'whatsapp') {
+    if (titleEl) titleEl.textContent = 'WhatsApp Templates';
+    if (sendBtn) sendBtn.textContent = 'Open in WhatsApp';
+  } else {
+    if (titleEl) titleEl.textContent = 'Email Templates';
+    if (sendBtn) sendBtn.textContent = 'Open in Email App';
+  }
+
+  const descEl = document.getElementById('calEmailModalDesc');
+  if (calEmailChannel === 'whatsapp') {
+    if (descEl) descEl.textContent = `To: ${custName}${calEmailPhone ? ' (' + (doc.quote?.custPhone || '') + ')' : '. No phone number saved.'}`;
+  } else {
+    if (descEl) descEl.textContent = `To: ${custName}${calEmailAddr ? ' (' + calEmailAddr + ')' : '. No email address saved.'}`;
+  }
+
+  const listEl = document.getElementById('calTemplateList');
+  if (listEl) {
+    listEl.innerHTML = templates.map(t => `
+      <button type="button" class="cal-template-btn${calEmailSelectedTemplate?.id === t.id ? ' selected' : ''}"
+        onclick="calSelectTemplate('${t.id}')"
+        data-tmpl-id="${t.id}"
+        data-subj="${encodeURIComponent(t.subject)}"
+        data-body="${encodeURIComponent(t.body)}">
+        <div class="cal-template-btn-title">${t.title}</div>
+        <div class="cal-template-btn-desc">${t.desc}</div>
+      </button>`).join('') + `
+      <button type="button" class="cal-template-btn${calEmailSelectedTemplate?.id === 'custom' ? ' selected' : ''}"
+        onclick="calSelectTemplate('custom')"
+        data-tmpl-id="custom" data-subj="" data-body="">
+        <div class="cal-template-btn-title">Write Your Own</div>
+        <div class="cal-template-btn-desc">Opens your ${calEmailChannel === 'whatsapp' ? 'WhatsApp' : 'email'} app with a blank message</div>
+      </button>`;
+  }
+
+  updateCalEmailPreview();
+  document.getElementById('calEmailModal').style.display = 'flex';
+}
+
+function calSelectTemplate(templateId) {
+  // "Write Your Own" fires immediately without showing subject/body fields
+  if (templateId === 'custom') {
+    document.getElementById('calEmailModal').style.display = 'none';
+    if (calEmailChannel === 'whatsapp') {
+      if (!calEmailPhone) { showSavedPopup('No phone number saved for this customer.'); return; }
+      window.open('https://wa.me/' + calEmailPhone, '_blank');
+    } else {
+      if (!calEmailAddr) { showSavedPopup('No email address saved for this customer.'); return; }
+      window.location.href = 'mailto:' + calEmailAddr;
+    }
+    return;
+  }
+
+  document.querySelectorAll('.cal-template-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.tmplId === templateId);
+  });
+  const btn = document.querySelector(`.cal-template-btn[data-tmpl-id="${templateId}"]`);
+  if (btn) {
+    calEmailSelectedTemplate = {
+      id:      templateId,
+      subject: decodeURIComponent(btn.dataset.subj || ''),
+      body:    decodeURIComponent(btn.dataset.body || ''),
+    };
+  }
+  updateCalEmailPreview();
+}
+
+function updateCalEmailPreview() {
+  const previewEl = document.getElementById('calEmailPreview');
+  if (!calEmailSelectedTemplate || !previewEl) return;
+  previewEl.style.display = 'block';
+  previewEl.textContent = calEmailSelectedTemplate.body || '';
+}
+
+function sendCalEmail() {
+  if (!calEmailSelectedTemplate) return;
+
+  if (calEmailChannel === 'whatsapp') {
+    if (!calEmailPhone) {
+      showSavedPopup('No phone number saved for this customer.');
+      return;
+    }
+    const text = encodeURIComponent(calEmailSelectedTemplate.body || '');
+    window.open(`https://wa.me/${calEmailPhone}?text=${text}`, '_blank');
+  } else {
+    if (!calEmailAddr) {
+      showSavedPopup('No email address saved for this customer.');
+      return;
+    }
+    const subject = encodeURIComponent(calEmailSelectedTemplate.subject || '');
+    const body    = encodeURIComponent(calEmailSelectedTemplate.body || '');
+    window.location.href = `mailto:${calEmailAddr}?subject=${subject}&body=${body}`;
+  }
+
+  document.getElementById('calEmailModal').style.display = 'none';
+}
+
+function setupCalendar() {
+  // Calendar nav button
+  const menuCalendar = document.getElementById('menuCalendar');
+  if (menuCalendar) {
+    menuCalendar.addEventListener('click', () => {
+      // Close the slide-out nav menu
+      const hamburger = document.getElementById('hamburgerBtn');
+      const navMenu   = document.getElementById('navMenu');
+      const overlay   = document.getElementById('navMenuOverlay');
+      hamburger?.classList.remove('open');
+      navMenu?.classList.remove('open');
+      overlay?.classList.remove('open');
+      hamburger?.setAttribute('aria-expanded', 'false');
+      navMenu?.setAttribute('aria-hidden', 'true');
+      showPage('page-calendar');
+    });
+  }
+
+  // Close email/WhatsApp modal
+  function closeCalEmailModalFn() {
+    document.getElementById('calEmailModal').style.display = 'none';
+    calEmailSelectedTemplate = null;
+    calEmailChannel = 'email';
+  }
+  ['closeCalEmailModal', 'closeCalEmailModalBtn'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', closeCalEmailModalFn);
+  });
+
+  // Send email button
+  document.getElementById('sendCalEmailBtn')?.addEventListener('click', sendCalEmail);
+
+  // Close on overlay click
+  document.getElementById('calEmailModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeCalEmailModalFn();
+  });
 }
