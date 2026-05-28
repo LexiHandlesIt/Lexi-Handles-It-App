@@ -825,25 +825,23 @@ input[type="text"].sig-text-input:focus {
     padding: 12px 16px 8px !important;
     min-height: 0;
   }
-  /* Portrait stays at the BOTTOM */
+  /* Portrait fixed height at the BOTTOM — anchored from top so head always shows */
   .pl-portrait-wrap {
     order: unset;
-    flex: 0 0 auto !important;
-    min-height: unset !important;
-    max-height: 200px;
+    flex: 0 0 200px !important;
+    height: 200px !important;
     width: 100%;
     display: flex;
     justify-content: center;
-    align-items: flex-end;
+    align-items: flex-start;
     overflow: hidden;
   }
   .pl-portrait {
     width: auto;
     max-width: 100%;
-    height: auto;
-    max-height: 200px;
+    height: 200px;
     object-fit: contain;
-    object-position: bottom center;
+    object-position: top center;
   }
 }
 
@@ -864,11 +862,12 @@ input[type="text"].sig-text-input:focus {
 }
 
 .pl-portrait-wrap {
-  flex: 0 0 auto;
+  flex: 0 0 220px;
+  height: 220px;
   width: 100%;
   display: flex;
   justify-content: center;
-  align-items: flex-end;
+  align-items: flex-start;
   overflow: hidden;
 }
 
@@ -876,10 +875,9 @@ input[type="text"].sig-text-input:focus {
   display: block;
   width: auto;
   max-width: 100%;
-  height: auto;
-  max-height: 220px;
+  height: 220px;
   object-fit: contain;
-  object-position: bottom center;
+  object-position: top center;
 }
 
 .ob-header,
