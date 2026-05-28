@@ -730,6 +730,15 @@ input[type="text"].sig-text-input:focus {
   .ob-wordmark {
     margin-bottom: 8px;
   }
+  .ob-logo-pair {
+    margin-bottom: 8px;
+  }
+  .ob-logo-pair .ob-logo-img {
+    height: 32px;
+  }
+  .ob-logo-pair .ob-strap-img {
+    height: 34px;
+  }
   .ob-intro {
     font-size: 0.86rem;
     line-height: 1.45;
@@ -879,6 +888,26 @@ input[type="text"].sig-text-input:focus {
   width: auto;
   object-fit: contain;
   margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.ob-logo-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.ob-logo-pair .ob-logo-img {
+  height: 38px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.ob-logo-pair .ob-strap-img {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
   flex-shrink: 0;
 }
 
