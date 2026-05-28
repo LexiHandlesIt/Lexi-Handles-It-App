@@ -567,7 +567,12 @@ function setupNavigation() {
       showSavedPopup("Add at least one job to your price list first, then we're good to go.");
       return;
     }
-    showPage('page3');
+    // Existing users editing via the menu go back to View My Jobs, not the new quote flow
+    if (state.saved.length > 0) {
+      showPage('page4');
+    } else {
+      showPage('page3');
+    }
   });
   document.getElementById('saveCustomerGoToJobsBtn')?.addEventListener('click', () => {
     const first = (getVal('custFirstName') || '').trim();

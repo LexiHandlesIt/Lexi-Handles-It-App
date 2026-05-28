@@ -723,7 +723,7 @@
     <!-- PAGE 3c: COMPLETION & SIGNATURE -->
     <section id="page-completion" class="page">
       <div class="page-header">
-        <h1 class="page-title">Save</h1>
+        <h1 class="page-title">Job Terms</h1>
         <div class="completion-intro-row">
           <p class="completion-intro-text" id="completionIntroText">[name], is this an estimate or a quote?</p>
           <button type="button" class="tooltip-btn" id="estQuoteTooltipBtn" aria-label="What is the difference?">?</button>
@@ -813,12 +813,9 @@
           </div>
         </div>
 
+        <input type="hidden" id="authSig">
         <div class="form-group" style="margin-top:24px">
-          <label for="authSig">Authorised Signature</label>
-          <input type="text" id="authSig" placeholder="">
-        </div>
-        <div class="form-group">
-          <label>Signature Preview</label>
+          <label>Authorised Signature Preview</label>
           <input type="text" id="custSigText" class="sig-text-input" placeholder="">
           <p class="sig-hint-text">To change this signature, delete and type preferred name or leave blank if you would prefer to print and sign.</p>
         </div>
