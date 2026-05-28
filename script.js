@@ -248,13 +248,18 @@ function showSavedPopup(label, onDone, duration = 2500) {
       <div class="saved-popup-msg">${label || "I've saved that for you."}</div>
     </div>`;
   document.body.appendChild(overlay);
-  setTimeout(() => {
+
+  function dismiss() {
+    clearTimeout(timer);
     overlay.classList.add('fade-out');
     setTimeout(() => {
       overlay.remove();
       if (onDone) onDone();
     }, 350);
-  }, duration);
+  }
+
+  overlay.addEventListener('click', dismiss);
+  const timer = setTimeout(dismiss, duration);
 }
 
 const KEY_NAV_HINT = 'tq_nav_hint_suppressed';
@@ -275,9 +280,17 @@ function setupNavHint() {
   const suppress = document.getElementById('navHintSuppress');
   if (!popup || !closeBtn || !suppress) return;
 
-  closeBtn.addEventListener('click', () => {
+  function closeNavHint() {
     if (suppress.checked) localStorage.setItem(KEY_NAV_HINT, '1');
     popup.style.display = 'none';
+  }
+
+  closeBtn.addEventListener('click', closeNavHint);
+
+  // Click anywhere outside the card to dismiss
+  document.addEventListener('click', e => {
+    if (popup.style.display === 'none') return;
+    if (!popup.contains(e.target)) closeNavHint();
   });
 
   suppress.addEventListener('change', () => {
@@ -352,7 +365,7 @@ function showPage(pageId) {
     const authSig = document.getElementById('authSig');
     const custSigText = document.getElementById('custSigText');
     if (authSig && custSigText && !custSigText.value && !custSigText.dataset.userEdited) {
-      custSigText.value = authSig.value;
+      custSigText.value = formatSigFromName(authSig.value) || defaultAuthSig();
     }
     // Personalise the intro text with the customer's first name
     const introEl = document.getElementById('completionIntroText');
@@ -450,6 +463,23 @@ function setupNavigation() {
       menuNewDoc.classList.toggle('open', !isOpen);
     });
   }
+
+  // Field info ? popup (CRN, VAT, etc.)
+  document.querySelectorAll('.field-info-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById('fieldInfoTitle').textContent = btn.dataset.title || '';
+      document.getElementById('fieldInfoBody').textContent  = btn.dataset.body  || '';
+      document.getElementById('fieldInfoPopup').style.display = 'flex';
+    });
+  });
+  document.getElementById('closeFieldInfoBtn')?.addEventListener('click', () => {
+    document.getElementById('fieldInfoPopup').style.display = 'none';
+  });
+  document.getElementById('fieldInfoPopup')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) document.getElementById('fieldInfoPopup').style.display = 'none';
+  });
 
   // Reference ? popup
   document.querySelectorAll('.ref-info-btn').forEach(btn => {
@@ -697,6 +727,25 @@ function setupPage1() {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
   });
 }
+
+/* ===== UNIVERSAL BACKDROP-CLICK-TO-CLOSE ===== */
+// Any .modal-overlay click on the backdrop (not its children) closes the modal.
+// Modals that need extra cleanup are handled with special cases.
+document.addEventListener('click', e => {
+  if (!e.target.classList.contains('modal-overlay')) return;
+  const id = e.target.id;
+  if (id === 'photosModal') { closePhotosAndReturn(); return; }
+  if (id === 'markPaidModal') { e.target.style.display = 'none'; reopenDashboardAfterMoneyIn(); return; }
+  if (id === 'customerDashboardModal') { e.target.style.display = 'none'; activeCustomerGroup = null; return; }
+  if (id === 'previewModal') { closePreview(); return; }
+  if (id === 'invoiceModal' || id === 'receiptModal') {
+    e.target.style.display = 'none';
+    if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  // Default: hide the overlay
+  e.target.style.display = 'none';
+});
 
 function handleLogoUpload(e) {
   const file = e.target.files[0];
@@ -1553,7 +1602,7 @@ function setupPageCompletion() {
     const sigText = document.getElementById('custSigText');
     // Only auto-sync if the user hasn't manually edited the preview
     if (!sigText.dataset.userEdited) {
-      sigText.value = document.getElementById('authSig').value;
+      sigText.value = formatSigFromName(document.getElementById('authSig').value);
     }
   });
   document.getElementById('custSigText').addEventListener('input', () => {
@@ -1638,11 +1687,11 @@ function populateQuoteForm() {
   setVal('quoteNotes',    q.notes);
   setVal('quotePrivateNotes', q.privateNotes);
   setVal('customTerms',   q.customTerms || '');
-  const traderName = (state.company.firstName + ' ' + state.company.lastName).trim() || state.company.businessName || '';
-  const sigName = q.authSig || traderName;
-  setVal('authSig',     sigName);
-  // Always show the name in the signature preview — never blank
-  setVal('custSigText', q.custSigText || sigName);
+  const sigName = q.authSig || defaultAuthName();
+  setVal('authSig', sigName);
+  // Signature preview: saved value, or auto-format from the name as F.Last
+  const sigPreview = q.custSigText || (q.authSig ? formatSigFromName(q.authSig) : defaultAuthSig());
+  setVal('custSigText', sigPreview);
   // Reset user-edited flag so authSig changes still sync
   const sigEl = document.getElementById('custSigText');
   if (sigEl) delete sigEl.dataset.userEdited;
@@ -1674,12 +1723,33 @@ function populateQuoteForm() {
   updateJobPicker();
 }
 
+/* Returns the full printed name: "Samantha Clarke" */
+function defaultAuthName() {
+  const first = (state.company.firstName || '').trim();
+  const last  = (state.company.lastName  || '').trim();
+  return (first + ' ' + last).trim() || state.company.businessName || '';
+}
+
+/* Returns the formatted signature: "S.Clarke" */
+function defaultAuthSig() {
+  const first = (state.company.firstName || '').trim();
+  const last  = (state.company.lastName  || '').trim();
+  if (first && last) return first.charAt(0).toUpperCase() + '.' + last;
+  return first || last || state.company.businessName || '';
+}
+
+/* Formats any "First Last" string into "F.Last" — used when the name field changes */
+function formatSigFromName(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return name || '';
+  return parts[0].charAt(0).toUpperCase() + '.' + parts.slice(1).join(' ');
+}
+
 function populateAuthSig() {
-  const name = (state.company.firstName + ' ' + state.company.lastName).trim() || state.company.businessName || '';
   const authSigEl = document.getElementById('authSig');
-  if (authSigEl && !authSigEl.value) authSigEl.value = name;
+  if (authSigEl && !authSigEl.value) authSigEl.value = defaultAuthName();
   const custSigEl = document.getElementById('custSigText');
-  if (custSigEl && !custSigEl.value && !custSigEl.dataset.userEdited) custSigEl.value = name;
+  if (custSigEl && !custSigEl.value && !custSigEl.dataset.userEdited) custSigEl.value = defaultAuthSig();
 }
 
 function setTodayDate() {
@@ -4541,7 +4611,7 @@ function openJobTermsEdit(docId) {
   document.getElementById('jteCustomTerms').value = q.customTerms || '';
 
   // Signature
-  document.getElementById('jteAuthSig').value = q.authSig || state.company.firstName || '';
+  document.getElementById('jteAuthSig').value = q.authSig || defaultAuthName();
 
   // Live totals
   jteUpdateTotals();
@@ -4727,9 +4797,8 @@ function applyBizChoice(docId, useNew, forAll, callback) {
       if (d.quote) {
         // Update the printed auth name
         d.quote.authSig = newAuthName;
-        // Update the cursive signature text only if it was already set
-        // (don't stamp a name onto a blank signature field)
-        if (d.quote.custSigText) d.quote.custSigText = newAuthName;
+        // Update the signature preview to F.Last format, but only if it was already set
+        if (d.quote.custSigText) d.quote.custSigText = formatSigFromName(newAuthName);
       }
     };
 
