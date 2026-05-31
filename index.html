@@ -274,6 +274,10 @@
             <input type="text" id="p1LastName" autocomplete="family-name" required>
           </div>
         </div>
+        <div class="form-group">
+          <label for="p1PreferredName">Preferred Name <button type="button" class="field-info-btn" data-title="Preferred Name" data-body="What should Lexi call you in the app? Leave this blank and your first name will be used. Your official name always appears on documents.">?</button></label>
+          <input type="text" id="p1PreferredName" placeholder="Leave blank to use your first name">
+        </div>
         <div class="form-grid-2">
           <div class="form-group">
             <label for="p1BusinessName">Business Name</label>
@@ -474,6 +478,27 @@
         </div>
       </div>
 
+      <!-- QR Code -->
+      <div class="card">
+        <h2 class="card-title">Add Your QR Code <button type="button" class="field-info-btn" data-title="QR Code" data-body="Upload your QR code here. Point it wherever works best for your business. Your website, a booking page, a special offer, a questionnaire. Whatever gets you more work.">?</button></h2>
+        <p class="card-desc" style="margin-bottom:12px">Your QR code will appear on your quotes, estimates, invoices and receipts.</p>
+        <div class="logo-upload-area" id="qrUploadArea" tabindex="0" role="button" aria-label="Upload QR code">
+          <div id="qrPlaceholder" class="logo-placeholder">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5" y="5" width="3" height="3"/><rect x="16" y="5" width="3" height="3"/><rect x="5" y="16" width="3" height="3"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4"/><path d="M21 14v7"/></svg>
+            <span>Tap to upload QR code</span>
+            <small>PNG or JPG — appears on all your documents</small>
+          </div>
+          <div id="qrPreview" class="logo-preview" style="display:none">
+            <img id="qrImg" src="" alt="QR code preview" style="max-width:140px;max-height:140px;object-fit:contain">
+            <div class="logo-actions">
+              <button type="button" class="btn btn-sm btn-outline" id="changeQrBtn">Change</button>
+              <button type="button" class="btn btn-sm btn-danger" id="removeQrBtn">Remove</button>
+            </div>
+          </div>
+        </div>
+        <input type="file" id="qrFile" accept="image/*" style="display:none" aria-hidden="true">
+      </div>
+
       <!-- Page Footer -->
       <div class="page-footer">
         <button type="button" class="btn btn-primary btn-lg" id="saveBusinessBtn">Save My Business</button>
@@ -581,7 +606,7 @@
 
       <div class="page-footer">
         <button type="button" class="btn btn-outline btn-lg" id="backToSetupBtn">Back</button>
-        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToQuoteBtn">New Estimate or Quote</button>
+        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToQuoteBtn">Next</button>
       </div>
     </section>
 

@@ -112,7 +112,7 @@ function businessNameCompliment(name) {
 }
 
 function traderFirstName() {
-  return (state.company.firstName || '').trim() || 'there';
+  return (state.company.preferredName || state.company.firstName || '').trim() || 'there';
 }
 
 function hasRequiredSetup() {
@@ -567,12 +567,7 @@ function setupNavigation() {
       showSavedPopup("Add at least one job to your price list first, then we're good to go.");
       return;
     }
-    // Existing users editing via the menu go back to View My Jobs, not the new quote flow
-    if (state.saved.length > 0) {
-      showPage('page4');
-    } else {
-      showPage('page3');
-    }
+    showPage('page4');
   });
   document.getElementById('saveCustomerGoToJobsBtn')?.addEventListener('click', () => {
     const first = (getVal('custFirstName') || '').trim();
@@ -644,6 +639,26 @@ function setupPage1() {
     showLogoState();
     save();
   });
+
+  // QR code upload
+  const qrArea      = document.getElementById('qrUploadArea');
+  const qrFile      = document.getElementById('qrFile');
+  const changeQrBtn = document.getElementById('changeQrBtn');
+  const removeQrBtn = document.getElementById('removeQrBtn');
+  if (qrArea && qrFile) {
+    qrArea.addEventListener('click', e => {
+      if (!e.target.closest('.logo-actions')) qrFile.click();
+    });
+    qrArea.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') qrFile.click(); });
+    qrFile.addEventListener('change', handleQRUpload);
+    changeQrBtn?.addEventListener('click', e => { e.stopPropagation(); qrFile.click(); });
+    removeQrBtn?.addEventListener('click', e => {
+      e.stopPropagation();
+      state.company.qrCode = '';
+      showQRState();
+      save();
+    });
+  }
 
   // Payment method toggles
   document.getElementById('payBankTransfer').addEventListener('change', e => {
@@ -778,10 +793,36 @@ function showLogoState() {
   if (haslLogo) document.getElementById('logoImg').src = state.company.logo;
 }
 
+function handleQRUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Please upload an image file.', 'error'); return; }
+  if (file.size > 5 * 1024 * 1024) { toast('Image must be under 5MB.', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    state.company.qrCode = ev.target.result;
+    showQRState();
+    save();
+    showSavedPopup('QR code saved — it will appear on all your documents.', null, 3500);
+  };
+  reader.readAsDataURL(file);
+}
+
+function showQRState() {
+  const hasQR = !!state.company.qrCode;
+  const placeholder = document.getElementById('qrPlaceholder');
+  const preview     = document.getElementById('qrPreview');
+  const img         = document.getElementById('qrImg');
+  if (placeholder) placeholder.style.display = hasQR ? 'none' : 'flex';
+  if (preview)     preview.style.display     = hasQR ? 'flex' : 'none';
+  if (hasQR && img) img.src = state.company.qrCode;
+}
+
 function populatePage1Fields() {
   const c = state.company;
   setVal('p1FirstName',    c.firstName);
   setVal('p1LastName',     c.lastName);
+  setVal('p1PreferredName', c.preferredName || '');
   setVal('p1BusinessName', c.businessName);
   setVal('p1Address',      c.address);
   setVal('p1Postcode',      c.postcode);
@@ -793,6 +834,7 @@ function populatePage1Fields() {
   setVal('p1Trade',         c.trade || '');
 
   showLogoState();
+  showQRState();
 
   // Payment methods
   const methods = c.payMethods || [];
@@ -874,6 +916,7 @@ function saveBusinessDetails(showToast = true) {
     bizChoiceMade: null,   // reset so modal appears again for any docs that differ from new details
     firstName:    firstName,
     lastName:     lastName,
+    preferredName: getVal('p1PreferredName').trim(),
     businessName: getVal('p1BusinessName'),
     trade:        getVal('p1Trade'),
     address:      getVal('p1Address'),
@@ -4426,6 +4469,16 @@ function renderSingleCustomerDashboard(group, groups) {
 /* ===== CUSTOMER EDIT CHOICE ===== */
 let activeEditDocId = null; // docId pre-selected when Edit is clicked on a specific job card
 
+function openUpdateFromCal(docId) {
+  // Set up activeCustomerGroup so the edit choice modal works correctly
+  const groups = buildCustomerGroups();
+  const group  = groups.find(g => g.docs.some(d => d.id === docId));
+  if (!group) return;
+  activeCustomerGroup = group;
+  activeEditDocId     = docId;
+  openCustomerEditChoice(docId);
+}
+
 function openCustomerEditChoice(docId) {
   activeEditDocId = docId || null;
   // Personalise the title with customer first name if available
@@ -5590,6 +5643,13 @@ function buildDocHtml(doc, docType, extra = {}) {
   // ── Sig block for invoice/receipt ───────────────────────────────
   const sigHtml = !isQuote ? buildSigSection(q, co, docType) : '';
 
+  // ── QR code ──────────────────────────────────────────────────────
+  const qrSrc = state.company.qrCode || co.qrCode || '';
+  const qrHtml = qrSrc ? `
+    <div class="section doc-qr-section" style="text-align:center;padding-top:10px">
+      <img src="${qrSrc}" alt="QR Code" style="width:90px;height:90px;object-fit:contain">
+    </div>` : '';
+
   // ── Photos ───────────────────────────────────────────────────────
   const photosHtml = extra.includePhotos ? buildPhotosSection(doc) : '';
 
@@ -5660,6 +5720,7 @@ function buildDocHtml(doc, docType, extra = {}) {
         ${extraHtml}
         ${termsHtml}
         ${sigHtml}
+        ${qrHtml}
         ${photosHtml}
       </div>
       ${isQuote ? '' : '<div class="doc-footer">Powered by LexiHandlesIt.com</div>'}
@@ -6187,6 +6248,7 @@ function renderCalendar() {
               ${phone
                 ? `<a href="tel:${esc(phone)}" class="cal-icon-btn cal-icon-phone" title="Call customer">${SVG_PHONE_A}</a>`
                 : `<button type="button" class="cal-icon-btn cal-icon-phone cal-btn-disabled" title="No phone number saved">${SVG_PHONE_A}</button>`}
+              <button type="button" class="cal-view-cust-btn" onclick="openUpdateFromCal('${esc(item.docId)}')" title="Update job">Update</button>
             </div>
           </div>`;
         }).join('')}
@@ -6504,8 +6566,7 @@ function calSelectTemplate(templateId) {
   if (templateId === 'custom') {
     document.getElementById('calEmailModal').style.display = 'none';
     if (calEmailChannel === 'whatsapp') {
-      if (!calEmailPhone) { showSavedPopup('No phone number saved for this customer.'); return; }
-      window.open('https://wa.me/' + calEmailPhone, '_blank');
+      window.open('https://wa.me/', '_blank');
     } else {
       if (!calEmailAddr) { showSavedPopup('No email address saved for this customer.'); return; }
       window.location.href = 'mailto:' + calEmailAddr;
@@ -6538,12 +6599,8 @@ function sendCalEmail() {
   if (!calEmailSelectedTemplate) return;
 
   if (calEmailChannel === 'whatsapp') {
-    if (!calEmailPhone) {
-      showSavedPopup('No phone number saved for this customer.');
-      return;
-    }
     const text = encodeURIComponent(calEmailSelectedTemplate.body || '');
-    window.open(`https://wa.me/${calEmailPhone}?text=${text}`, '_blank');
+    window.open(`https://wa.me/?text=${text}`, '_blank');
   } else {
     if (!calEmailAddr) {
       showSavedPopup('No email address saved for this customer.');
