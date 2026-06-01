@@ -14,6 +14,25 @@
 </head>
 <body>
 
+  <!-- PAUSED SCREEN — shown when app is in winter pause -->
+  <div id="pausedScreen" class="paused-screen" style="display:none" role="dialog" aria-modal="true">
+    <div class="paused-card">
+      <div class="paused-snowflakes" aria-hidden="true">❄️ ❄️ ❄️</div>
+      <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" style="height:52px;margin-bottom:4px" onerror="this.style.display='none'">
+      <h2 class="paused-title">Lexi's on winter pause</h2>
+      <p class="paused-sub" id="pausedSub">All your customers, jobs and documents are safe and waiting for you.</p>
+      <div class="paused-stats" id="pausedStats"></div>
+      <div class="paused-since" id="pausedSince"></div>
+      <button type="button" class="btn btn-primary paused-resume-btn" id="resumeLexiBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Resume Lexi — I'm back!
+      </button>
+      <button type="button" class="paused-chase-link" id="pausedChaseBtn">
+        Got outstanding invoices? Chase them now
+      </button>
+    </div>
+  </div>
+
   <!-- ONBOARDING MODAL -->
   <div id="onboardingModal" class="ob-screen" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
     <div class="ob-card">
@@ -142,10 +161,12 @@
 
   <!-- SLIDE-OUT NAV MENU -->
   <div class="nav-menu" id="navMenu" aria-hidden="true">
+
+    <!-- New Job -->
     <div class="nav-submenu-group">
       <button class="nav-menu-item nav-submenu-trigger" id="menuNewDoc">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Make New Docs
+        New Job
         <svg class="nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="nav-submenu" id="navNewDocSubmenu">
@@ -163,34 +184,63 @@
         </button>
       </div>
     </div>
-    <button class="nav-menu-item" data-target="page4" id="menuSavedDocs">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      View My Jobs
-      <span class="nav-menu-badge" id="savedBadge" style="display:none">0</span>
-    </button>
-    <button class="nav-menu-item" data-target="page-calendar" id="menuCalendar">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      View My Calendar <span class="nav-beta-badge">Beta</span>
-    </button>
-    <button class="nav-menu-item" id="menuBizInfo">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      Send My Business Info
-    </button>
-    <button class="nav-menu-item nav-menu-section-break" data-target="page1" id="menuEditBusiness">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      Edit My Business
-    </button>
-    <button class="nav-menu-item" data-target="page2" id="menuPriceList">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      Edit My Price List
-    </button>
+
+    <!-- My Jobs -->
+    <div class="nav-submenu-group">
+      <button class="nav-menu-item nav-submenu-trigger" id="menuManageJobs">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        My Jobs
+        <svg class="nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="nav-submenu" id="navManageJobsSubmenu">
+        <button class="nav-menu-item nav-submenu-item" data-target="page4" id="menuSavedDocs">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          View My Jobs
+          <span class="nav-menu-badge" id="savedBadge" style="display:none">0</span>
+        </button>
+        <button class="nav-menu-item nav-submenu-item" data-target="page-calendar" id="menuCalendar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          View My Calendar <span class="nav-beta-badge">Beta</span>
+        </button>
+        <button class="nav-menu-item nav-submenu-item" id="menuChasePayments">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          Chase Payments
+          <span class="nav-menu-badge nav-chase-badge" id="chasePaymentsBadge" style="display:none">0</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="nav-submenu-group">
+      <button class="nav-menu-item nav-submenu-trigger" id="menuManageBusiness">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+        <svg class="nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="nav-submenu" id="navManageBusinessSubmenu">
+        <button class="nav-menu-item nav-submenu-item" data-target="page1" id="menuEditBusiness">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+          My Business
+        </button>
+        <button class="nav-menu-item nav-submenu-item" data-target="page2" id="menuPriceList">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          My Price List
+        </button>
+        <button class="nav-menu-item nav-submenu-item" id="menuEarnings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          My Earnings
+        </button>
+      </div>
+    </div>
+
+    <!-- Share -->
     <button class="nav-menu-item nav-menu-section-break" id="menuShareLexi">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
       Share Lexi
     </button>
-    <button class="nav-menu-item" id="menuBackupRestore">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
-      Backup &amp; Restore
+    <button class="nav-menu-item nav-menu-pause" id="menuPauseWinter" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      Pause for Winter
     </button>
     <button class="nav-menu-item nav-menu-signout" id="menuSignOut">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -314,6 +364,12 @@
           <div class="form-group">
             <label for="p1Website">Website</label>
             <input type="url" id="p1Website" autocomplete="url">
+          </div>
+          <div class="form-group">
+            <label for="p1ReviewLink">Google Review Link
+              <button type="button" class="field-info-btn" data-title="Google Review Link" data-body="Paste your Google review link here. After you mark a job as paid, Lexi will offer to send a review request to your customer automatically.">?</button>
+            </label>
+            <input type="url" id="p1ReviewLink" placeholder="https://g.page/r/your-review-link">
           </div>
         </div>
         <div class="form-group">
@@ -478,25 +534,49 @@
         </div>
       </div>
 
-      <!-- QR Code -->
-      <div class="card">
-        <h2 class="card-title">Add Your QR Code <button type="button" class="field-info-btn" data-title="QR Code" data-body="Upload your QR code here. Point it wherever works best for your business. Your website, a booking page, a special offer, a questionnaire, reviews. Whatever gets you more work.">?</button></h2>
-        <p class="card-desc" style="margin-bottom:12px">Your QR code will appear on your quotes, estimates, invoices and receipts.</p>
-        <div class="logo-upload-area" id="qrUploadArea" tabindex="0" role="button" aria-label="Upload QR code">
-          <div id="qrPlaceholder" class="logo-placeholder">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5" y="5" width="3" height="3"/><rect x="16" y="5" width="3" height="3"/><rect x="5" y="16" width="3" height="3"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4"/><path d="M21 14v7"/></svg>
-            <span>Tap to upload QR code</span>
-            <small>PNG or JPG — appears on all your documents</small>
-          </div>
-          <div id="qrPreview" class="logo-preview" style="display:none">
-            <img id="qrImg" src="" alt="QR code preview" style="max-width:140px;max-height:140px;object-fit:contain">
-            <div class="logo-actions">
-              <button type="button" class="btn btn-sm btn-outline" id="changeQrBtn">Change</button>
-              <button type="button" class="btn btn-sm btn-danger" id="removeQrBtn">Remove</button>
+      <!-- QR Code + Qualifications (two-column layout) -->
+      <div class="card qr-quals-row">
+
+        <!-- Left: QR Code -->
+        <div class="qr-quals-col">
+          <h2 class="card-title">Add Your QR Code <button type="button" class="field-info-btn" data-title="QR Code" data-body="Upload your QR code here. Point it wherever works best for your business. Your website, a booking page, a special offer, a questionnaire, reviews. Whatever gets you more work.">?</button></h2>
+          <p class="card-desc" style="margin-bottom:12px">Appears on your documents.</p>
+          <div class="logo-upload-area" id="qrUploadArea" tabindex="0" role="button" aria-label="Upload QR code">
+            <div id="qrPlaceholder" class="logo-placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5" y="5" width="3" height="3"/><rect x="16" y="5" width="3" height="3"/><rect x="5" y="16" width="3" height="3"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4"/><path d="M21 14v7"/></svg>
+              <span>Tap to upload QR code</span>
+              <small>PNG or JPG</small>
+            </div>
+            <div id="qrPreview" class="logo-preview" style="display:none">
+              <img id="qrImg" src="" alt="QR code preview" style="max-width:120px;max-height:120px;object-fit:contain">
+              <div class="logo-actions">
+                <button type="button" class="btn btn-sm btn-outline" id="changeQrBtn">Change</button>
+                <button type="button" class="btn btn-sm btn-danger" id="removeQrBtn">Remove</button>
+              </div>
             </div>
           </div>
+          <input type="file" id="qrFile" accept="image/*" style="display:none" aria-hidden="true">
         </div>
-        <input type="file" id="qrFile" accept="image/*" style="display:none" aria-hidden="true">
+
+        <!-- Divider -->
+        <div class="qr-quals-divider"></div>
+
+        <!-- Right: Qualifications -->
+        <div class="qr-quals-col">
+          <h2 class="card-title">My Qualifications <button type="button" class="field-info-btn" data-title="Qualifications" data-body="Upload copies of your certificates, gas-safe card, NICEIC accreditation, or any other qualification. You can share them directly with customers from the My Qualifications menu.">?</button></h2>
+          <p class="card-desc" style="margin-bottom:12px">Gas safe, NICEIC, etc.</p>
+          <div class="logo-upload-area quals-upload-area" id="qualsUploadArea" tabindex="0" role="button" aria-label="Upload qualifications">
+            <div id="qualsPlaceholder" class="logo-placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="18" rx="2"/><path d="M10 3h8l4 4v14a2 2 0 0 1-2 2h-6"/><line x1="6" y1="9" x2="10" y2="9"/><line x1="6" y1="13" x2="10" y2="13"/></svg>
+              <span>Tap to add document</span>
+              <small>PDF, PNG or JPG</small>
+            </div>
+            <div id="qualsFileList" class="quals-file-list" style="display:none"></div>
+            <button type="button" class="btn btn-sm btn-outline quals-add-more-btn" id="qualsAddMoreBtn" style="display:none;margin-top:8px">+ Add Another</button>
+          </div>
+          <input type="file" id="qualsFile" accept="image/*,application/pdf" style="display:none" aria-hidden="true">
+        </div>
+
       </div>
 
       <!-- Page Footer -->
@@ -620,43 +700,62 @@
 
       <div class="card">
         <h2 class="card-title">Customer Details</h2>
-        <div class="form-grid-cust-name" style="margin-top:4px">
-          <div class="form-group">
-            <label for="custTitle">Title</label>
-            <select id="custTitle">
-              <option value=""> </option>
-              <option value="Mr">Mr</option>
-              <option value="Mrs">Mrs</option>
-              <option value="Ms">Ms</option>
-              <option value="Dr">Dr</option>
-            </select>
-          </div>
+
+        <!-- Always visible: name + phone -->
+        <div class="form-grid-2" style="margin-top:4px">
           <div class="form-group">
             <label for="custFirstName">First Name</label>
-            <input type="text" id="custFirstName" autocomplete="given-name">
+            <input type="text" id="custFirstName" autocomplete="given-name" placeholder="e.g. Dave">
           </div>
-          <div class="form-group" style="margin-bottom:0">
+          <div class="form-group">
             <label for="custLastName">Last Name</label>
-            <input type="text" id="custLastName" autocomplete="family-name">
+            <input type="text" id="custLastName" autocomplete="family-name" placeholder="e.g. Smith">
           </div>
         </div>
         <div class="form-group">
-          <label for="custAddr">Address</label>
-          <textarea id="custAddr" rows="3" autocomplete="street-address"></textarea>
+          <label for="custPhone">Phone</label>
+          <input type="tel" id="custPhone" autocomplete="tel" placeholder="e.g. 07700 900123">
         </div>
-        <div class="form-grid-2">
-          <div class="form-group">
-            <label for="custPostcode">Postcode</label>
-            <input type="text" id="custPostcode" autocomplete="postal-code">
+
+        <!-- Expandable extra fields -->
+        <button type="button" class="cust-more-toggle" id="custMoreToggle" aria-expanded="false">
+          <svg id="custMoreChevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          <span id="custMoreLabel">Add more details</span>
+        </button>
+        <div class="cust-extra-fields" id="custExtraFields" style="display:none">
+          <div class="form-grid-cust-name" style="margin-top:4px">
+            <div class="form-group">
+              <label for="custTitle">Title</label>
+              <select id="custTitle">
+                <option value=""> </option>
+                <option value="Mr">Mr</option>
+                <option value="Mrs">Mrs</option>
+                <option value="Ms">Ms</option>
+                <option value="Dr">Dr</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>&nbsp;</label><!-- spacer to keep grid aligned -->
+              <div style="padding-top:8px;font-size:0.78rem;color:#aaa">Optional</div>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>&nbsp;</label>
+            </div>
           </div>
           <div class="form-group">
-            <label for="custPhone">Phone</label>
-            <input type="tel" id="custPhone" autocomplete="tel">
+            <label for="custAddr">Address</label>
+            <textarea id="custAddr" rows="3" autocomplete="street-address"></textarea>
           </div>
-        </div>
-        <div class="form-group">
-          <label for="custEmail">Email</label>
-          <input type="email" id="custEmail" autocomplete="email">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="custPostcode">Postcode</label>
+              <input type="text" id="custPostcode" autocomplete="postal-code">
+            </div>
+            <div class="form-group">
+              <label for="custEmail">Email</label>
+              <input type="email" id="custEmail" autocomplete="email">
+            </div>
+          </div>
         </div>
         <div class="form-grid-2">
           <div class="form-group">
@@ -857,11 +956,8 @@
     <!-- PAGE 4: SAVED DOCUMENTS -->
     <section id="page4" class="page" data-page="4">
       <div class="page4-sticky-top">
-        <div class="page-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <h1 class="page-title" id="savedJobsTitle" style="flex:1;min-width:0">My Jobs</h1>
-          <button type="button" class="btn btn-sm" id="newJobBtn" style="flex-shrink:0;font-size:0.82rem;padding:6px 14px;background:var(--sage);border:1.5px solid var(--sage);color:#fff;font-weight:700">
-            New Job
-          </button>
+        <div class="page-header">
+          <h1 class="page-title" id="savedJobsTitle">My Jobs</h1>
         </div>
         <!-- Nav hint popup (shown after first save) -->
         <div class="nav-hint-popup" id="navHintPopup" style="display:none" role="dialog" aria-modal="true">
@@ -873,7 +969,45 @@
             <input type="checkbox" id="navHintSuppress"> Do not show me this message again
           </label>
         </div>
-        <div class="saved-filter-bar">
+        <!-- Quick Quote banner — primary CTA -->
+        <button type="button" class="quick-quote-banner" id="quickQuoteBtn">
+          <div class="qq-left">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <div>
+              <span class="qq-title">New Quote or Estimate</span>
+              <span class="qq-sub">Get a professional document out in minutes</span>
+            </div>
+          </div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
+        <!-- Seasonal pause prompt — shown Aug/Sep/Oct for outdoor trades -->
+        <div id="seasonalBanner" class="seasonal-banner" style="display:none" role="alert">
+          <span class="seasonal-banner-icon">❄️</span>
+          <div class="seasonal-banner-text">
+            <strong>Heading into the quiet season?</strong>
+            <span>Pause Lexi for winter — your customers and jobs stay safe, ready for spring.</span>
+          </div>
+          <button type="button" class="seasonal-banner-btn" id="seasonalBannerBtn">Pause for Winter</button>
+          <button type="button" class="seasonal-banner-close" id="seasonalBannerClose" aria-label="Dismiss">&#x2715;</button>
+        </div>
+
+        <!-- Search -->
+        <div class="jobs-search-wrap">
+          <svg class="jobs-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="jobSearchInput" class="jobs-search-input" placeholder="Search customers…" autocomplete="off">
+        </div>
+
+        <!-- Attention widget — populated by JS -->
+        <div id="attentionWidget"></div>
+
+        <!-- Filter bar — collapsed by default -->
+        <button type="button" class="filter-toggle" id="filterToggleBtn" aria-expanded="false">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          <span id="filterToggleLabel">Filter &amp; Sort</span>
+          <svg id="filterToggleChevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="saved-filter-bar" id="savedFilterBar" style="display:none">
           <div class="filter-group">
             <label for="savedFilterSelect" class="filter-group-label">Show</label>
             <select id="savedFilterSelect" class="saved-filter-select">
@@ -898,7 +1032,7 @@
             </select>
           </div>
           <div class="filter-group">
-            <label for="exportSelect" class="filter-group-label">Export</label>
+            <label for="exportSelect" class="filter-group-label">Export CSV</label>
             <select id="exportSelect" class="saved-filter-select export-select">
               <option value="all" selected>All</option>
               <option value="Estimate">Estimates</option>
@@ -923,11 +1057,50 @@
     <section id="page-calendar" class="page" data-page="calendar">
       <div class="page-header">
         <h1 class="page-title">View My Calendar</h1>
+        <button type="button" class="btn btn-outline btn-sm cal-sync-btn" id="calSyncBtn" title="Sync with Google / Outlook">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Sync Calendar
+        </button>
       </div>
       <div class="cal-page-wrap" id="calPageWrap">
         <!-- Populated by renderCalendar() -->
       </div>
     </section>
+
+    <!-- CALENDAR SYNC MODAL -->
+    <div id="calSyncModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Sync your calendar">
+      <div class="modal-card" style="max-width:440px">
+        <div class="modal-header">
+          <h2 class="modal-title">Sync with Your Calendar</h2>
+          <button type="button" class="modal-close-btn" id="closeCalSyncBtn" aria-label="Close">&#x2715;</button>
+        </div>
+        <div class="modal-body" style="padding:16px 20px 20px">
+          <p style="margin:0 0 16px;color:#555;font-size:0.9rem">Export your Lexi job dates as a calendar file (.ics) and import it into Google Calendar, Apple Calendar, or Outlook — in seconds.</p>
+          <button type="button" class="btn btn-primary w-100" id="downloadIcsBtn" style="margin-bottom:10px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Download lexi-jobs.ics
+          </button>
+          <div class="cal-sync-steps">
+            <div class="cal-sync-step">
+              <span class="cal-sync-step-num">1</span>
+              <span>Press <strong>Download lexi-jobs.ics</strong> above</span>
+            </div>
+            <div class="cal-sync-step">
+              <span class="cal-sync-step-num">2</span>
+              <span>Open your calendar app:<br>
+                <strong>Google</strong> → Settings → Import<br>
+                <strong>Outlook</strong> → Open calendar file<br>
+                <strong>Apple</strong> → File → Import</span>
+            </div>
+            <div class="cal-sync-step">
+              <span class="cal-sync-step-num">3</span>
+              <span>Select the downloaded file — your jobs appear instantly</span>
+            </div>
+          </div>
+          <p style="margin:14px 0 0;font-size:0.8rem;color:#999">This is a one-time export. Repeat whenever you want an updated snapshot.</p>
+        </div>
+      </div>
+    </div>
 
   </main>
 
@@ -1356,6 +1529,48 @@
     </div>
   </div>
 
+  <!-- SEND CHOICE MODAL -->
+  <div id="sendChoiceModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="What would you like to send?">
+    <div class="modal-card send-choice-card">
+      <div class="modal-header">
+        <h2 class="modal-title">What would you like to send?</h2>
+        <button type="button" class="modal-close-btn" id="closeSendChoiceBtn" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-body send-choice-body">
+        <button type="button" class="send-choice-btn" id="sendChoiceBusiness">
+          <div class="send-choice-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+          </div>
+          <div class="send-choice-text">
+            <span class="send-choice-title">Business Details</span>
+            <span class="send-choice-desc">Name, address, phone, email, website</span>
+          </div>
+          <svg class="send-choice-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button type="button" class="send-choice-btn" id="sendChoicePayment">
+          <div class="send-choice-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          </div>
+          <div class="send-choice-text">
+            <span class="send-choice-title">Payment Details</span>
+            <span class="send-choice-desc">Bank transfer, PayPal, cash options</span>
+          </div>
+          <svg class="send-choice-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button type="button" class="send-choice-btn" id="sendChoiceQuals">
+          <div class="send-choice-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="18" rx="2"/><path d="M10 3h8l4 4v14a2 2 0 0 1-2 2h-6"/><line x1="6" y1="9" x2="10" y2="9"/><line x1="6" y1="13" x2="10" y2="13"/></svg>
+          </div>
+          <div class="send-choice-text">
+            <span class="send-choice-title">My Qualifications</span>
+            <span class="send-choice-desc">Certificates &amp; accreditations</span>
+          </div>
+          <svg class="send-choice-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SEND BANK DETAILS MODAL -->
   <div id="bizInfoModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Send My Business Info">
     <div class="modal-card">
@@ -1366,8 +1581,10 @@
       <div class="modal-body">
         <p class="biz-info-intro">Tick what you want to include, then hit Send.</p>
         <div id="bizInfoOptions" class="biz-info-options"></div>
-        <label class="biz-info-preview-label">Preview</label>
-        <textarea id="bizInfoShareText" rows="7" class="share-textarea biz-info-preview" readonly></textarea>
+        <div id="bizInfoPreviewWrap">
+          <label class="biz-info-preview-label">Preview</label>
+          <textarea id="bizInfoShareText" rows="7" class="share-textarea biz-info-preview" readonly></textarea>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" id="copyBizInfoBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
@@ -1666,6 +1883,71 @@
 
   <!-- TOAST -->
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- CHASE PAYMENTS MODAL -->
+  <div id="chasePaymentsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Chase Payments">
+    <div class="modal-card chase-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title">Chase Payments</h2>
+          <p id="chaseModalSub" style="margin:2px 0 0;font-size:0.82rem;color:#888"></p>
+        </div>
+        <button type="button" class="modal-close-btn" id="closeChaseModalBtn" aria-label="Close">&#x2715;</button>
+      </div>
+      <div id="chaseModalBody" class="modal-body" style="padding:0 0 8px"></div>
+    </div>
+  </div>
+
+  <!-- PAUSE FOR WINTER MODAL -->
+  <div id="pauseWinterModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Pause for Winter">
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-header">
+        <h2 class="modal-title">❄️ Pause for Winter</h2>
+        <button type="button" class="modal-close-btn" id="closePauseModalBtn" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px 20px">
+        <div class="pause-stats-row" id="pauseStatsRow"></div>
+        <p class="pause-explainer">All of this stays safe while you're paused. Resume any time with one tap — your data will be exactly where you left it.</p>
+        <div class="pause-price-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          When subscriptions launch, pausing will cost just £1.99/month to keep your data safe — far less than cancelling and starting again.
+        </div>
+        <div id="chaseBeforePause" class="chase-before-pause" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          <span id="chaseBeforePauseText"></span>
+          <button type="button" class="btn btn-sm btn-outline" id="chaseBeforePauseBtn" style="margin-left:auto;flex-shrink:0">Chase Now</button>
+        </div>
+        <button type="button" class="btn btn-primary w-100" id="confirmPauseBtn" style="margin-top:16px">
+          Pause Lexi for Winter
+        </button>
+        <p style="text-align:center;margin:10px 0 0;font-size:0.8rem;color:#aaa">You can resume any time from the paused screen.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- REVIEW REQUEST MODAL -->
+  <div id="reviewRequestModal" class="modal-overlay" style="display:none;z-index:600" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width:380px;text-align:center">
+      <div style="font-size:2rem;margin:16px 0 6px">⭐</div>
+      <h2 class="modal-title" style="margin-bottom:6px">Get in!</h2>
+      <p id="reviewRequestMsg" style="color:#555;font-size:0.9rem;margin:0 0 20px;line-height:1.5"></p>
+      <button type="button" class="btn btn-primary w-100" id="reviewWhatsappBtn" style="margin-bottom:10px">
+        Ask on WhatsApp
+      </button>
+      <button type="button" class="btn btn-outline w-100" id="reviewLaterBtn">Not Now</button>
+    </div>
+  </div>
+
+  <!-- EARNINGS SUMMARY MODAL -->
+  <div id="earningsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="My Earnings">
+    <div class="modal-card earnings-modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">My Earnings</h2>
+        <button type="button" class="modal-close-btn" id="closeEarningsBtn" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-body" id="earningsModalBody" style="padding:16px 20px 20px"></div>
+    </div>
+  </div>
 
   <!-- CALENDAR EMAIL COMPOSER MODAL -->
   <div class="modal-overlay" id="calEmailModal" style="display:none" role="dialog" aria-modal="true" aria-label="Email Templates">

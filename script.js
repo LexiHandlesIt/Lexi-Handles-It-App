@@ -13,6 +13,16 @@ const KEY_REC   = 'tq_recseq';
 const KEY_ONBOARDED    = 'tq_onboarded';
 const KEY_PL_ONBOARDED = 'tq_pl_onboarded';
 const KEY_PREVIEW_FIRST_SUPPRESSED = 'tq_preview_first_suppressed';
+const KEY_CUST_DATA    = 'lexi_cust_data';  // { "david okafor": { note, recurringDays } }
+
+function custKey(name) { return (name || '').trim().toLowerCase(); }
+function getCustData(name)           { const d = lsGet(KEY_CUST_DATA) || {}; return d[custKey(name)] || {}; }
+function saveCustData(name, updates) {
+  const all = lsGet(KEY_CUST_DATA) || {};
+  const k = custKey(name);
+  all[k] = { ...(all[k] || {}), ...updates };
+  localStorage.setItem(KEY_CUST_DATA, JSON.stringify(all));
+}
 
 /* ===== DEFAULT COLOURS ===== */
 const DEFAULT_COLOURS = { primary: '#7D5730', accent: '#6B7C5C', bg: '#F5F0E8' };
@@ -171,6 +181,11 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPageCompletion();
   setupPage4();
   setupModals();
+  setupSendChoice();
+  setupChaseAndPause();
+  setupJobSearch();
+  setupReviewModal();
+  setupEarnings();
   updateSavedBadge();
   populatePage1Fields();
   refreshPriceList();
@@ -427,6 +442,8 @@ function setupNavigation() {
     hamburger.setAttribute('aria-expanded', 'false');
     navMenu.setAttribute('aria-hidden', 'true');
   }
+  // Expose globally so other modules (Chase Payments, Pause, Quals) can close the menu
+  window.closeMenu = closeMenu;
 
   hamburger.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
@@ -452,17 +469,26 @@ function setupNavigation() {
     });
   });
 
-  // New Document submenu toggle
-  const menuNewDoc   = document.getElementById('menuNewDoc');
-  const newDocSubmenu = document.getElementById('navNewDocSubmenu');
-  if (menuNewDoc && newDocSubmenu) {
-    menuNewDoc.addEventListener('click', (e) => {
+  // Submenu toggle helper
+  function setupSubmenu(triggerId, submenuId) {
+    const trigger = document.getElementById(triggerId);
+    const submenu = document.getElementById(submenuId);
+    if (!trigger || !submenu) return;
+    trigger.addEventListener('click', e => {
       e.stopPropagation();
-      const isOpen = newDocSubmenu.classList.contains('open');
-      newDocSubmenu.classList.toggle('open', !isOpen);
-      menuNewDoc.classList.toggle('open', !isOpen);
+      // Close all other submenus first
+      document.querySelectorAll('.nav-submenu.open').forEach(s => {
+        if (s !== submenu) { s.classList.remove('open'); s.previousElementSibling?.classList.remove('open'); }
+      });
+      const isOpen = submenu.classList.contains('open');
+      submenu.classList.toggle('open', !isOpen);
+      trigger.classList.toggle('open', !isOpen);
     });
   }
+
+  setupSubmenu('menuNewDoc',        'navNewDocSubmenu');
+  setupSubmenu('menuManageJobs',    'navManageJobsSubmenu');
+  setupSubmenu('menuManageBusiness','navManageBusinessSubmenu');
 
   // Field info ? popup (CRN, VAT, etc.)
   document.querySelectorAll('.field-info-btn').forEach(btn => {
@@ -514,8 +540,10 @@ function setupNavigation() {
   document.getElementById('menuBizInfo')?.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
     closeMenu();
-    openBizInfoModal();
+    setTimeout(openSendChoiceModal, 180);
   });
+
+  // Qualifications are now shared from within Send My Business Info — no separate menu item needed
 
   document.getElementById('menuShareLexi')?.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
@@ -659,6 +687,19 @@ function setupPage1() {
       save();
     });
   }
+
+  // Qualifications upload
+  const qualsArea    = document.getElementById('qualsUploadArea');
+  const qualsFile    = document.getElementById('qualsFile');
+  const qualsAddMore = document.getElementById('qualsAddMoreBtn');
+  if (qualsArea && qualsFile) {
+    qualsArea.addEventListener('click', e => {
+      if (!e.target.closest('.quals-file-list') && !e.target.closest('.quals-add-more-btn')) qualsFile.click();
+    });
+    qualsArea.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') qualsFile.click(); });
+    qualsFile.addEventListener('change', handleQualUpload);
+  }
+  qualsAddMore?.addEventListener('click', e => { e.stopPropagation(); qualsFile.click(); });
 
   // Payment method toggles
   document.getElementById('payBankTransfer').addEventListener('change', e => {
@@ -818,6 +859,115 @@ function showQRState() {
   if (hasQR && img) img.src = state.company.qrCode;
 }
 
+/* ===== QUALIFICATIONS ===== */
+function handleQualUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const allowed = ['image/jpeg','image/png','image/gif','image/webp','application/pdf'];
+  if (!allowed.includes(file.type)) { toast('Please upload a PDF or image file.', 'error'); return; }
+  if (file.size > 10 * 1024 * 1024) { toast('File must be under 10 MB.', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    if (!state.company.qualifications) state.company.qualifications = [];
+    state.company.qualifications.push({ name: file.name, type: file.type, data: ev.target.result });
+    showQualsState();
+    save();
+    showSavedPopup('Qualification saved.', null, 2500);
+  };
+  reader.readAsDataURL(file);
+  // Reset so same file can be re-uploaded
+  e.target.value = '';
+}
+
+function showQualsState() {
+  const quals       = state.company.qualifications || [];
+  const placeholder = document.getElementById('qualsPlaceholder');
+  const fileList    = document.getElementById('qualsFileList');
+  const addMore     = document.getElementById('qualsAddMoreBtn');
+  if (!placeholder || !fileList) return;
+
+  if (quals.length === 0) {
+    placeholder.style.display = 'flex';
+    fileList.style.display    = 'none';
+    if (addMore) addMore.style.display = 'none';
+  } else {
+    placeholder.style.display = 'none';
+    fileList.style.display    = 'block';
+    if (addMore) addMore.style.display = 'block';
+    fileList.innerHTML = quals.map((q, i) => `
+      <div class="quals-file-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="18" rx="2"/><path d="M10 3h8l4 4v14a2 2 0 0 1-2 2h-6"/></svg>
+        <span class="quals-file-name" title="${esc(q.name)}">${esc(q.name)}</span>
+        <button type="button" class="quals-remove-btn" onclick="removeQual(${i})" aria-label="Remove">&#x2715;</button>
+      </div>`).join('');
+  }
+}
+
+function removeQual(index) {
+  if (!state.company.qualifications) return;
+  state.company.qualifications.splice(index, 1);
+  showQualsState();
+  save();
+}
+
+function openQualsModal() {
+  const quals = state.company.qualifications || [];
+  const listEl = document.getElementById('qualsModalList');
+  const emptyEl = document.getElementById('qualsModalEmpty');
+  if (quals.length === 0) {
+    if (listEl) listEl.innerHTML = '';
+    if (emptyEl) emptyEl.style.display = 'block';
+  } else {
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (listEl) listEl.innerHTML = quals.map((q, i) => {
+      const isPdf = q.type === 'application/pdf';
+      return `
+        <div class="quals-modal-row">
+          <div class="quals-modal-row-info">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="18" rx="2"/><path d="M10 3h8l4 4v14a2 2 0 0 1-2 2h-6"/></svg>
+            <span>${esc(q.name)}</span>
+          </div>
+          <div class="quals-modal-row-btns">
+            <button type="button" class="btn btn-sm btn-outline" onclick="viewQual(${i})">View</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="shareQual(${i})">Share</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+  document.getElementById('qualsModal').style.display = 'flex';
+}
+
+function viewQual(index) {
+  const q = (state.company.qualifications || [])[index];
+  if (!q) return;
+  const w = window.open('', '_blank');
+  if (!w) return;
+  if (q.type === 'application/pdf') {
+    w.document.write(`<html><body style="margin:0"><embed src="${q.data}" type="application/pdf" width="100%" height="100%" style="position:fixed;inset:0"></body></html>`);
+  } else {
+    w.document.write(`<html><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${q.data}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
+  }
+}
+
+function shareQual(index) {
+  const q = (state.company.qualifications || [])[index];
+  if (!q) return;
+  if (navigator.share) {
+    fetch(q.data)
+      .then(r => r.blob())
+      .then(blob => {
+        const file = new File([blob], q.name, { type: q.type });
+        navigator.share({ files: [file], title: q.name }).catch(() => {});
+      });
+  } else {
+    // Fallback: open for download
+    const a = document.createElement('a');
+    a.href = q.data;
+    a.download = q.name;
+    a.click();
+  }
+}
+
 function populatePage1Fields() {
   const c = state.company;
   setVal('p1FirstName',    c.firstName);
@@ -829,12 +979,14 @@ function populatePage1Fields() {
   setVal('p1Phone',         c.phone);
   setVal('p1Email',         c.email);
   setVal('p1Website',       c.website);
+  setVal('p1ReviewLink',    c.reviewLink || '');
   setVal('p1CompanyNumber', c.companyNumber || '');
   setVal('p1VatNumber',     c.vatNumber || '');
   setVal('p1Trade',         c.trade || '');
 
   showLogoState();
   showQRState();
+  showQualsState();
 
   // Payment methods
   const methods = c.payMethods || [];
@@ -924,6 +1076,7 @@ function saveBusinessDetails(showToast = true) {
     phone:        getVal('p1Phone'),
     email:        getVal('p1Email'),
     website:       getVal('p1Website'),
+    reviewLink:    getVal('p1ReviewLink').trim(),
     companyNumber: getVal('p1CompanyNumber'),
     vatNumber:     getVal('p1VatNumber'),
     payMethods:    methods,
@@ -1584,7 +1737,35 @@ function deleteJob(id) {
 
 /* ===== PAGE 3 — CUSTOMER DETAILS ===== */
 function setupPage3() {
-  // Doc type chooser now lives on page-completion — nothing needed here
+  // Expand/collapse extra customer fields
+  document.getElementById('custMoreToggle')?.addEventListener('click', () => {
+    const extra   = document.getElementById('custExtraFields');
+    const toggle  = document.getElementById('custMoreToggle');
+    const chevron = document.getElementById('custMoreChevron');
+    const label   = document.getElementById('custMoreLabel');
+    const isOpen  = extra.style.display !== 'none';
+    extra.style.display = isOpen ? 'none' : 'block';
+    toggle.setAttribute('aria-expanded', String(!isOpen));
+    if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+    if (label)   label.textContent = isOpen ? 'Add more details' : 'Show less';
+  });
+}
+
+// Expand extra fields if any hidden values are already populated (e.g. when editing)
+function syncCustMoreToggle() {
+  const extra   = document.getElementById('custExtraFields');
+  const toggle  = document.getElementById('custMoreToggle');
+  const chevron = document.getElementById('custMoreChevron');
+  const label   = document.getElementById('custMoreLabel');
+  if (!extra) return;
+  const hasExtra = ['custTitle','custAddr','custPostcode','custEmail'].some(id => {
+    const el = document.getElementById(id);
+    return el && el.value && el.value.trim() !== '';
+  });
+  extra.style.display = hasExtra ? 'block' : 'none';
+  if (toggle)  toggle.setAttribute('aria-expanded', String(hasExtra));
+  if (chevron) chevron.style.transform = hasExtra ? 'rotate(180deg)' : '';
+  if (label)   label.textContent = hasExtra ? 'Show less' : 'Add more details';
 }
 
 /* ===== PAGE JOBS — ADD JOBS ===== */
@@ -1728,6 +1909,7 @@ function populateQuoteForm() {
   setVal('custPostcode',  q.custPostcode);
   setVal('custPhone',     q.custPhone);
   setVal('custEmail',     q.custEmail);
+  syncCustMoreToggle(); // expand extra fields if any have values
   setVal('docRef',        q.ref);
   setVal('docDate',       q.date || todayStr());
   setVal('docValidFor',   q.validFor || '14');
@@ -2403,20 +2585,34 @@ function setupNewJobPicker() {
 
 /* ===== PAGE 4 — SAVED DOCS ===== */
 function setupPage4() {
-  // "New Job" button in page header — opens customer picker
-  document.getElementById('newJobBtn')?.addEventListener('click', () => {
-    // If there are saved customers, offer the picker; otherwise go straight to Add Customer
-    const hasSavedCustomers = state.saved.some(d => {
-      const q = d.quote || {};
-      return (buildCustName(q) || d.custName || '').trim() !== '';
-    });
-    if (hasSavedCustomers) {
-      openNewJobPicker();
-    } else {
-      prepareNewQuote();
-      showPage('page3');
-    }
+  // Filter & Sort toggle
+  document.getElementById('filterToggleBtn')?.addEventListener('click', () => {
+    const bar     = document.getElementById('savedFilterBar');
+    const chevron = document.getElementById('filterToggleChevron');
+    const label   = document.getElementById('filterToggleLabel');
+    const isOpen  = bar.style.display !== 'none';
+    bar.style.display = isOpen ? 'none' : 'flex';
+    document.getElementById('filterToggleBtn').setAttribute('aria-expanded', String(!isOpen));
+    if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+    if (label)   label.textContent = isOpen ? 'Filter & Sort' : 'Filter & Sort';
   });
+
+  // Quick Quote banner — goes straight to a blank quote form, one tap
+  document.getElementById('quickQuoteBtn')?.addEventListener('click', () => {
+    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    prepareNewQuote();
+    showPage('page3');
+    // Collapse extra customer fields for a clean start
+    const extra   = document.getElementById('custExtraFields');
+    const toggle  = document.getElementById('custMoreToggle');
+    const chevron = document.getElementById('custMoreChevron');
+    const label   = document.getElementById('custMoreLabel');
+    if (extra)   extra.style.display = 'none';
+    if (toggle)  toggle.setAttribute('aria-expanded', 'false');
+    if (chevron) chevron.style.transform = '';
+    if (label)   label.textContent = 'Add more details';
+  });
+
 
   const sel = document.getElementById('savedFilterSelect');
   if (sel) sel.addEventListener('change', () => refreshSavedDocs());
@@ -2434,7 +2630,99 @@ function setupPage4() {
   }
 }
 
+function renderAttentionWidget() {
+  const wrap = document.getElementById('attentionWidget');
+  if (!wrap) return;
+  const today = todayStr();
+  const items = [];
+
+  (state.saved || []).forEach(d => {
+    const q = d.quote || {};
+    const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Customer';
+    const ref = d.invoiceRef || q.ref || d.ref || '';
+    const payments = getDocPayments(d);
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const outstanding = Math.max(0, (d.total || 0) - totalPaid);
+
+    if (outstanding <= 0 || d.paid) return;
+
+    if (d.invoiceSent && d.invoiceDueDate && today > d.invoiceDueDate) {
+      const days = Math.floor((new Date(today) - new Date(d.invoiceDueDate)) / 86400000);
+      items.push({ docId: d.id, custName, ref, msg: `Invoice ${days}d overdue`, action: 'chase', color: '#c0392b' });
+    } else if (!d.invoiceSent && !d.paid) {
+      const docDate = q.date || d.date;
+      const qType = (q.type || '').toLowerCase();
+      if ((qType === 'estimate' || qType === 'quote') && docDate) {
+        const age = Math.floor((new Date(today) - new Date(docDate)) / 86400000);
+        if (age >= 14) {
+          items.push({ docId: d.id, custName, ref, msg: `${qType === 'quote' ? 'Quote' : 'Estimate'} sent ${age} days ago — no reply`, action: 'send', color: '#e67e22' });
+        }
+      }
+    }
+  });
+
+  // Recurring customers — check if they're overdue for a visit
+  const groups = buildCustomerGroups();
+  const today2 = todayStr();
+  groups.forEach(g => {
+    const data = getCustData(g.name);
+    if (!data.recurringDays) return;
+    // Find the most recent job date for this customer
+    const lastJobDate = g.docs
+      .map(d => d.jobCompletedDate || d.quote?.date || d.date || '')
+      .filter(Boolean).sort().pop();
+    if (!lastJobDate) return;
+    const daysSince = Math.floor((new Date(today2) - new Date(lastJobDate)) / 86400000);
+    if (daysSince >= data.recurringDays) {
+      const overdueDays = daysSince - data.recurringDays;
+      items.push({
+        docId: g.docs[0].id, custName: g.name, ref: '',
+        msg: `Regular visit ${overdueDays === 0 ? 'due today' : `${overdueDays}d overdue`} (every ${data.recurringDays === 7 ? 'week' : data.recurringDays === 14 ? '2 weeks' : data.recurringDays === 28 ? 'month' : data.recurringDays + ' days'})`,
+        action: 'recurring', color: '#8e44ad'
+      });
+    }
+  });
+
+  if (items.length === 0) { wrap.innerHTML = ''; return; }
+
+  wrap.innerHTML = `
+    <div class="attn-widget">
+      <button type="button" class="attn-widget-header" id="attnWidgetHeader" aria-expanded="true">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>${items.length} thing${items.length > 1 ? 's' : ''} need${items.length === 1 ? 's' : ''} your attention</span>
+        <svg class="attn-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto;transform:rotate(180deg)"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="attn-widget-body" id="attnWidgetBody">
+        ${items.map(item => `
+          <div class="attn-widget-row">
+            <div class="attn-widget-dot" style="background:${item.color}"></div>
+            <div class="attn-widget-info">
+              <span class="attn-widget-name">${esc(item.custName)}</span>
+              <span class="attn-widget-msg">${esc(item.msg)}</span>
+            </div>
+            ${item.action === 'chase'
+              ? `<button type="button" class="attn-action-btn attn-chase" onclick="openChaseForDoc('${esc(item.docId)}')">Chase</button>`
+              : item.action === 'recurring'
+                ? `<button type="button" class="attn-action-btn attn-recurring" onclick="openCustomerDashboardForDoc('${esc(item.docId)}')">Book In</button>`
+                : `<button type="button" class="attn-action-btn attn-send" onclick="openQuoteModal('${esc(item.docId)}')">Follow Up</button>`
+            }
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  // Toggle collapse
+  document.getElementById('attnWidgetHeader')?.addEventListener('click', () => {
+    const body    = document.getElementById('attnWidgetBody');
+    const chevron = wrap.querySelector('.attn-chevron');
+    const isOpen  = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+  });
+}
+
 function refreshSavedDocs() {
+  updateChasePaymentsBadge();
+  renderAttentionWidget();
   const sel    = document.getElementById('savedFilterSelect');
   const filter = sel ? sel.value : 'all';
   const sortSel = document.getElementById('savedSortSelect');
@@ -2450,6 +2738,16 @@ function refreshSavedDocs() {
   else if (filter === 'paid')     docs = docs.filter(d => d.paid);
   else if (filter === 'unpaid')   docs = docs.filter(d => !d.paid);
   else if (filter === 'accepted') docs = docs.filter(d => d.accepted);
+
+  // Search filter
+  const q = getJobSearchQuery();
+  if (q) {
+    docs = docs.filter(d => {
+      const quote = d.quote || {};
+      const name = [quote.custFirstName, quote.custLastName].filter(Boolean).join(' ').toLowerCase();
+      return name.includes(q) || (d.ref || quote.ref || '').toLowerCase().includes(q);
+    });
+  }
 
   // Sort
   const sortKey = d => {
@@ -2510,15 +2808,16 @@ function refreshSavedDocs() {
           <button type="button" class="type-badge ${statusBadge}" data-badge-id="${doc.id}" data-badge-status="${statusBadge}">${statusLabel}</button>
         </div>
       </div>
-      <div class="journey-select-wrap">
-        <select class="journey-select" data-id="${doc.id}">
-          <option value="">Create Document…</option>
-          <option value="quote">A &nbsp; Estimate</option>
-          <option value="quote-q">B &nbsp; Quote</option>
-          <option value="invoice">C &nbsp; Invoice</option>
-          <option value="receipt">D &nbsp; Receipt</option>
-        </select>
-        <button type="button" class="btn-view-customer" data-id="${doc.id}">View Customer</button>
+      <div class="job-card-actions">
+        <button type="button" class="jca-open" data-id="${doc.id}">Open</button>
+        ${statusBadge === 'overdue'
+          ? `<button type="button" class="jca-primary jca-chase" data-id="${doc.id}">💰 Chase Payment</button>`
+          : statusBadge === 'paid'
+            ? `<button type="button" class="jca-primary jca-paid" data-id="${doc.id}">View Receipt</button>`
+            : (statusBadge === 'invoiced')
+              ? `<button type="button" class="jca-primary jca-invoice" data-id="${doc.id}">Send Invoice</button>`
+              : `<button type="button" class="jca-primary jca-send" data-id="${doc.id}">Send ${statusLabel}</button>`
+        }
       </div>
       <div class="saved-doc-payment-tally">
         <span class="sdpt-payment-info">
@@ -2531,16 +2830,13 @@ function refreshSavedDocs() {
 
     container.appendChild(card);
 
-    card.querySelector('.journey-select').addEventListener('change', e => {
-      const action = e.target.value;
-      e.target.value = ''; // reset to placeholder
-      if (!action) return;
-      if      (action === 'quote')   openQuoteModal(doc.id);
-      else if (action === 'quote-q') openQuoteModal(doc.id);
-      else if (action === 'invoice') previewInvoice(doc.id);
-      else if (action === 'receipt') handleReceiptRequest(doc.id);
-    });
-    card.querySelector('.btn-view-customer').addEventListener('click', () => openCustomerDashboardForDoc(doc.id));
+    // Open → customer dashboard
+    card.querySelector('.jca-open')?.addEventListener('click', () => openCustomerDashboardForDoc(doc.id));
+    // Contextual primary actions
+    card.querySelector('.jca-chase')?.addEventListener('click',   () => openChaseForDoc(doc.id));
+    card.querySelector('.jca-send')?.addEventListener('click',    () => openQuoteModal(doc.id));
+    card.querySelector('.jca-invoice')?.addEventListener('click', () => previewInvoice(doc.id));
+    card.querySelector('.jca-paid')?.addEventListener('click',    () => handleReceiptRequest(doc.id));
 
     card.querySelector('.type-badge')?.addEventListener('click', () => {
       const status = statusBadge;
@@ -3148,7 +3444,13 @@ function setupModals() {
         renderSingleCustomerDashboard(updatedGroup, groups);
       } catch(e) { console.error('Dashboard re-render error:', e); }
     }
-    showSavedPopup(doc.paid ? 'Get in. That one is paid in full.' : "Payment logged. I've got it.");
+    if (doc.paid) {
+      showSavedPopup('Get in. That one is paid in full.', () => {
+        maybeAskForReview(doc);
+      }, 2000);
+    } else {
+      showSavedPopup("Payment logged. I've got it.");
+    }
   });
 }
 
@@ -3872,6 +4174,35 @@ function createNewCustomerFromPicker() {
   else openInvoiceModal(doc.id);
 }
 
+/* ===== SEND CHOICE ===== */
+const BIZ_SECTIONS  = ['contact', 'phone', 'companyNum', 'vatNum'];
+const PAY_SECTIONS  = ['bank', 'paypal', 'cash', 'other'];
+
+function openSendChoiceModal() {
+  document.getElementById('sendChoiceModal').style.display = 'flex';
+}
+
+function setupSendChoice() {
+  document.getElementById('closeSendChoiceBtn')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+  });
+  document.getElementById('sendChoiceModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+  document.getElementById('sendChoiceBusiness')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+    openBizInfoModal('business');
+  });
+  document.getElementById('sendChoicePayment')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+    openBizInfoModal('payment');
+  });
+  document.getElementById('sendChoiceQuals')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+    openBizInfoModal('qualifications');
+  });
+}
+
 /* ===== SEND MY BUSINESS INFO ===== */
 
 function bizInfoSections() {
@@ -3951,10 +4282,59 @@ function updateBizInfoPreview() {
   setVal('bizInfoShareText', buildBizInfoText());
 }
 
-function openBizInfoModal() {
-  const sections = bizInfoSections();
-  const container = document.getElementById('bizInfoOptions');
+function openBizInfoModal(filter) {
+  // filter: 'business' | 'payment' | 'qualifications' | undefined (all)
+  const allSections = bizInfoSections();
+  const container   = document.getElementById('bizInfoOptions');
+  const titleEl     = document.querySelector('#bizInfoModal .modal-title');
+  const previewWrap = document.getElementById('bizInfoPreviewWrap');
+  const footerEl    = document.querySelector('#bizInfoModal .modal-footer');
   if (!container) return;
+
+  // Qualifications-only view — no text preview needed
+  if (filter === 'qualifications') {
+    const quals = state.company.qualifications || [];
+    if (titleEl) titleEl.textContent = 'My Qualifications';
+    container.innerHTML = quals.length === 0
+      ? `<p style="color:#999;text-align:center;padding:20px 0;font-size:0.9rem">No qualifications uploaded yet.<br><small>Add them from <strong>Edit My Business</strong>.</small></p>`
+      : quals.map((q, i) => `
+          <div class="biz-info-qual-row">
+            <span class="biz-info-qual-name" title="${esc(q.name)}">${esc(q.name)}</span>
+            <div class="biz-info-qual-btns">
+              <button type="button" class="btn btn-sm btn-outline" onclick="viewQual(${i})">View</button>
+              <button type="button" class="btn btn-sm btn-primary" onclick="shareQual(${i})">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Share
+              </button>
+            </div>
+          </div>`).join('');
+    if (previewWrap) previewWrap.style.display = 'none';
+    if (footerEl)    footerEl.style.display    = 'none';
+    document.getElementById('bizInfoModal').style.display = 'flex';
+    return;
+  }
+
+  // Text-based view — filter sections
+  if (previewWrap) previewWrap.style.display = '';
+  if (footerEl)    footerEl.style.display    = '';
+
+  let sections = allSections;
+  if (filter === 'business') {
+    sections = allSections.filter(s => BIZ_SECTIONS.includes(s.id));
+    if (titleEl) titleEl.textContent = 'Send Business Details';
+  } else if (filter === 'payment') {
+    sections = allSections.filter(s => PAY_SECTIONS.includes(s.id));
+    if (titleEl) titleEl.textContent = 'Send Payment Details';
+  } else {
+    if (titleEl) titleEl.textContent = 'Send My Business Info';
+  }
+
+  if (sections.length === 0) {
+    container.innerHTML = `<p style="color:#999;text-align:center;padding:20px 0;font-size:0.9rem">No ${filter === 'payment' ? 'payment' : 'business'} details saved yet.<br><small>Add them from <strong>Edit My Business</strong>.</small></p>`;
+    if (previewWrap) previewWrap.style.display = 'none';
+    if (footerEl)    footerEl.style.display    = 'none';
+    document.getElementById('bizInfoModal').style.display = 'flex';
+    return;
+  }
 
   container.innerHTML = `
     <label class="checkbox-label biz-info-check biz-info-select-all">
@@ -4079,7 +4459,7 @@ function renderCustomerSelector(groups) {
   });
 }
 
-function buildCustomerJobSection(d) {
+function buildCustomerJobSection(d, jobNum = 0) {
   const q = d.quote || {};
   // items may live in q.items or (legacy) d.items
   const items = (q.items && q.items.length ? q.items : null) || (d.items && d.items.length ? d.items : null) || [];
@@ -4252,10 +4632,12 @@ function buildCustomerJobSection(d) {
     <div class="cdv-job-card">
       <div class="cdv-job-header">
         <div class="cdv-job-meta">
-          <span class="cdv-job-ref">${esc(ref)}</span>
+          <span class="cdv-job-ref">${jobNum ? `<span class="cdv-job-num">Job ${jobNum}:</span> ` : ''}${esc(ref)}</span>
           ${docDate ? `<span class="cdv-job-date">${formatDate(docDate)}</span>` : ''}
         </div>
-        <span class="type-badge ${statusClass}">${esc(statusLabel)}</span>
+        <button type="button" class="type-badge ${statusClass} cdv-status-btn"
+          data-prog-doc-id="${esc(d.id)}" data-prog-action="${statusClass === 'paid' ? 'receipt' : statusClass === 'invoiced' || statusClass === 'overdue' ? 'invoice' : 'quote'}"
+          title="Open ${statusLabel}">${esc(statusLabel)}</button>
       </div>
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
@@ -4296,6 +4678,7 @@ function renderSingleCustomerDashboard(group, groups) {
   const DSVG_EMAIL = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
   const DSVG_WA    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
   const DSVG_PHONE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.44 2 2 0 0 1 3.57 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.29 6.29l1.12-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+  const DSVG_SHARE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
   const contactBtns = `
     <div class="cdv-contact-btns">
       <button type="button" class="cal-icon-btn cal-icon-email cdv-labeled${!dashEmail ? ' cal-btn-disabled' : ''}"
@@ -4307,6 +4690,7 @@ function renderSingleCustomerDashboard(group, groups) {
       ${dashPhone
         ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Phone</span></a>`
         : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Phone</span></button>`}
+      <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share My Details</span></button>
     </div>`;
 
   // contentHtml = pure dashboard content (used for download — no buttons)
@@ -4335,11 +4719,13 @@ function renderSingleCustomerDashboard(group, groups) {
         </div>
       </div>
       <div class="cdv-jobs-list">
-        ${group.docs.map(d => buildCustomerJobSection(d)).join('')}
+        ${group.docs.map((d, i) => buildCustomerJobSection(d, group.docs.length > 1 ? i + 1 : 0)).join('')}
       </div>
+      ${buildCustomerExtras(group.name)}
     </div>`;
 
   body.innerHTML = contentHtml;
+  wireCustomerExtras(body, group.name);
 
   // Wire modal-header action buttons
   const firstDocId = group.docs[0]?.id;
@@ -6566,7 +6952,8 @@ function calSelectTemplate(templateId) {
   if (templateId === 'custom') {
     document.getElementById('calEmailModal').style.display = 'none';
     if (calEmailChannel === 'whatsapp') {
-      window.open('https://wa.me/', '_blank');
+      // Use location.href for reliable mobile WhatsApp deep-link (contact chooser, no pre-filled message)
+      window.location.href = 'https://wa.me/';
     } else {
       if (!calEmailAddr) { showSavedPopup('No email address saved for this customer.'); return; }
       window.location.href = 'mailto:' + calEmailAddr;
@@ -6649,4 +7036,647 @@ function setupCalendar() {
   document.getElementById('calEmailModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) closeCalEmailModalFn();
   });
+
+  // Calendar sync modal
+  document.getElementById('calSyncBtn')?.addEventListener('click', () => {
+    document.getElementById('calSyncModal').style.display = 'flex';
+  });
+  document.getElementById('closeCalSyncBtn')?.addEventListener('click', () => {
+    document.getElementById('calSyncModal').style.display = 'none';
+  });
+  document.getElementById('calSyncModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+  document.getElementById('downloadIcsBtn')?.addEventListener('click', downloadIcsFile);
 }
+
+/* ===== CALENDAR EXPORT (.ics) ===== */
+function formatIcsDate(dateStr) {
+  // dateStr is YYYY-MM-DD → YYYYMMDD
+  return (dateStr || '').replace(/-/g, '');
+}
+
+function downloadIcsFile() {
+  const docs = state.saved || [];
+  const co   = state.company || {};
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Lexi Handles It//Jobs//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+  ];
+
+  docs.forEach(d => {
+    const q        = d.quote || {};
+    const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Customer';
+    const ref      = d.invoiceRef || d.receiptRef || q.ref || d.ref || 'Job';
+    const startRaw = d.jobStartDate || q.date || d.date;
+    const endRaw   = d.jobCompletedDate || startRaw;
+    if (!startRaw) return; // skip undated docs
+
+    const start = formatIcsDate(startRaw);
+    const end   = formatIcsDate(endRaw || startRaw);
+    // iCal DTEND for all-day is exclusive (day+1)
+    const endExcl = formatIcsDate(
+      new Date(new Date(endRaw || startRaw).getTime() + 86400000).toISOString().slice(0, 10)
+    );
+
+    const desc  = (q.items || []).map(i => i.name).join(', ') || ref;
+    const status = d.paid ? 'Paid' : d.invoiceSent ? 'Invoiced' : (q.type || 'Estimate');
+    const uid   = `${ref}-${d.id}@lexi-handles-it`;
+
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${uid}`);
+    lines.push(`DTSTAMP:${formatIcsDate(new Date().toISOString().slice(0,10))}T000000Z`);
+    lines.push(`DTSTART;VALUE=DATE:${start}`);
+    lines.push(`DTEND;VALUE=DATE:${endExcl}`);
+    lines.push(`SUMMARY:${ref} – ${custName}`);
+    lines.push(`DESCRIPTION:${status} | ${desc}`);
+    if (q.custAddr) lines.push(`LOCATION:${q.custAddr}${q.custPostcode ? ', ' + q.custPostcode : ''}`);
+    lines.push('END:VEVENT');
+  });
+
+  lines.push('END:VCALENDAR');
+
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'lexi-jobs.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showSavedPopup('Calendar exported — open the file in Google, Outlook or Apple Calendar.', null, 4000);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHASE PAYMENTS
+   ═══════════════════════════════════════════════════════════ */
+
+const SEASONAL_TRADES = [
+  'garden','gardener','gardening','landscape','landscaper','landscaping',
+  'roofer','roofing','roof','exterior','painter','decorator','window',
+  'tree surgeon','tree','fencer','fencing','driveway','paving','paver'
+];
+
+function isSeasonalTrade() {
+  const t = (state.company?.trade || '').toLowerCase();
+  return SEASONAL_TRADES.some(k => t.includes(k));
+}
+
+function getOverdueInvoices() {
+  const today = todayStr();
+  const results = [];
+  (state.saved || []).forEach(d => {
+    const q = d.quote || {};
+    const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Customer';
+    const ref = d.invoiceRef || d.receiptRef || q.ref || d.ref || '-';
+    const payments = getDocPayments(d);
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const outstanding = Math.max(0, (d.total || 0) - totalPaid);
+    if (outstanding <= 0 || d.paid) return;
+
+    // Invoiced and overdue
+    if (d.invoiceSent && d.invoiceDueDate && today > d.invoiceDueDate) {
+      const days = Math.floor((new Date(today) - new Date(d.invoiceDueDate)) / 86400000);
+      results.push({ docId: d.id, custName, ref, amount: outstanding, days, phone: q.custPhone || '', email: q.custEmail || '', urgency: days >= 30 ? 'critical' : days >= 14 ? 'warning' : 'gentle', doc: d });
+    }
+    // Job complete, no invoice raised and past expected due date
+    else if (!d.invoiceSent && d.jobCompletedDate) {
+      const terms = (q.selectedTerms || []);
+      const termDays = terms.includes('payment30') ? 30 : terms.includes('payment14') ? 14 : terms.includes('payment7') ? 7 : 30;
+      const expDue = addDays(d.jobCompletedDate, termDays);
+      if (today >= expDue) {
+        const days = Math.floor((new Date(today) - new Date(expDue)) / 86400000);
+        results.push({ docId: d.id, custName, ref, amount: outstanding, days, phone: q.custPhone || '', email: q.custEmail || '', urgency: 'invoice-needed', doc: d });
+      }
+    }
+  });
+  // Sort: most overdue first
+  results.sort((a, b) => b.days - a.days);
+  return results;
+}
+
+function updateChasePaymentsBadge() {
+  const overdue = getOverdueInvoices();
+  const badge = document.getElementById('chasePaymentsBadge');
+  if (!badge) return;
+  if (overdue.length > 0) {
+    badge.textContent = overdue.length;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function buildChaseMessage(item, channel) {
+  const traderName = state.company?.preferredName || state.company?.firstName || 'your tradesperson';
+  const custFirst = (item.custName || '').split(' ')[0] || item.custName;
+
+  if (item.urgency === 'invoice-needed') {
+    return channel === 'whatsapp'
+      ? `Hi ${custFirst}, hope all's good! Just wanted to let you know I'll be sending over your invoice for ${item.ref} shortly. Give me a shout if you have any questions. Cheers, ${traderName}`
+      : { subject: `Invoice coming — ${item.ref}`, body: `Hi ${custFirst},\n\nHope you're well. I'll be sending your invoice for job ${item.ref} (£${fmtPrice(item.amount)}) over shortly.\n\nGive me a shout if you have any questions.\n\nThanks,\n${traderName}` };
+  }
+  if (item.urgency === 'gentle') {
+    return channel === 'whatsapp'
+      ? `Hi ${custFirst}, hope you're well! Just a friendly nudge — invoice ${item.ref} for ${fmtPrice(item.amount)} is now due. No rush, just wanted to make sure you got it. Cheers, ${traderName}`
+      : { subject: `Payment reminder — ${item.ref}`, body: `Hi ${custFirst},\n\nHope all is good with you. Just a gentle reminder that invoice ${item.ref} for ${fmtPrice(item.amount)} is now due.\n\nLet me know if you have any questions.\n\nThanks,\n${traderName}` };
+  }
+  if (item.urgency === 'warning') {
+    return channel === 'whatsapp'
+      ? `Hi ${custFirst}, just chasing invoice ${item.ref} for ${fmtPrice(item.amount)} which is now ${item.days} days overdue. Could you let me know when to expect payment? Thanks, ${traderName}`
+      : { subject: `Overdue invoice — ${item.ref}`, body: `Hi ${custFirst},\n\nI'm just following up on invoice ${item.ref} for ${fmtPrice(item.amount)}, which is now ${item.days} days overdue.\n\nCould you please let me know when I can expect payment?\n\nThanks,\n${traderName}` };
+  }
+  // critical (30+ days)
+  return channel === 'whatsapp'
+    ? `Hi ${custFirst}, I need to chase invoice ${item.ref} for ${fmtPrice(item.amount)} which is now ${item.days} days overdue. Please could you make payment or get in touch to discuss. Thanks, ${traderName}`
+    : { subject: `Urgent: overdue invoice ${item.ref}`, body: `Hi ${custFirst},\n\nI'm writing to chase invoice ${item.ref} for ${fmtPrice(item.amount)}, which is now ${item.days} days overdue.\n\nPlease could you arrange payment or contact me to discuss.\n\nThanks,\n${traderName}` };
+}
+
+function urgencyLabel(item) {
+  if (item.urgency === 'invoice-needed') return { text: 'Invoice not sent', cls: 'chase-tag-invoice' };
+  if (item.urgency === 'gentle')         return { text: `${item.days}d overdue`, cls: 'chase-tag-gentle' };
+  if (item.urgency === 'warning')        return { text: `${item.days}d overdue`, cls: 'chase-tag-warning' };
+  return { text: `${item.days}d overdue`, cls: 'chase-tag-critical' };
+}
+
+function openChaseForDoc(docId) {
+  // Open chase modal pre-filtered — the relevant customer will be at the top (sorted by overdue days)
+  openChasePaymentsModal();
+  // Scroll to this customer's row after the modal renders
+  setTimeout(() => {
+    const row = document.querySelector(`.chase-row [data-id="${docId}"]`);
+    if (row) row.closest('.chase-row')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 100);
+}
+
+function openChasePaymentsModal() {
+  const overdue = getOverdueInvoices();
+  const body = document.getElementById('chaseModalBody');
+  const sub  = document.getElementById('chaseModalSub');
+  if (!body) return;
+
+  const totalOwed = overdue.reduce((s, i) => s + i.amount, 0);
+
+  if (sub) {
+    sub.textContent = overdue.length
+      ? `${overdue.length} outstanding — ${fmtPrice(totalOwed)} owed`
+      : 'All payments up to date';
+  }
+
+  if (overdue.length === 0) {
+    body.innerHTML = `
+      <div style="padding:32px 20px;text-align:center">
+        <div style="font-size:2.4rem;margin-bottom:10px">🎉</div>
+        <p style="font-weight:700;color:var(--sage);margin:0 0 6px">Nothing to chase!</p>
+        <p style="color:#888;font-size:0.88rem;margin:0">All your invoices are paid up. Nice work.</p>
+      </div>`;
+  } else {
+    body.innerHTML = overdue.map(item => {
+      const tag = urgencyLabel(item);
+      const hasPhone = !!item.phone;
+      const hasEmail = !!item.email;
+      return `
+        <div class="chase-row">
+          <div class="chase-row-top">
+            <div class="chase-row-name">${esc(item.custName)}</div>
+            <span class="chase-tag ${tag.cls}">${tag.text}</span>
+          </div>
+          <div class="chase-row-ref">${esc(item.ref)} &bull; <strong>${fmtPrice(item.amount)}</strong> outstanding</div>
+          <div class="chase-row-btns">
+            <button type="button" class="chase-wa-btn${hasPhone ? '' : ' chase-btn-disabled'}"
+              ${hasPhone ? `onclick="sendChase('${esc(item.docId)}','whatsapp')"` : ''}
+              title="${hasPhone ? 'Send WhatsApp chase' : 'No phone number saved'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Chase by WhatsApp
+            </button>
+            <button type="button" class="chase-email-btn${hasEmail ? '' : ' chase-btn-disabled'}"
+              ${hasEmail ? `onclick="sendChase('${esc(item.docId)}','email')"` : ''}
+              title="${hasEmail ? 'Send email chase' : 'No email address saved'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              Email
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  document.getElementById('chasePaymentsModal').style.display = 'flex';
+}
+
+function sendChase(docId, channel) {
+  const overdue = getOverdueInvoices();
+  const item = overdue.find(i => i.docId === docId);
+  if (!item) return;
+  const msg = buildChaseMessage(item, channel);
+  if (channel === 'whatsapp') {
+    const text = encodeURIComponent(msg);
+    window.open(`https://wa.me/${item.phone.replace(/\D/g,'')}?text=${text}`, '_blank');
+  } else {
+    const m = msg;
+    window.location.href = `mailto:${item.email}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WINTER PAUSE
+   ═══════════════════════════════════════════════════════════ */
+
+const KEY_PAUSE = 'lexi_paused';
+
+function isPaused() {
+  try { return !!JSON.parse(localStorage.getItem(KEY_PAUSE)); } catch { return false; }
+}
+
+function getPauseData() {
+  try { return JSON.parse(localStorage.getItem(KEY_PAUSE)) || null; } catch { return null; }
+}
+
+function openPauseModal() {
+  const docs = state.saved || [];
+  const custCount = buildCustomerGroups().length;
+  const totalJobs = docs.length;
+  const totalOwed = getOverdueInvoices().reduce((s, i) => s + i.amount, 0);
+  const overdueCount = getOverdueInvoices().length;
+
+  // Build stats row
+  const statsRow = document.getElementById('pauseStatsRow');
+  if (statsRow) {
+    statsRow.innerHTML = `
+      <div class="pause-stat"><span class="pause-stat-num">${custCount}</span><span class="pause-stat-lbl">Customers</span></div>
+      <div class="pause-stat"><span class="pause-stat-num">${totalJobs}</span><span class="pause-stat-lbl">Jobs</span></div>
+      <div class="pause-stat"><span class="pause-stat-num">${fmtPrice(docs.reduce((s,d)=>s+(d.total||0),0))}</span><span class="pause-stat-lbl">Billed</span></div>`;
+  }
+
+  // Warn about outstanding invoices
+  const chaseWrap = document.getElementById('chaseBeforePause');
+  const chaseText = document.getElementById('chaseBeforePauseText');
+  if (chaseWrap && chaseText) {
+    if (overdueCount > 0) {
+      chaseText.textContent = `You have ${overdueCount} outstanding invoice${overdueCount>1?'s':''} totalling ${fmtPrice(totalOwed)}. Chase them before you pause?`;
+      chaseWrap.style.display = 'flex';
+    } else {
+      chaseWrap.style.display = 'none';
+    }
+  }
+
+  document.getElementById('pauseWinterModal').style.display = 'flex';
+}
+
+function confirmPause() {
+  const pauseData = { since: todayStr(), custCount: buildCustomerGroups().length, jobCount: (state.saved||[]).length };
+  localStorage.setItem(KEY_PAUSE, JSON.stringify(pauseData));
+  document.getElementById('pauseWinterModal').style.display = 'none';
+  // Close menu overlay cleanly before showing the paused screen
+  document.getElementById('navMenu')?.classList.remove('open');
+  document.getElementById('navMenuOverlay')?.classList.remove('active');
+  document.getElementById('hamburgerBtn')?.setAttribute('aria-expanded','false');
+  setTimeout(showPausedScreen, 250);
+}
+
+function showPausedScreen() {
+  const data = getPauseData();
+  if (!data) return;
+
+  const sub   = document.getElementById('pausedSub');
+  const stats = document.getElementById('pausedStats');
+  const since = document.getElementById('pausedSince');
+
+  if (sub) sub.textContent = `Your ${data.custCount} customers and ${data.jobCount} jobs are safe and waiting for you.`;
+  if (stats) {
+    const totalOwed = getOverdueInvoices().reduce((s,i)=>s+i.amount,0);
+    stats.innerHTML = totalOwed > 0
+      ? `<div class="paused-stat-note">💰 You have <strong>${fmtPrice(totalOwed)}</strong> outstanding — chase it below even while paused.</div>`
+      : `<div class="paused-stat-note">✅ All payments up to date. Enjoy the break.</div>`;
+  }
+  if (since) since.textContent = `Paused since ${formatDate(data.since)}`;
+
+  document.getElementById('pausedScreen').style.display = 'flex';
+}
+
+function resumeLexi() {
+  localStorage.removeItem(KEY_PAUSE);
+  document.getElementById('pausedScreen').style.display = 'none';
+  const name = state.company?.preferredName || state.company?.firstName || '';
+  showSavedPopup(`Welcome back${name ? ', ' + name : ''}! Ready when you are. 💪`, null, 4000);
+  updateChasePaymentsBadge();
+  refreshSavedDocs();
+}
+
+function checkSeasonalPrompt() {
+  const month = new Date().getMonth(); // 0=Jan … 11=Dec
+  const isSeason = isSeasonalTrade();
+
+  // Pause for Winter menu item — November only (month 10)
+  const pauseBtn = document.getElementById('menuPauseWinter');
+  if (pauseBtn) {
+    pauseBtn.style.display = (month === 10 && !isPaused()) ? '' : 'none';
+  }
+
+  // Seasonal banner in My Jobs page — August (7), September (8), October (9)
+  const banner = document.getElementById('seasonalBanner');
+  if (banner) {
+    const showBanner = isSeason && [7, 8, 9].includes(month) && !isPaused()
+      && !localStorage.getItem('lexi_seasonal_dismissed');
+    banner.style.display = showBanner ? 'flex' : 'none';
+  }
+}
+
+/* ── Wire up Chase + Pause in setupModals ── */
+function setupChaseAndPause() {
+  // Chase payments menu
+  document.getElementById('menuChasePayments')?.addEventListener('click', () => {
+    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    closeMenu();
+    setTimeout(openChasePaymentsModal, 180);
+  });
+  document.getElementById('closeChaseModalBtn')?.addEventListener('click', () => {
+    document.getElementById('chasePaymentsModal').style.display = 'none';
+  });
+  document.getElementById('chasePaymentsModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+
+  // Pause for winter menu
+  document.getElementById('menuPauseWinter')?.addEventListener('click', () => {
+    closeMenu();
+    setTimeout(openPauseModal, 180);
+  });
+  document.getElementById('closePauseModalBtn')?.addEventListener('click', () => {
+    document.getElementById('pauseWinterModal').style.display = 'none';
+  });
+  document.getElementById('pauseWinterModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+  document.getElementById('confirmPauseBtn')?.addEventListener('click', confirmPause);
+
+  // Chase before pausing shortcut
+  document.getElementById('chaseBeforePauseBtn')?.addEventListener('click', () => {
+    document.getElementById('pauseWinterModal').style.display = 'none';
+    openChasePaymentsModal();
+  });
+
+  // Seasonal banner
+  document.getElementById('seasonalBannerBtn')?.addEventListener('click', () => {
+    document.getElementById('seasonalBanner').style.display = 'none';
+    openPauseModal();
+  });
+  document.getElementById('seasonalBannerClose')?.addEventListener('click', () => {
+    document.getElementById('seasonalBanner').style.display = 'none';
+    localStorage.setItem('lexi_seasonal_dismissed', '1');
+  });
+
+  // Paused screen
+  document.getElementById('resumeLexiBtn')?.addEventListener('click', resumeLexi);
+  document.getElementById('pausedChaseBtn')?.addEventListener('click', () => {
+    document.getElementById('pausedScreen').style.display = 'none';
+    openChasePaymentsModal();
+  });
+
+  // Check if already paused on load
+  if (isPaused()) showPausedScreen();
+
+  // Show seasonal banner if applicable
+  checkSeasonalPrompt();
+
+  // Update chase badge
+  updateChasePaymentsBadge();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SEARCH
+   ═══════════════════════════════════════════════════════════ */
+function setupJobSearch() {
+  const input = document.getElementById('jobSearchInput');
+  if (!input) return;
+  let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => refreshSavedDocs(), 200);
+  });
+}
+
+function getJobSearchQuery() {
+  return (document.getElementById('jobSearchInput')?.value || '').trim().toLowerCase();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   REVIEW REQUEST
+   ═══════════════════════════════════════════════════════════ */
+let _reviewDoc = null;
+
+function maybeAskForReview(doc) {
+  const reviewLink = state.company.reviewLink || '';
+  const q = doc.quote || {};
+  const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'your customer';
+  const traderName = state.company.preferredName || state.company.firstName || '';
+  const msg = document.getElementById('reviewRequestMsg');
+  if (msg) msg.textContent = `${custName}'s job is paid in full. Want to ask them for a Google review while they're happy?`;
+  _reviewDoc = doc;
+  document.getElementById('reviewRequestModal').style.display = 'flex';
+  document.getElementById('reviewWhatsappBtn').onclick = () => {
+    const text = reviewLink
+      ? `Hi ${q.custFirstName || custName}, glad you're happy with the work! If you have two minutes, a Google review would really help my business: ${reviewLink} — thanks so much! ${traderName}`
+      : `Hi ${q.custFirstName || custName}, really glad you're happy with the work! If you get a chance, a Google review would mean the world to me. Thanks! ${traderName}`;
+    window.location.href = 'https://wa.me/' + (q.custPhone || '').replace(/\D/g,'') + '?text=' + encodeURIComponent(text);
+    document.getElementById('reviewRequestModal').style.display = 'none';
+  };
+  document.getElementById('reviewLaterBtn').onclick = () => {
+    document.getElementById('reviewRequestModal').style.display = 'none';
+  };
+}
+
+function setupReviewModal() {
+  document.getElementById('reviewRequestModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CUSTOMER STICKY NOTES + RECURRING JOBS
+   Rendered inside the customer dashboard
+   ═══════════════════════════════════════════════════════════ */
+function buildCustomerExtras(groupName) {
+  const data = getCustData(groupName);
+  const note = data.note || '';
+  const recurringDays = data.recurringDays || 0;
+
+  const recurringOptions = [
+    { val: 0,  label: 'Not a regular customer' },
+    { val: 7,  label: 'Weekly' },
+    { val: 14, label: 'Every 2 weeks' },
+    { val: 28, label: 'Monthly' },
+    { val: 42, label: 'Every 6 weeks' },
+  ];
+
+  return `
+    <div class="cdv-extras-section">
+      <div class="cdv-extras-row">
+        <label class="cdv-extras-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Customer Notes
+        </label>
+        <textarea class="cdv-sticky-note" data-cust="${esc(groupName)}" rows="3"
+          placeholder="e.g. Dog in garden, parking at front, prefers WhatsApp…">${esc(note)}</textarea>
+      </div>
+      <div class="cdv-extras-row">
+        <label class="cdv-extras-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Regular Visit
+        </label>
+        <select class="cdv-recurring-select" data-cust="${esc(groupName)}">
+          ${recurringOptions.map(o => `<option value="${o.val}"${o.val === recurringDays ? ' selected' : ''}>${o.label}</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
+}
+
+function wireCustomerExtras(body, groupName) {
+  // Sticky note — auto-save on change
+  let noteTimer;
+  body.querySelector('.cdv-sticky-note')?.addEventListener('input', e => {
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => {
+      saveCustData(groupName, { note: e.target.value });
+    }, 600);
+  });
+  // Recurring — save immediately on change
+  body.querySelector('.cdv-recurring-select')?.addEventListener('change', e => {
+    saveCustData(groupName, { recurringDays: parseInt(e.target.value) || 0 });
+    updateChasePaymentsBadge(); // refresh badge in case recurring state changed
+    renderAttentionWidget();
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EARNINGS SUMMARY
+   ═══════════════════════════════════════════════════════════ */
+function openEarningsModal() {
+  const body = document.getElementById('earningsModalBody');
+  if (!body) return;
+
+  const docs = state.saved || [];
+  const now  = new Date();
+  // UK tax year: 6 Apr to 5 Apr
+  const taxYearStart = new Date(now.getMonth() < 3 || (now.getMonth() === 3 && now.getDate() < 6)
+    ? now.getFullYear() - 1 : now.getFullYear(), 3, 6); // April = month 3
+
+  let totalInvoiced = 0, totalPaid = 0, totalOutstanding = 0, jobCount = 0;
+  const byMonth = {};
+
+  docs.forEach(d => {
+    const q = d.quote || {};
+    const docDate = q.date || d.date;
+    if (!docDate) return;
+    const dDate = new Date(docDate);
+    if (dDate < taxYearStart) return; // only this tax year
+
+    const payments = getDocPayments(d);
+    const paid     = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const total    = d.total || 0;
+    const outstanding = Math.max(0, total - paid);
+
+    totalInvoiced   += total;
+    totalPaid       += paid;
+    totalOutstanding += outstanding;
+    jobCount++;
+
+    // Monthly breakdown by invoice date
+    const monthKey = docDate.slice(0, 7); // YYYY-MM
+    if (!byMonth[monthKey]) byMonth[monthKey] = { invoiced: 0, paid: 0 };
+    byMonth[monthKey].invoiced += total;
+    byMonth[monthKey].paid     += paid;
+  });
+
+  const months = Object.keys(byMonth).sort();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  const taxYearLabel = `${taxYearStart.getFullYear()}–${taxYearStart.getFullYear() + 1}`;
+
+  body.innerHTML = `
+    <p style="color:#888;font-size:0.8rem;margin:0 0 14px">Tax year ${taxYearLabel} (6 Apr – 5 Apr)</p>
+    <div class="earn-summary-grid">
+      <div class="earn-stat">
+        <span class="earn-stat-num">${fmtPrice(totalInvoiced)}</span>
+        <span class="earn-stat-lbl">Total Invoiced</span>
+      </div>
+      <div class="earn-stat">
+        <span class="earn-stat-num earn-paid">${fmtPrice(totalPaid)}</span>
+        <span class="earn-stat-lbl">Collected</span>
+      </div>
+      <div class="earn-stat">
+        <span class="earn-stat-num ${totalOutstanding > 0 ? 'earn-owed' : ''}">${fmtPrice(totalOutstanding)}</span>
+        <span class="earn-stat-lbl">Outstanding</span>
+      </div>
+      <div class="earn-stat">
+        <span class="earn-stat-num">${jobCount}</span>
+        <span class="earn-stat-lbl">Jobs</span>
+      </div>
+    </div>
+
+    ${months.length ? `
+    <div class="earn-breakdown">
+      <div class="earn-breakdown-title">Month by month</div>
+      ${months.map(m => {
+        const [yr, mo] = m.split('-');
+        const label = monthNames[parseInt(mo) - 1] + ' ' + yr;
+        const d = byMonth[m];
+        return `<div class="earn-month-row">
+          <span class="earn-month-name">${label}</span>
+          <span class="earn-month-invoiced">${fmtPrice(d.invoiced)}</span>
+          <span class="earn-month-paid ${d.paid < d.invoiced ? 'earn-partial' : 'earn-full'}">${fmtPrice(d.paid)} collected</span>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+
+    <div class="earn-tax-note">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      These figures are for reference only. Always check with your accountant at tax time.
+    </div>
+
+    <button type="button" class="btn btn-outline w-100" id="exportEarningsBtn" style="margin-top:14px">Download as Text</button>`;
+
+  // Wire export button
+  document.getElementById('exportEarningsBtn')?.addEventListener('click', () => {
+    const lines = [
+      `Lexi Handles It — Earnings Summary`,
+      `Tax year ${taxYearLabel}`,
+      ``,
+      `Total invoiced:   ${fmtPrice(totalInvoiced)}`,
+      `Total collected:  ${fmtPrice(totalPaid)}`,
+      `Outstanding:      ${fmtPrice(totalOutstanding)}`,
+      `Number of jobs:   ${jobCount}`,
+      ``,
+      `Month-by-month:`,
+      ...months.map(m => {
+        const [yr, mo] = m.split('-');
+        return `  ${monthNames[parseInt(mo)-1]} ${yr}: invoiced ${fmtPrice(byMonth[m].invoiced)}, collected ${fmtPrice(byMonth[m].paid)}`;
+      }),
+      ``,
+      `Generated by Lexi Handles It`
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `lexi-earnings-${taxYearLabel}.txt`; a.click();
+  });
+
+  document.getElementById('earningsModal').style.display = 'flex';
+}
+
+function setupEarnings() {
+  document.getElementById('menuEarnings')?.addEventListener('click', () => {
+    closeMenu();
+    setTimeout(openEarningsModal, 180);
+  });
+  document.getElementById('closeEarningsBtn')?.addEventListener('click', () => {
+    document.getElementById('earningsModal').style.display = 'none';
+  });
+  document.getElementById('earningsModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+}
+
+
