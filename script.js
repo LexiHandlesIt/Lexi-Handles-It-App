@@ -477,7 +477,10 @@ function setupNavigation() {
         return;
       }
       closeMenu();
-      if (target === 'page3') prepareNewQuote();
+      if (target === 'page3') {
+        if (quietSeasonGuard()) return;
+        prepareNewQuote();
+      }
       showPage(target);
     });
   });
@@ -538,6 +541,7 @@ function setupNavigation() {
   // New Invoice from menu
   document.getElementById('menuNewInvoice')?.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (quietSeasonGuard()) { closeMenu(); return; }
     closeMenu();
     openClientPicker('invoice');
   });
@@ -545,6 +549,7 @@ function setupNavigation() {
   // New Receipt from menu
   document.getElementById('menuNewReceipt')?.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (quietSeasonGuard()) { closeMenu(); return; }
     closeMenu();
     openClientPicker('receipt');
   });
@@ -2627,6 +2632,7 @@ function setupPage4() {
   // Quick Quote banner — goes straight to a blank quote form, one tap
   document.getElementById('quickQuoteBtn')?.addEventListener('click', () => {
     if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (quietSeasonGuard()) return;
     prepareNewQuote();
     showPage('page3');
     // Collapse extra customer fields for a clean start
@@ -4224,6 +4230,24 @@ function setupSendChoice() {
     if (activeDocId) {
       const doc = state.saved.find(d => d.id === activeDocId);
       if (doc) populateQuoteSendModal(doc);
+    }
+  });
+  document.getElementById('sendChoiceInvoice')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+    if (activeDocId) {
+      const doc = state.saved.find(d => d.id === activeDocId);
+      if (doc) populateQuoteSendModal(doc);
+    } else {
+      startNewInvoice();
+    }
+  });
+  document.getElementById('sendChoiceReceipt')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+    if (activeDocId) {
+      const doc = state.saved.find(d => d.id === activeDocId);
+      if (doc) populateQuoteSendModal(doc);
+    } else {
+      startNewReceipt();
     }
   });
   document.getElementById('sendChoiceBusiness')?.addEventListener('click', () => {
@@ -7318,10 +7342,18 @@ function sendChase(docId, channel) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   WINTER PAUSE
+   QUIET SEASON
    ═══════════════════════════════════════════════════════════ */
 
-const KEY_PAUSE = 'lexi_paused';
+const KEY_PAUSE      = 'lexi_paused';
+const KEY_QS_HISTORY = 'lexi_qs_history'; // { monthsUsed: N } — persists across sessions
+
+function getQsMonthsUsed()      { try { return JSON.parse(localStorage.getItem(KEY_QS_HISTORY))?.monthsUsed || 0; } catch { return 0; } }
+function getQsMonthsRemaining() { return Math.max(0, 6 - getQsMonthsUsed()); }
+function bankQsMonths(months)   {
+  const used = getQsMonthsUsed() + months;
+  localStorage.setItem(KEY_QS_HISTORY, JSON.stringify({ monthsUsed: used }));
+}
 
 function isPaused() {
   try { return !!JSON.parse(localStorage.getItem(KEY_PAUSE)); } catch { return false; }
@@ -7331,12 +7363,72 @@ function getPauseData() {
   try { return JSON.parse(localStorage.getItem(KEY_PAUSE)) || null; } catch { return null; }
 }
 
-function openPauseModal() {
+function isQuietSeasonExpired() {
+  const data = getPauseData();
+  if (!data || !data.endDate) return false;
+  return new Date() >= new Date(data.endDate);
+}
+
+function checkPauseExpiry() {
+  if (isPaused() && isQuietSeasonExpired()) {
+    localStorage.removeItem(KEY_PAUSE);
+    const name = state.company?.preferredName || state.company?.firstName || '';
+    showSavedPopup(`Welcome back${name ? ', ' + name : ''}! Ready when you are.`, null, 4000);
+    updateChasePaymentsBadge();
+    refreshSavedDocs();
+  }
+}
+
+function quietSeasonGuard() {
+  if (!isPaused()) return false;
+  document.getElementById('quietSeasonLockedModal').style.display = 'flex';
+  return true;
+}
+
+/* ── Stub backend integrations ── */
+function notifySupabaseQuietSeason(data) {
+  console.log('[Quiet Season] Supabase notify:', data);
+}
+function pauseStripeSubscription(months) {
+  console.log('[Quiet Season] Stripe pause for', months, 'months');
+}
+function applyMailchimpQuietSeasonTag() {
+  console.log('[Quiet Season] Mailchimp tag applied');
+}
+function resumeSupabaseAccount() {
+  console.log('[Quiet Season] Supabase resume');
+}
+function resumeStripeSubscription() {
+  console.log('[Quiet Season] Stripe resume');
+}
+function removeMailchimpQuietSeasonTag() {
+  console.log('[Quiet Season] Mailchimp tag removed');
+}
+
+function openQuietSeasonIntroModal() {
+  const name = state.company?.preferredName || state.company?.firstName || '';
+  const titleEl = document.getElementById('qsIntroTitle');
+  if (titleEl) titleEl.textContent = name ? `Hi ${name}.` : 'Quiet Season';
+  const remaining = getQsMonthsRemaining();
+  const noteEl = document.getElementById('qsIntroMonthsLeft');
+  if (noteEl) {
+    if (remaining < 6) {
+      noteEl.textContent = `You have ${remaining} month${remaining !== 1 ? 's' : ''} of quiet season remaining this year.`;
+      noteEl.style.display = 'block';
+    } else {
+      noteEl.style.display = 'none';
+    }
+  }
+  document.getElementById('quietSeasonIntroModal').style.display = 'flex';
+}
+
+function openQuietSeasonModal() {
   const docs = state.saved || [];
   const custCount = buildCustomerGroups().length;
   const totalJobs = docs.length;
   const totalOwed = getOverdueInvoices().reduce((s, i) => s + i.amount, 0);
   const overdueCount = getOverdueInvoices().length;
+  const remaining = getQsMonthsRemaining();
 
   // Build stats row
   const statsRow = document.getElementById('pauseStatsRow');
@@ -7352,20 +7444,66 @@ function openPauseModal() {
   const chaseText = document.getElementById('chaseBeforePauseText');
   if (chaseWrap && chaseText) {
     if (overdueCount > 0) {
-      chaseText.textContent = `You have ${overdueCount} outstanding invoice${overdueCount>1?'s':''} totalling ${fmtPrice(totalOwed)}. Chase them before you pause?`;
+      chaseText.textContent = `You have ${overdueCount} outstanding invoice${overdueCount>1?'s':''} totalling ${fmtPrice(totalOwed)}. Chase them before your quiet season?`;
       chaseWrap.style.display = 'flex';
     } else {
       chaseWrap.style.display = 'none';
     }
   }
 
-  document.getElementById('pauseWinterModal').style.display = 'flex';
+  // Reset duration picker — only show months within remaining allowance
+  const noteEl = document.getElementById('qsMonthsRemainingNote');
+  if (noteEl) {
+    noteEl.textContent = remaining < 6
+      ? `You have ${remaining} month${remaining !== 1 ? 's' : ''} remaining out of your 6-month allowance.`
+      : 'You have your full 6-month allowance available.';
+  }
+  document.querySelectorAll('.qs-duration-btn').forEach(btn => {
+    btn.classList.remove('selected');
+    const m = parseInt(btn.dataset.months, 10);
+    btn.disabled = m > remaining;
+    btn.style.opacity = m > remaining ? '0.35' : '';
+  });
+  const confirmBtn = document.getElementById('confirmQuietSeasonBtn');
+  if (confirmBtn) confirmBtn.disabled = true;
+
+  document.getElementById('quietSeasonModal').style.display = 'flex';
 }
 
-function confirmPause() {
-  const pauseData = { since: todayStr(), custCount: buildCustomerGroups().length, jobCount: (state.saved||[]).length };
+function openQuietSeasonStatusModal() {
+  const data = getPauseData();
+  if (!data) return;
+  const endDate = document.getElementById('qsStatusEndDate');
+  const monthsLeft = document.getElementById('qsStatusMonthsLeft');
+  if (endDate) endDate.textContent = `Your quiet season ends ${formatDate(data.endDate)}`;
+  if (monthsLeft) {
+    const remaining = data.months || '';
+    monthsLeft.textContent = remaining ? `${remaining} month${remaining !== 1 ? 's' : ''} remaining` : '';
+  }
+  document.getElementById('quietSeasonStatusModal').style.display = 'flex';
+}
+
+function confirmQuietSeason(months) {
+  const since = todayStr();
+  const endDateObj = new Date();
+  endDateObj.setMonth(endDateObj.getMonth() + months);
+  const endDate = endDateObj.toISOString().slice(0, 10);
+  const docs = state.saved || [];
+  const pauseData = {
+    since,
+    endDate,
+    months,
+    custCount: buildCustomerGroups().length,
+    jobCount: docs.length
+  };
   localStorage.setItem(KEY_PAUSE, JSON.stringify(pauseData));
-  document.getElementById('pauseWinterModal').style.display = 'none';
+  document.getElementById('quietSeasonModal').style.display = 'none';
+
+  // Stub integrations
+  notifySupabaseQuietSeason(pauseData);
+  pauseStripeSubscription(months);
+  applyMailchimpQuietSeasonTag();
+
   // Close menu overlay cleanly before showing the paused screen
   document.getElementById('navMenu')?.classList.remove('open');
   document.getElementById('navMenuOverlay')?.classList.remove('active');
@@ -7377,27 +7515,57 @@ function showPausedScreen() {
   const data = getPauseData();
   if (!data) return;
 
-  const sub   = document.getElementById('pausedSub');
-  const stats = document.getElementById('pausedStats');
-  const since = document.getElementById('pausedSince');
+  const sub    = document.getElementById('pausedSub');
+  const stats  = document.getElementById('pausedStats');
+  const since  = document.getElementById('pausedSince');
+  const chaseSection = document.getElementById('pausedChaseSection');
+  const chaseBtn = document.getElementById('pausedChaseBtn');
 
-  if (sub) sub.textContent = `Your ${data.custCount} customers and ${data.jobCount} jobs are safe and waiting for you.`;
+  if (sub) sub.textContent = `Your jobs, customers and earnings are all safe right here. See you when you are ready to get back on the tools.`;
+
   if (stats) {
-    const totalOwed = getOverdueInvoices().reduce((s,i)=>s+i.amount,0);
-    stats.innerHTML = totalOwed > 0
-      ? `<div class="paused-stat-note">💰 You have <strong>${fmtPrice(totalOwed)}</strong> outstanding — chase it below even while paused.</div>`
-      : `<div class="paused-stat-note">✅ All payments up to date. Enjoy the break.</div>`;
+    stats.innerHTML = `
+      <div class="pause-stats-row" style="margin-bottom:0">
+        <div class="pause-stat"><span class="pause-stat-num">${data.custCount || 0}</span><span class="pause-stat-lbl">Customers</span></div>
+        <div class="pause-stat"><span class="pause-stat-num">${data.jobCount || 0}</span><span class="pause-stat-lbl">Jobs</span></div>
+      </div>`;
   }
-  if (since) since.textContent = `Paused since ${formatDate(data.since)}`;
+
+  if (since) {
+    const endDateText = data.endDate ? `Your quiet season ends ${formatDate(data.endDate)}` : `Started ${formatDate(data.since)}`;
+    since.textContent = endDateText;
+  }
+
+  const totalOwed = getOverdueInvoices().reduce((s,i)=>s+i.amount,0);
+  if (chaseSection) chaseSection.style.display = totalOwed > 0 ? 'block' : 'none';
+  if (chaseBtn) chaseBtn.style.display = totalOwed > 0 ? '' : 'none';
+
+  // Update menu badge
+  const badge = document.getElementById('qsActiveBadge');
+  if (badge) badge.style.display = '';
 
   document.getElementById('pausedScreen').style.display = 'flex';
 }
 
 function resumeLexi() {
+  const data = getPauseData();
+  if (data?.months) bankQsMonths(data.months); // bank this session's months
   localStorage.removeItem(KEY_PAUSE);
   document.getElementById('pausedScreen').style.display = 'none';
+  document.getElementById('quietSeasonStatusModal').style.display = 'none';
+
+  // Stub integrations
+  resumeSupabaseAccount();
+  resumeStripeSubscription();
+  removeMailchimpQuietSeasonTag();
+
   const name = state.company?.preferredName || state.company?.firstName || '';
-  showSavedPopup(`Welcome back${name ? ', ' + name : ''}! Ready when you are. 💪`, null, 4000);
+  showSavedPopup(`Welcome back${name ? ', ' + name : ''}! Ready when you are.`, null, 4000);
+
+  // Reset menu badge
+  const badge = document.getElementById('qsActiveBadge');
+  if (badge) badge.style.display = 'none';
+
   updateChasePaymentsBadge();
   refreshSavedDocs();
 }
@@ -7406,11 +7574,9 @@ function checkSeasonalPrompt() {
   const month = new Date().getMonth(); // 0=Jan … 11=Dec
   const isSeason = isSeasonalTrade();
 
-  // Pause for Winter menu item — November only (month 10)
-  const pauseBtn = document.getElementById('menuPauseWinter');
-  if (pauseBtn) {
-    pauseBtn.style.display = (month === 10 && !isPaused()) ? '' : 'none';
-  }
+  // Quiet Season menu item — always visible, but update active badge
+  const badge = document.getElementById('qsActiveBadge');
+  if (badge) badge.style.display = isPaused() ? '' : 'none';
 
   // Seasonal banner in My Jobs page — August (7), September (8), October (9)
   const banner = document.getElementById('seasonalBanner');
@@ -7421,7 +7587,7 @@ function checkSeasonalPrompt() {
   }
 }
 
-/* ── Wire up Chase + Pause in setupModals ── */
+/* ── Wire up Chase + Quiet Season in setupModals ── */
 function setupChaseAndPause() {
   // Chase payments menu
   document.getElementById('menuChasePayments')?.addEventListener('click', () => {
@@ -7436,29 +7602,83 @@ function setupChaseAndPause() {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
   });
 
-  // Pause for winter menu
-  document.getElementById('menuPauseWinter')?.addEventListener('click', () => {
+  // Quiet Season menu item
+  document.getElementById('menuQuietSeason')?.addEventListener('click', () => {
     closeMenu();
-    setTimeout(openPauseModal, 180);
+    if (isPaused()) {
+      setTimeout(openQuietSeasonStatusModal, 180);
+    } else {
+      setTimeout(openQuietSeasonIntroModal, 180);
+    }
   });
-  document.getElementById('closePauseModalBtn')?.addEventListener('click', () => {
-    document.getElementById('pauseWinterModal').style.display = 'none';
+
+  // Intro modal
+  document.getElementById('closeQsIntroBtn')?.addEventListener('click', () => {
+    document.getElementById('quietSeasonIntroModal').style.display = 'none';
   });
-  document.getElementById('pauseWinterModal')?.addEventListener('click', e => {
+  document.getElementById('qsIntroMaybeLaterBtn')?.addEventListener('click', () => {
+    document.getElementById('quietSeasonIntroModal').style.display = 'none';
+  });
+  document.getElementById('quietSeasonIntroModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
   });
-  document.getElementById('confirmPauseBtn')?.addEventListener('click', confirmPause);
+  document.getElementById('qsIntroContinueBtn')?.addEventListener('click', () => {
+    document.getElementById('quietSeasonIntroModal').style.display = 'none';
+    openQuietSeasonModal();
+  });
 
-  // Chase before pausing shortcut
+  // Quiet Season activation modal
+  document.getElementById('closeQuietSeasonModalBtn')?.addEventListener('click', () => {
+    document.getElementById('quietSeasonModal').style.display = 'none';
+  });
+  document.getElementById('quietSeasonModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+
+  // Duration pill buttons
+  document.getElementById('qsDurationGrid')?.addEventListener('click', e => {
+    const btn = e.target.closest('.qs-duration-btn');
+    if (!btn) return;
+    document.querySelectorAll('.qs-duration-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    const confirmBtn = document.getElementById('confirmQuietSeasonBtn');
+    if (confirmBtn) confirmBtn.disabled = false;
+  });
+
+  document.getElementById('confirmQuietSeasonBtn')?.addEventListener('click', () => {
+    const selected = document.querySelector('.qs-duration-btn.selected');
+    if (!selected) return;
+    confirmQuietSeason(parseInt(selected.dataset.months, 10));
+  });
+
+  // Chase before quiet season shortcut
   document.getElementById('chaseBeforePauseBtn')?.addEventListener('click', () => {
-    document.getElementById('pauseWinterModal').style.display = 'none';
+    document.getElementById('quietSeasonModal').style.display = 'none';
     openChasePaymentsModal();
+  });
+
+  // Quiet Season status modal
+  document.getElementById('closeQsStatusModalBtn')?.addEventListener('click', () => {
+    document.getElementById('quietSeasonStatusModal').style.display = 'none';
+  });
+  document.getElementById('quietSeasonStatusModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+  document.getElementById('qsStatusResumeBtn')?.addEventListener('click', resumeLexi);
+
+  // Locked modal
+  document.getElementById('qsLockedResumeBtn')?.addEventListener('click', () => {
+    document.getElementById('quietSeasonLockedModal').style.display = 'none';
+    resumeLexi();
+  });
+  document.getElementById('qsLockedCloseBtn')?.addEventListener('click', () => {
+    document.getElementById('quietSeasonLockedModal').style.display = 'none';
   });
 
   // Seasonal banner
   document.getElementById('seasonalBannerBtn')?.addEventListener('click', () => {
     document.getElementById('seasonalBanner').style.display = 'none';
-    openPauseModal();
+    openQuietSeasonModal();
   });
   document.getElementById('seasonalBannerClose')?.addEventListener('click', () => {
     document.getElementById('seasonalBanner').style.display = 'none';
@@ -7472,7 +7692,8 @@ function setupChaseAndPause() {
     openChasePaymentsModal();
   });
 
-  // Check if already paused on load
+  // Check expiry on load, then show if still paused
+  checkPauseExpiry();
   if (isPaused()) showPausedScreen();
 
   // Show seasonal banner if applicable
