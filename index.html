@@ -324,70 +324,124 @@
             <input type="text" id="p1LastName" autocomplete="family-name" required>
           </div>
         </div>
-        <div class="form-group">
-          <label for="p1PreferredName">Preferred Name <button type="button" class="field-info-btn" data-title="Preferred Name" data-body="What should Lexi call you in the app? Leave this blank and your first name will be used. Your official name always appears on documents.">?</button></label>
-          <input type="text" id="p1PreferredName" placeholder="Leave blank to use your first name">
-        </div>
         <div class="form-grid-2">
+          <div class="form-group">
+            <label for="p1PreferredName">Preferred Name <button type="button" class="field-info-btn" data-title="Preferred Name" data-body="What should Lexi call you in the app? Leave this blank and your first name will be used. Your official name always appears on documents.">?</button></label>
+            <input type="text" id="p1PreferredName">
+          </div>
           <div class="form-group">
             <label for="p1BusinessName">Business Name</label>
             <input type="text" id="p1BusinessName" autocomplete="organization">
           </div>
-          <div class="form-group">
-            <label for="p1CompanyNumber">Company Registration Number (CRN) <button type="button" class="field-info-btn" data-title="Company Registration Number (CRN)" data-body="Issued by Companies House when you set up your limited company. Skip if you're not limited.">?</button></label>
-            <input type="text" id="p1CompanyNumber" placeholder="e.g. 12345678">
-          </div>
-          <div class="form-group">
-            <label for="p1VatNumber">VAT Registration Number <button type="button" class="field-info-btn" data-title="VAT Registration Number" data-body="Most small tradespeople are not VAT registered, especially when starting out. It only applies if your turnover exceeds the VAT threshold (currently £90,000) or you've voluntarily registered.">?</button></label>
-            <input type="text" id="p1VatNumber" placeholder="e.g. GB 123 456 789">
-          </div>
         </div>
-        <div class="form-group">
-          <label for="p1Address">Business Address</label>
-          <textarea id="p1Address" rows="3" autocomplete="street-address"></textarea>
-        </div>
-        <div class="form-grid-2">
-          <div class="form-group">
-            <label for="p1Postcode">Postcode</label>
-            <input type="text" id="p1Postcode" autocomplete="postal-code">
+
+        <button type="button" id="aboutYouMoreBtn" class="show-more-link"><svg id="aboutYouChevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg> Show more</button>
+
+        <div id="aboutYouExtra" style="display:none">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="p1Phone">Phone</label>
+              <input type="tel" id="p1Phone" autocomplete="tel">
+            </div>
+            <div class="form-group">
+              <label for="p1Email">Email</label>
+              <input type="email" id="p1Email" autocomplete="email">
+            </div>
           </div>
           <div class="form-group">
-            <label for="p1Phone">Phone</label>
-            <input type="tel" id="p1Phone" autocomplete="tel">
+            <label for="p1Address">Business Address</label>
+            <textarea id="p1Address" rows="3" autocomplete="street-address"></textarea>
           </div>
-        </div>
-        <div class="form-grid-2">
-          <div class="form-group">
-            <label for="p1Email">Email</label>
-            <input type="email" id="p1Email" autocomplete="email">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="p1Postcode">Postcode</label>
+              <input type="text" id="p1Postcode" autocomplete="postal-code">
+            </div>
+            <div class="form-group">
+              <label for="p1Website">Website</label>
+              <input type="url" id="p1Website" autocomplete="url">
+            </div>
           </div>
-          <div class="form-group">
-            <label for="p1Website">Website</label>
-            <input type="url" id="p1Website" autocomplete="url">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="p1CompanyNumber">Company Registration Number <button type="button" class="field-info-btn" data-title="Company Registration Number (CRN)" data-body="Issued by Companies House when you set up your limited company. Skip if you're not limited.">?</button></label>
+              <input type="text" id="p1CompanyNumber">
+            </div>
+            <div class="form-group">
+              <label for="p1VatNumber">VAT Registration Number <button type="button" class="field-info-btn" data-title="VAT Registration Number" data-body="Most small tradespeople are not VAT registered, especially when starting out. It only applies if your turnover exceeds the VAT threshold (currently £90,000) or you've voluntarily registered.">?</button></label>
+              <input type="text" id="p1VatNumber">
+            </div>
           </div>
-          <div class="form-group">
-            <label for="p1ReviewLink">Google Review Link
-              <button type="button" class="field-info-btn" data-title="Google Review Link" data-body="Paste your Google review link here. After you mark a job as paid, Lexi will offer to send a review request to your customer automatically.">?</button>
-            </label>
-            <input type="url" id="p1ReviewLink" placeholder="https://g.page/r/your-review-link">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="p1ReviewLink">Google Review Link
+                <button type="button" class="field-info-btn" data-title="Google Review Link" data-body="Paste your Google review link here. After you mark a job as paid, Lexi will offer to send a review request to your customer automatically.">?</button>
+              </label>
+              <input type="url" id="p1ReviewLink">
+            </div>
+            <div class="form-group">
+              <label for="p1Trade">Your Trade</label>
+              <select id="p1Trade">
+                <option value="">Select your trade…</option>
+                <option value="Builder">Builder</option>
+                <option value="Carpenter">Carpenter</option>
+                <option value="Decorator">Decorator</option>
+                <option value="Electrician">Electrician</option>
+                <option value="Gardener">Gardener</option>
+                <option value="Gas Engineer">Gas Engineer</option>
+                <option value="Plasterer">Plasterer</option>
+                <option value="Plumber">Plumber</option>
+                <option value="Roofer">Roofer</option>
+                <option value="Tiler">Tiler</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
           </div>
-        </div>
-        <div class="form-group">
-          <label for="p1Trade">Your Trade</label>
-          <select id="p1Trade">
-            <option value="">Select your trade…</option>
-            <option value="Builder">Builder</option>
-            <option value="Carpenter">Carpenter</option>
-            <option value="Decorator">Decorator</option>
-            <option value="Electrician">Electrician</option>
-            <option value="Gardener">Gardener</option>
-            <option value="Gas Engineer">Gas Engineer</option>
-            <option value="Plasterer">Plasterer</option>
-            <option value="Plumber">Plumber</option>
-            <option value="Roofer">Roofer</option>
-            <option value="Tiler">Tiler</option>
-            <option value="Other">Other</option>
-          </select>
+
+          <!-- QR Code + Qualifications -->
+          <div class="qr-quals-row" style="margin-top:12px">
+
+            <!-- Left: QR Code -->
+            <div class="qr-quals-col">
+              <h2 class="card-title">Add Your QR Code <button type="button" class="field-info-btn" data-title="QR Code" data-body="Upload your QR code here. Point it wherever works best for your business. Your website, a booking page, a special offer, a questionnaire, reviews. Whatever gets you more work.">?</button></h2>
+              <p class="card-desc" style="margin-bottom:12px">Appears on your documents.</p>
+              <div class="logo-upload-area" id="qrUploadArea" tabindex="0" role="button" aria-label="Upload QR code">
+                <div id="qrPlaceholder" class="logo-placeholder">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5" y="5" width="3" height="3"/><rect x="16" y="5" width="3" height="3"/><rect x="5" y="16" width="3" height="3"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4"/><path d="M21 14v7"/></svg>
+                  <span>Tap to upload QR code</span>
+                  <small>PNG or JPG</small>
+                </div>
+                <div id="qrPreview" class="logo-preview" style="display:none">
+                  <img id="qrImg" src="" alt="QR code preview" style="max-width:120px;max-height:120px;object-fit:contain">
+                  <div class="logo-actions">
+                    <button type="button" class="btn btn-sm btn-outline" id="changeQrBtn">Change</button>
+                    <button type="button" class="btn btn-sm btn-danger" id="removeQrBtn">Remove</button>
+                  </div>
+                </div>
+              </div>
+              <input type="file" id="qrFile" accept="image/*" style="display:none" aria-hidden="true">
+            </div>
+
+            <!-- Divider -->
+            <div class="qr-quals-divider"></div>
+
+            <!-- Right: Qualifications -->
+            <div class="qr-quals-col">
+              <h2 class="card-title">Add Qualifications <button type="button" class="field-info-btn" data-title="Qualifications" data-body="Upload copies of your certificates, gas-safe card, NICEIC accreditation, or any other qualification. You can share them directly with customers from the Add Qualifications menu.">?</button></h2>
+              <p class="card-desc" style="margin-bottom:12px">Gas safe, NICEIC, etc.</p>
+              <div class="logo-upload-area quals-upload-area" id="qualsUploadArea" tabindex="0" role="button" aria-label="Upload qualifications">
+                <div id="qualsPlaceholder" class="logo-placeholder">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="18" rx="2"/><path d="M10 3h8l4 4v14a2 2 0 0 1-2 2h-6"/><line x1="6" y1="9" x2="10" y2="9"/><line x1="6" y1="13" x2="10" y2="13"/></svg>
+                  <span>Tap to add document</span>
+                  <small>PDF, PNG or JPG</small>
+                </div>
+                <div id="qualsFileList" class="quals-file-list" style="display:none"></div>
+                <button type="button" class="btn btn-sm btn-outline quals-add-more-btn" id="qualsAddMoreBtn" style="display:none;margin-top:8px">+ Add Another</button>
+              </div>
+              <input type="file" id="qualsFile" accept="image/*,application/pdf" style="display:none" aria-hidden="true">
+            </div>
+
+          </div>
         </div>
 
       </div>
@@ -534,51 +588,6 @@
         </div>
       </div>
 
-      <!-- QR Code + Qualifications (two-column layout) -->
-      <div class="card qr-quals-row">
-
-        <!-- Left: QR Code -->
-        <div class="qr-quals-col">
-          <h2 class="card-title">Add Your QR Code <button type="button" class="field-info-btn" data-title="QR Code" data-body="Upload your QR code here. Point it wherever works best for your business. Your website, a booking page, a special offer, a questionnaire, reviews. Whatever gets you more work.">?</button></h2>
-          <p class="card-desc" style="margin-bottom:12px">Appears on your documents.</p>
-          <div class="logo-upload-area" id="qrUploadArea" tabindex="0" role="button" aria-label="Upload QR code">
-            <div id="qrPlaceholder" class="logo-placeholder">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="5" y="5" width="3" height="3"/><rect x="16" y="5" width="3" height="3"/><rect x="5" y="16" width="3" height="3"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4"/><path d="M21 14v7"/></svg>
-              <span>Tap to upload QR code</span>
-              <small>PNG or JPG</small>
-            </div>
-            <div id="qrPreview" class="logo-preview" style="display:none">
-              <img id="qrImg" src="" alt="QR code preview" style="max-width:120px;max-height:120px;object-fit:contain">
-              <div class="logo-actions">
-                <button type="button" class="btn btn-sm btn-outline" id="changeQrBtn">Change</button>
-                <button type="button" class="btn btn-sm btn-danger" id="removeQrBtn">Remove</button>
-              </div>
-            </div>
-          </div>
-          <input type="file" id="qrFile" accept="image/*" style="display:none" aria-hidden="true">
-        </div>
-
-        <!-- Divider -->
-        <div class="qr-quals-divider"></div>
-
-        <!-- Right: Qualifications -->
-        <div class="qr-quals-col">
-          <h2 class="card-title">My Qualifications <button type="button" class="field-info-btn" data-title="Qualifications" data-body="Upload copies of your certificates, gas-safe card, NICEIC accreditation, or any other qualification. You can share them directly with customers from the My Qualifications menu.">?</button></h2>
-          <p class="card-desc" style="margin-bottom:12px">Gas safe, NICEIC, etc.</p>
-          <div class="logo-upload-area quals-upload-area" id="qualsUploadArea" tabindex="0" role="button" aria-label="Upload qualifications">
-            <div id="qualsPlaceholder" class="logo-placeholder">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="18" rx="2"/><path d="M10 3h8l4 4v14a2 2 0 0 1-2 2h-6"/><line x1="6" y1="9" x2="10" y2="9"/><line x1="6" y1="13" x2="10" y2="13"/></svg>
-              <span>Tap to add document</span>
-              <small>PDF, PNG or JPG</small>
-            </div>
-            <div id="qualsFileList" class="quals-file-list" style="display:none"></div>
-            <button type="button" class="btn btn-sm btn-outline quals-add-more-btn" id="qualsAddMoreBtn" style="display:none;margin-top:8px">+ Add Another</button>
-          </div>
-          <input type="file" id="qualsFile" accept="image/*,application/pdf" style="display:none" aria-hidden="true">
-        </div>
-
-      </div>
-
       <!-- Page Footer -->
       <div class="page-footer">
         <button type="button" class="btn btn-primary btn-lg" id="saveBusinessBtn">Save My Business</button>
@@ -705,16 +714,16 @@
         <div class="form-grid-2" style="margin-top:4px">
           <div class="form-group">
             <label for="custFirstName">First Name</label>
-            <input type="text" id="custFirstName" autocomplete="given-name" placeholder="e.g. Dave">
+            <input type="text" id="custFirstName" autocomplete="given-name">
           </div>
           <div class="form-group">
             <label for="custLastName">Last Name</label>
-            <input type="text" id="custLastName" autocomplete="family-name" placeholder="e.g. Smith">
+            <input type="text" id="custLastName" autocomplete="family-name">
           </div>
         </div>
         <div class="form-group">
           <label for="custPhone">Phone</label>
-          <input type="tel" id="custPhone" autocomplete="tel" placeholder="e.g. 07700 900123">
+          <input type="tel" id="custPhone" autocomplete="tel">
         </div>
 
         <!-- Expandable extra fields -->
@@ -760,7 +769,7 @@
         <div class="form-grid-2">
           <div class="form-group">
             <label for="docRef">Reference <button type="button" class="ref-info-btn" id="refInfoBtn" aria-label="About references">?</button></label>
-            <input type="text" id="docRef" placeholder="EST-001">
+            <input type="text" id="docRef">
           </div>
           <div class="form-group">
             <label for="docDate">Date</label>
@@ -834,7 +843,7 @@
 
         <div class="form-group" style="margin-top:16px">
           <label for="quoteNotes">Description of Work</label>
-          <textarea id="quoteNotes" rows="4" placeholder="Describe clearly exactly what work you will carry out. Be as specific as possible to protect both you and your customer."></textarea>
+          <textarea id="quoteNotes" rows="4"></textarea>
         </div>
 
         <div class="pj-footer-btns">
@@ -919,7 +928,7 @@
         </div>
         <div class="form-group" id="validCustomGroup" style="display:none;margin-top:8px">
           <label for="docValidCustom">Custom validity (days)</label>
-          <input type="number" id="docValidCustom" min="1" placeholder="60">
+          <input type="number" id="docValidCustom" min="1">
         </div>
 
         <div style="margin-top:16px">
@@ -992,21 +1001,21 @@
           <button type="button" class="seasonal-banner-close" id="seasonalBannerClose" aria-label="Dismiss">&#x2715;</button>
         </div>
 
-        <!-- Search -->
-        <div class="jobs-search-wrap">
-          <svg class="jobs-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="search" id="jobSearchInput" class="jobs-search-input" placeholder="Search customers…" autocomplete="off">
+        <!-- Search + Filter toggle on same row -->
+        <div class="jobs-search-row">
+          <div class="jobs-search-wrap">
+            <svg class="jobs-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="jobSearchInput" class="jobs-search-input" placeholder="Search customers…" autocomplete="off">
+          </div>
+          <button type="button" class="filter-toggle" id="filterToggleBtn" aria-expanded="false">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span id="filterToggleLabel">Filter &amp; Sort</span>
+            <svg id="filterToggleChevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
         </div>
 
         <!-- Attention widget — populated by JS -->
         <div id="attentionWidget"></div>
-
-        <!-- Filter bar — collapsed by default -->
-        <button type="button" class="filter-toggle" id="filterToggleBtn" aria-expanded="false">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-          <span id="filterToggleLabel">Filter &amp; Sort</span>
-          <svg id="filterToggleChevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <div class="saved-filter-bar" id="savedFilterBar" style="display:none">
           <div class="filter-group">
             <label for="savedFilterSelect" class="filter-group-label">Show</label>
@@ -1139,7 +1148,7 @@
         <button type="button" class="btn btn-outline" id="previewEditBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>
         <button type="button" class="btn btn-outline" id="previewPrintBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Print</button>
         <button type="button" class="btn btn-success" id="previewSaveBtn">✓ Save</button>
-        <button type="button" class="btn btn-primary" id="previewSendBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send</button>
+        <button type="button" class="btn btn-primary" id="previewSendBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Share</button>
       </div>
     </div>
   </div>
@@ -1185,15 +1194,15 @@
         </div>
         <label class="checkbox-label compact"><input type="checkbox" id="quoteIncludePhotos"> Add before and after photos on page 2</label>
         <div class="form-group">
-          <label for="quoteSendNotes">Notes</label>
-          <textarea id="quoteSendNotes" rows="3" placeholder="Thank you for your enquiry..."></textarea>
+          <label for="quoteSendNotes">Message to Customer <small style="font-weight:normal;opacity:0.65;font-size:0.8em;">— sent alongside the document</small></label>
+          <textarea id="quoteSendNotes" rows="4" placeholder="Type a message to include when you share this document..."></textarea>
         </div>
       </div>
       <div class="modal-footer preview-footer">
         <button type="button" class="btn btn-outline" id="quoteEditBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>
         <button type="button" class="btn btn-outline" id="quotePreviewBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview</button>
         <button type="button" class="btn btn-success" id="quoteSaveBtn">✓ Save</button>
-        <button type="button" class="btn btn-primary" id="quoteSendBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send</button>
+        <button type="button" class="btn btn-primary" id="quoteSendBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Share</button>
       </div>
     </div>
   </div>
@@ -1537,6 +1546,16 @@
         <button type="button" class="modal-close-btn" id="closeSendChoiceBtn" aria-label="Close">&#x2715;</button>
       </div>
       <div class="modal-body send-choice-body">
+        <button type="button" class="send-choice-btn" id="sendChoiceEstimate">
+          <div class="send-choice-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <div class="send-choice-text">
+            <span class="send-choice-title">Estimate / Quote</span>
+            <span class="send-choice-desc">Send the document to your customer</span>
+          </div>
+          <svg class="send-choice-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
         <button type="button" class="send-choice-btn" id="sendChoiceBusiness">
           <div class="send-choice-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
@@ -1562,7 +1581,7 @@
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="18" rx="2"/><path d="M10 3h8l4 4v14a2 2 0 0 1-2 2h-6"/><line x1="6" y1="9" x2="10" y2="9"/><line x1="6" y1="13" x2="10" y2="13"/></svg>
           </div>
           <div class="send-choice-text">
-            <span class="send-choice-title">My Qualifications</span>
+            <span class="send-choice-title">Add Qualifications</span>
             <span class="send-choice-desc">Certificates &amp; accreditations</span>
           </div>
           <svg class="send-choice-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>

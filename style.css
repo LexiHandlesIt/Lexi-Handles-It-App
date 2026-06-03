@@ -450,6 +450,29 @@ input[type="text"].sig-text-input:focus {
   .form-grid-3 .fg-grow { grid-column: 1 / -1; }
 }
 
+/* ===== SHOW MORE TOGGLE ===== */
+.show-more-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f0ebe3;
+  border: 1px solid #d9d0c4;
+  border-radius: 999px;
+  padding: 4px 12px;
+  margin: 6px 0 2px;
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: background 0.15s, border-color 0.15s;
+}
+.show-more-link:hover {
+  background: #e8e0d4;
+  border-color: #c5bbad;
+}
+#aboutYouExtra { margin-top: 10px; }
+
 /* ===== BUTTONS ===== */
 .btn {
   display: inline-flex;
@@ -2267,22 +2290,23 @@ input[type="text"].sig-text-input:focus {
 }
 
 .saved-filter-bar {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  margin-top: 12px;
-  margin-bottom: 16px;
+  margin-top: 8px;
+  margin-bottom: 12px;
 }
 .filter-group {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
 }
 .filter-group-label {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: #999;
   white-space: nowrap;
 }
@@ -2291,16 +2315,16 @@ input[type="text"].sig-text-input:focus {
   color: var(--walnut);
 }
 .saved-filter-select {
-  padding: 7px 8px;
+  padding: 4px 8px;
   border: 1.5px solid var(--border);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--white);
   color: var(--charcoal);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-family: inherit;
   cursor: pointer;
-  min-height: 38px;
-  width: 100%;
+  min-height: 0;
+  width: auto;
 }
 
 .saved-doc-card {
@@ -3724,6 +3748,10 @@ input[type="text"].sig-text-input:focus {
   }
   .modal-overlay { padding: 0; align-items: flex-end; }
   .modal-card { border-radius: var(--radius) var(--radius) 0 0; max-height: 92vh; }
+  #customerDashboardModal .modal-card { max-height: 96vh; }
+  #jobDetailsEditModal .modal-card { max-height: 96vh; }
+  .cal-icon-btn.cdv-labeled span { display: none; }
+  .cal-icon-btn.cdv-labeled { padding: 0 10px; }
   .onboarding-card { border-radius: var(--radius); margin: 0 0 env(safe-area-inset-bottom); }
   .modal-overlay.for-onboarding { align-items: center; padding: 16px; }
 
@@ -5436,20 +5464,30 @@ input[type="text"].sig-text-input:focus {
 .attn-send:hover  { background: #fde8c0; }
 
 /* ===== FILTER TOGGLE ===== */
-.filter-toggle {
+.jobs-search-row {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+.jobs-search-row .jobs-search-wrap {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
-  background: none;
+  background: var(--white);
   border: 1.5px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 0.8rem;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 0.9rem;
   font-weight: 600;
-  color: #888;
+  color: #aaa;
   cursor: pointer;
-  margin-bottom: 10px;
-  width: 100%;
+  white-space: nowrap;
   transition: border-color 0.15s, color 0.15s;
 }
 .filter-toggle:hover { border-color: var(--sage); color: var(--sage); }

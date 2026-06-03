@@ -25,7 +25,7 @@ function saveCustData(name, updates) {
 }
 
 /* ===== DEFAULT COLOURS ===== */
-const DEFAULT_COLOURS = { primary: '#7D5730', accent: '#6B7C5C', bg: '#F5F0E8' };
+const DEFAULT_COLOURS = { primary: '#1a1a1a', accent: '#555555', bg: '#ffffff' };
 
 /* ===== COLOUR HELPERS ===== */
 // Returns true when a hex colour is perceptually light (text should be dark)
@@ -165,6 +165,19 @@ function personaliseText() {
 
 /* ===== INIT ===== */
 document.addEventListener('DOMContentLoaded', () => {
+  // About You — show more toggle
+  const aboutYouMoreBtn = document.getElementById('aboutYouMoreBtn');
+  const aboutYouExtra   = document.getElementById('aboutYouExtra');
+  if (aboutYouMoreBtn && aboutYouExtra) {
+    aboutYouMoreBtn.addEventListener('click', () => {
+      const open = aboutYouExtra.style.display !== 'none';
+      aboutYouExtra.style.display = open ? 'none' : 'block';
+      const chevron = document.getElementById('aboutYouChevron');
+      if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
+      aboutYouMoreBtn.childNodes[1].textContent = open ? ' Show more' : ' Show less';
+    });
+  }
+
   loadFromStorage();
   setupOnboarding();
   setupNewJobPicker();
@@ -816,6 +829,7 @@ function handleLogoUpload(e) {
   const reader = new FileReader();
   reader.onload = ev => {
     state.company.logo = ev.target.result;
+    state.company.bizChoiceMade = null; // reset so docs are prompted to use new logo
     showLogoState();
     save();
     if (document.getElementById('useLogoColours')?.checked) {
@@ -983,6 +997,19 @@ function populatePage1Fields() {
   setVal('p1CompanyNumber', c.companyNumber || '');
   setVal('p1VatNumber',     c.vatNumber || '');
   setVal('p1Trade',         c.trade || '');
+
+  // Auto-expand "Show more" if any hidden fields already have data
+  const extraFields = [c.phone, c.address, c.postcode, c.email, c.website, c.reviewLink, c.companyNumber, c.vatNumber, c.trade];
+  if (extraFields.some(v => v && String(v).trim())) {
+    const extra = document.getElementById('aboutYouExtra');
+    const btn   = document.getElementById('aboutYouMoreBtn');
+    if (extra) extra.style.display = 'block';
+    if (btn) {
+      btn.childNodes[1].textContent = ' Show less';
+      const chevron = document.getElementById('aboutYouChevron');
+      if (chevron) chevron.style.transform = 'rotate(180deg)';
+    }
+  }
 
   showLogoState();
   showQRState();
@@ -3206,9 +3233,21 @@ function setupModals() {
   });
 
   document.getElementById('previewSendBtn').addEventListener('click', () => {
-    const html = document.getElementById('previewContent').innerHTML;
-    const wrapped = wrapDoc(html);
-    sendDocRaw(wrapped, 'document.html');
+    const { type } = previewContext;
+    if (type === 'quote') {
+      // Send via the modal function so the cover message is included
+      closePreview();
+      sendQuoteFromModal();
+    } else if (type === 'invoice') {
+      closePreview();
+      sendInvoiceFromModal();
+    } else if (type === 'receipt') {
+      closePreview();
+      sendReceiptFromModal();
+    } else {
+      const html = document.getElementById('previewContent').innerHTML;
+      sendDocRaw(wrapDoc(html), 'document.html');
+    }
   });
 
   // Quote modal
@@ -3220,18 +3259,8 @@ function setupModals() {
     openPreview(buildDocHtml(applyDocEdits(doc, quoteData), 'quote', quoteData), 'quote', doc.id || null);
   });
   document.getElementById('quoteSendBtn').addEventListener('click', () => {
-    if (!quotePreviewed && !localStorage.getItem(KEY_PREVIEW_FIRST_SUPPRESSED)) {
-      pendingPreviewSend = previewFirst => {
-        if (previewFirst) {
-          document.getElementById('quotePreviewBtn').click();
-        } else {
-          sendQuoteFromModal();
-        }
-      };
-      document.getElementById('previewFirstModal').style.display = 'flex';
-      return;
-    }
-    sendQuoteFromModal();
+    // Always show preview first — user can Share or Edit from there
+    document.getElementById('quotePreviewBtn').click();
   });
 
   function sendQuoteFromModal() {
@@ -3252,7 +3281,7 @@ function setupModals() {
     // Pass the notes (pre-filled with the intro paragraph) as the share message body
     const shareMessage = quoteData.quoteNotes || '';
     sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), shareMessage);
-    toast('Quote sent!', 'success');
+    toast('Quote shared!', 'success');
   }
 
   // Invoice modal
@@ -4188,6 +4217,14 @@ function setupSendChoice() {
   });
   document.getElementById('sendChoiceModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+  document.getElementById('sendChoiceEstimate')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+    // Open the quote send modal for the active doc
+    if (activeDocId) {
+      const doc = state.saved.find(d => d.id === activeDocId);
+      if (doc) populateQuoteSendModal(doc);
+    }
   });
   document.getElementById('sendChoiceBusiness')?.addEventListener('click', () => {
     document.getElementById('sendChoiceModal').style.display = 'none';
@@ -6093,10 +6130,9 @@ function buildDocHtml(doc, docType, extra = {}) {
       </div>
       <div class="doc-body">
         ${descHtml}
-        <div class="doc-section-heading">Itemised Breakdown</div>
         <table class="doc-items-table">
           <thead><tr style="background:${accent}">
-            <th>Description</th>
+            <th>Itemised Breakdown</th>
             <th class="r">Qty</th>
             <th class="r">Unit Price</th>
             <th class="r" style="border-right:none">Total</th>
