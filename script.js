@@ -2844,7 +2844,7 @@ function refreshSavedDocs() {
       <div class="job-card-actions">
         <button type="button" class="jca-open" data-id="${doc.id}">Open</button>
         ${statusBadge === 'overdue'
-          ? `<button type="button" class="jca-primary jca-chase" data-id="${doc.id}">💰 Chase Payment</button>`
+          ? `<button type="button" class="jca-primary jca-chase" data-id="${doc.id}">£ Chase Payment</button>`
           : statusBadge === 'paid'
             ? `<button type="button" class="jca-primary jca-paid" data-id="${doc.id}">View Receipt</button>`
             : (statusBadge === 'invoiced')
@@ -3284,9 +3284,20 @@ function setupModals() {
       }
     }
     document.getElementById('quoteModal').style.display = 'none';
-    // Pass the notes (pre-filled with the intro paragraph) as the share message body
-    const shareMessage = quoteData.quoteNotes || '';
-    sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), shareMessage);
+    // Generate acceptance token and inject link into share message
+    if (activeDocId) {
+      const savedDoc = state.saved.find(d => d.id === activeDocId);
+      if (savedDoc && !savedDoc.acceptToken) generateAcceptToken(activeDocId);
+      if (savedDoc) {
+        const baseMsg = quoteData.quoteNotes || '';
+        const shareMessage = buildAcceptanceMessage(savedDoc, baseMsg);
+        sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), shareMessage);
+      } else {
+        sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), quoteData.quoteNotes || '');
+      }
+    } else {
+      sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), quoteData.quoteNotes || '');
+    }
     toast('Quote shared!', 'success');
   }
 
@@ -7386,6 +7397,98 @@ function quietSeasonGuard() {
 }
 
 /* ── Stub backend integrations ── */
+/* ═══════════════════════════════════════════════════════════
+   QUOTE ACCEPTANCE — DIGITAL SIGN-OFF
+   ═══════════════════════════════════════════════════════════ */
+
+const KEY_ACCEPT_BASE = 'lexi_accept_'; // key prefix: lexi_accept_<token>
+
+function generateAcceptToken(docId) {
+  const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return null;
+  doc.acceptToken = token;
+  doc.acceptStatus = 'pending'; // pending | accepted | declined
+  save();
+  return token;
+}
+
+function getAcceptUrl(token) {
+  // In production this would be your GitHub Pages URL
+  const base = window.location.origin + window.location.pathname.replace('index.html','').replace(/\/$/, '');
+  return `${base}/accept.html?token=${token}`;
+}
+
+function buildAcceptanceMessage(doc, baseMessage) {
+  const q = doc.quote || {};
+  const firstName = q.custFirstName || '';
+  const token = doc.acceptToken || generateAcceptToken(doc.id);
+  const url = getAcceptUrl(token);
+  return `${baseMessage}\n\nTo accept this quote, simply tap the link below. It takes 10 seconds.\n${url}`;
+}
+
+function checkQuoteAcceptances() {
+  let anyAccepted = false;
+  (state.saved || []).forEach(doc => {
+    if (doc.acceptToken && doc.acceptStatus === 'pending') {
+      const stored = localStorage.getItem(KEY_ACCEPT_BASE + doc.acceptToken);
+      if (stored) {
+        try {
+          const data = JSON.parse(stored);
+          if (data.status === 'accepted') {
+            doc.acceptStatus = 'accepted';
+            doc.acceptedBy   = data.name || '';
+            doc.acceptedAt   = data.timestamp || '';
+            doc.jobAccepted  = true;
+            anyAccepted = true;
+            notifySupabaseQuoteAccepted(doc, data);
+          } else if (data.status === 'declined') {
+            doc.acceptStatus = 'declined';
+            doc.declinedAt   = data.timestamp || '';
+          }
+        } catch(e) {}
+      }
+    }
+  });
+  if (anyAccepted) {
+    save();
+    refreshSavedDocs();
+    showQuoteAcceptedNotification();
+  }
+}
+
+function showQuoteAcceptedNotification() {
+  const accepted = (state.saved || []).filter(d => d.acceptStatus === 'accepted' && !d.acceptNotified);
+  if (!accepted.length) return;
+  const doc = accepted[0];
+  const q = doc.quote || {};
+  const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Your customer';
+  const ref = q.ref || doc.ref || '';
+  const el = document.getElementById('quoteAcceptedModal');
+  const msg = document.getElementById('quoteAcceptedMsg');
+  if (msg) msg.innerHTML = `<strong>${custName}</strong> has accepted your quote${ref ? ' (' + ref + ')' : ''}.<br><br>
+    ${doc.acceptedBy ? 'Signed off by: <strong>' + doc.acceptedBy + '</strong><br>' : ''}
+    ${doc.acceptedAt ? 'At: ' + new Date(doc.acceptedAt).toLocaleString('en-GB') : ''}`;
+  if (el) el.style.display = 'flex';
+  // Mark as notified so we don't show again
+  accepted.forEach(d => { d.acceptNotified = true; });
+  save();
+}
+
+// ── Supabase / Mailchimp stubs ──
+function notifySupabaseQuoteAccepted(doc, data) {
+  console.log('[Quote Acceptance] Supabase notify — doc:', doc.id, 'accepted by:', data.name, 'at:', data.timestamp);
+  // TODO: POST to Supabase edge function to send push/email notification to tradesman
+}
+function sendAcceptanceConfirmationEmail(custEmail, ref) {
+  console.log('[Quote Acceptance] Confirmation email stub — to:', custEmail, 'ref:', ref);
+  // TODO: Trigger Mailchimp transactional email to customer confirming acceptance
+}
+
+/* ═══════════════════════════════════════════════════════════
+   QUIET SEASON (stubs)
+   ═══════════════════════════════════════════════════════════ */
+
 function notifySupabaseQuietSeason(data) {
   console.log('[Quiet Season] Supabase notify:', data);
 }
@@ -7694,6 +7797,7 @@ function setupChaseAndPause() {
 
   // Check expiry on load, then show if still paused
   checkPauseExpiry();
+  checkQuoteAcceptances();
   if (isPaused()) showPausedScreen();
 
   // Show seasonal banner if applicable
@@ -7747,6 +7851,14 @@ function maybeAskForReview(doc) {
 }
 
 function setupReviewModal() {
+  // Quote accepted modal
+  document.getElementById('quoteAcceptedOkBtn')?.addEventListener('click', () => {
+    document.getElementById('quoteAcceptedModal').style.display = 'none';
+  });
+  document.getElementById('quoteAcceptedModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+
   document.getElementById('reviewRequestModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
   });
@@ -7935,5 +8047,4 @@ function setupEarnings() {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
   });
 }
-
 

@@ -5772,3 +5772,217 @@ input[type="text"].sig-text-input:focus {
   flex-shrink: 0;
 }
 
+/* Small-phone resilience: keep onboarding controls visible and usable. */
+@media (max-width: 420px) {
+  .ob-screen {
+    padding: 4px;
+  }
+
+  .ob-card {
+    height: calc(100dvh - 8px);
+    border-radius: 16px;
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .ob-logo-pair {
+    gap: 4px;
+    margin-bottom: 5px;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .ob-logo-pair .ob-logo-img {
+    height: 27px;
+    max-width: 42%;
+  }
+
+  .ob-logo-pair .ob-strap-img {
+    height: 28px;
+    max-width: 56%;
+  }
+
+  .ob-intro {
+    font-size: 0.76rem;
+    line-height: 1.35;
+  }
+
+  .ob-middle {
+    grid-template-columns: minmax(0, 0.66fr) minmax(86px, 0.34fr);
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .ob-left {
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+    flex-direction: column;
+  }
+
+  .ob-steps {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    gap: 7px;
+    margin-bottom: 6px;
+    padding: 9px;
+    overscroll-behavior: contain;
+  }
+
+  .ob-step {
+    gap: 7px;
+  }
+
+  .ob-num {
+    width: 28px;
+    height: 28px;
+    font-size: 0.88rem;
+  }
+
+  .ob-step-text strong {
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .ob-step-text span {
+    font-size: 0.7rem;
+    line-height: 1.3;
+  }
+
+  .ob-footer {
+    flex: 0 0 auto;
+    padding-top: 2px;
+    background: #F5F0E8;
+  }
+
+  .ob-referral {
+    margin-bottom: 6px;
+  }
+
+  .ob-referral-select,
+  .ob-start-btn {
+    min-height: 38px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    font-size: 0.78rem;
+  }
+
+  .ob-portrait {
+    top: 12px;
+    right: -54px;
+    width: calc(100% + 105px);
+  }
+}
+
+@media (max-width: 360px), (max-height: 700px) {
+  .ob-card {
+    padding: 9px;
+  }
+
+  .ob-intro {
+    font-size: 0.7rem;
+    line-height: 1.28;
+  }
+
+  .ob-steps {
+    gap: 5px;
+    padding: 7px;
+  }
+
+  .ob-step-text span {
+    font-size: 0.66rem;
+  }
+
+  .ob-portrait {
+    top: 8px;
+    right: -42px;
+    width: calc(100% + 82px);
+  }
+}
+
+/* Keep the working app comfortably scaled on narrow phones too. */
+@media (max-width: 420px) {
+  :root {
+    --header-h: 64px;
+  }
+
+  .app-header {
+    height: var(--header-h);
+    padding: 0 8px;
+  }
+
+  .header-logo {
+    gap: 4px;
+  }
+
+  .header-logo-img {
+    height: 34px;
+    max-width: 42%;
+  }
+
+  .header-strap-img {
+    height: 32px;
+    max-width: 54%;
+  }
+
+  .header-avatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  .hamburger-btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .app-main {
+    padding: 12px 8px 100px;
+  }
+
+  .page-header {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .page-title {
+    font-size: 1.25rem;
+  }
+
+  .page-title:has(.page-num) {
+    padding: 7px 10px;
+  }
+
+  .page-sub,
+  .card-desc {
+    font-size: 0.84rem;
+  }
+
+  .card {
+    padding: 14px 10px;
+    margin-bottom: 10px;
+  }
+
+  .card-title {
+    margin-bottom: 10px;
+  }
+
+  .form-group {
+    margin-bottom: 10px;
+  }
+
+  .btn {
+    padding-left: 12px;
+    padding-right: 12px;
+    white-space: normal;
+  }
+
+  .modal-body {
+    padding: 14px 10px;
+  }
+
+  .modal-footer {
+    gap: 6px;
+    padding: 10px;
+  }
+}
