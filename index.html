@@ -47,6 +47,10 @@
       </div>
 
       <p class="ob-intro" id="onboardingTitle">Hi, I'm Lexi, your AI business mate. I'll handle the drafts, you handle the graft. Three simple steps. Let's get you sorted.</p>
+      <div class="trial-promise" role="note">
+        <strong>Start with 3 months free.</strong>
+        <span>No card needed today. Try Lexi properly, then choose a plan when you're ready.</span>
+      </div>
     </div>
 
     <div class="ob-middle">
@@ -88,7 +92,7 @@
           </select>
         </div>
 
-        <button id="startBtn" class="btn btn-sage btn-full ob-start-btn">Sort me out Lexi</button>
+        <button id="startBtn" class="btn btn-sage btn-full ob-start-btn">Start my 3 months free</button>
       </div>
     </div>
 
@@ -233,6 +237,10 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           My Earnings
         </button>
+        <button class="nav-menu-item nav-submenu-item" id="menuTrialPlans">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M7 15h4"/></svg>
+          Trial &amp; Plans
+        </button>
         <button class="nav-menu-item nav-submenu-item nav-menu-pause" id="menuQuietSeason">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/></svg>
           <span id="menuQuietSeasonLabel">Quiet Season</span>
@@ -252,6 +260,27 @@
     </button>
   </div>
   <div class="nav-menu-overlay" id="navMenuOverlay"></div>
+
+  <!-- TRIAL & PLANS MODAL -->
+  <div class="modal-overlay" id="trialPlansModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="trialPlansTitle">
+    <div class="modal-card modal-card-sm trial-plan-card">
+      <div class="modal-header">
+        <h2 class="modal-title" id="trialPlansTitle">Your Lexi trial</h2>
+        <button type="button" class="modal-close" id="closeTrialPlansBtn" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="trial-status-box">
+          <strong id="trialStatusTitle">3 months free. No card needed.</strong>
+          <span id="trialStatusCopy">Use Lexi properly first. When the trial is nearly done, I'll help you choose the plan that fits.</span>
+        </div>
+        <p class="trial-plan-copy">Payment comes later through Stripe, once you're ready to keep Lexi working for you. Until then, crack on and build the habit.</p>
+        <div class="trial-plan-actions">
+          <button type="button" class="btn btn-sage btn-full" id="trialKeepGoingBtn">Keep using Lexi free</button>
+          <a href="YOUR_STRIPE_TRADESMAN_LINK" class="btn btn-outline btn-full" id="trialChoosePlanBtn">Choose a plan later</a>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- BACKUP & RESTORE MODAL -->
   <div class="modal-overlay" id="backupRestoreModal" style="display:none" role="dialog" aria-modal="true">

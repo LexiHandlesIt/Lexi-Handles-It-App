@@ -14,6 +14,9 @@ const KEY_ONBOARDED    = 'tq_onboarded';
 const KEY_PL_ONBOARDED = 'tq_pl_onboarded';
 const KEY_PREVIEW_FIRST_SUPPRESSED = 'tq_preview_first_suppressed';
 const KEY_CUST_DATA    = 'lexi_cust_data';  // { "david okafor": { note, recurringDays } }
+const KEY_TRIAL_START  = 'lexi_trial_start';
+const KEY_TRIAL_END    = 'lexi_trial_end';
+const TRIAL_DAYS       = 90;
 
 function custKey(name) { return (name || '').trim().toLowerCase(); }
 function getCustData(name)           { const d = lsGet(KEY_CUST_DATA) || {}; return d[custKey(name)] || {}; }
@@ -22,6 +25,27 @@ function saveCustData(name, updates) {
   const k = custKey(name);
   all[k] = { ...(all[k] || {}), ...updates };
   localStorage.setItem(KEY_CUST_DATA, JSON.stringify(all));
+}
+
+function ensureTrialStarted() {
+  let start = localStorage.getItem(KEY_TRIAL_START);
+  let end = localStorage.getItem(KEY_TRIAL_END);
+  if (!start || !end) {
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + TRIAL_DAYS);
+    start = startDate.toISOString();
+    end = endDate.toISOString();
+    localStorage.setItem(KEY_TRIAL_START, start);
+    localStorage.setItem(KEY_TRIAL_END, end);
+  }
+  return { start: new Date(start), end: new Date(end) };
+}
+
+function getTrialDaysRemaining() {
+  const { end } = ensureTrialStarted();
+  const ms = end.getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / 86400000));
 }
 
 /* ===== DEFAULT COLOURS ===== */
@@ -579,6 +603,16 @@ function setupNavigation() {
     });
   }
 
+  document.getElementById('menuTrialPlans')?.addEventListener('click', () => {
+    closeMenu();
+    openTrialPlansModal();
+  });
+  document.getElementById('closeTrialPlansBtn')?.addEventListener('click', closeTrialPlansModal);
+  document.getElementById('trialKeepGoingBtn')?.addEventListener('click', closeTrialPlansModal);
+  document.getElementById('trialPlansModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeTrialPlansModal();
+  });
+
   // Sign Out
   const signOutBtn = document.getElementById('menuSignOut');
   if (signOutBtn) {
@@ -648,10 +682,33 @@ function setupOnboarding() {
   document.getElementById('startBtn').addEventListener('click', () => {
     const source = document.getElementById('referralSource').value;
     submitReferral(source);
+    ensureTrialStarted();
     localStorage.setItem(KEY_ONBOARDED, '1');
     modal.style.display = 'none';
     showPage('page1');
   });
+}
+
+function openTrialPlansModal() {
+  const days = getTrialDaysRemaining();
+  const title = document.getElementById('trialStatusTitle');
+  const copy = document.getElementById('trialStatusCopy');
+  if (title && copy) {
+    if (days > 0) {
+      title.textContent = `${days} day${days === 1 ? '' : 's'} left in your free trial.`;
+      copy.textContent = 'No card needed today. Keep using Lexi and choose a plan near the end if she is earning her keep.';
+    } else {
+      title.textContent = 'Your free trial has ended.';
+      copy.textContent = 'You can still view your saved work. Choose a plan when you are ready to keep creating new documents.';
+    }
+  }
+  const modal = document.getElementById('trialPlansModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeTrialPlansModal() {
+  const modal = document.getElementById('trialPlansModal');
+  if (modal) modal.style.display = 'none';
 }
 
 async function submitReferral(source) {
@@ -8047,4 +8104,3 @@ function setupEarnings() {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
   });
 }
-
