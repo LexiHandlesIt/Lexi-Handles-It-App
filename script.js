@@ -2,11 +2,26 @@
 
 /* ===== CONFIG ===== */
 const FORMSPREE_URL = 'YOUR_FORM_ID'; // Replace with your Formspree endpoint
+const SUPABASE_URL = 'https://dwiqqtutsjainpvdizgt.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_c0HS04ZbqIBPrbXvzNdPXw_IpeKBzHN';
+const lexiSupabase = (
+  window.supabase &&
+  SUPABASE_PUBLISHABLE_KEY !== 'PASTE_YOUR_SUPABASE_PUBLISHABLE_KEY_HERE'
+)
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+  : null;
+let authMode = 'signup';
+let lexiAuthSession = null;
+let priceListSyncTimer = null;
+let customerSyncTimer = null;
+let savedDocsSyncTimer = null;
+let savedDocsSyncReady = false;
 
 /* ===== STORAGE KEYS ===== */
 const KEY_CO   = 'tq_co';
 const KEY_PL   = 'tq_pl';
 const KEY_SAVED = 'tq_saved';
+const KEY_CUSTOMERS = 'tq_customers';
 const KEY_REF   = 'tq_refseq';
 const KEY_INV   = 'tq_invseq';
 const KEY_REC   = 'tq_recseq';
@@ -16,6 +31,7 @@ const KEY_PREVIEW_FIRST_SUPPRESSED = 'tq_preview_first_suppressed';
 const KEY_CUST_DATA    = 'lexi_cust_data';  // { "david okafor": { note, recurringDays } }
 const KEY_TRIAL_START  = 'lexi_trial_start';
 const KEY_TRIAL_END    = 'lexi_trial_end';
+const KEY_AUTH_REMEMBER_EMAIL = 'lexi_auth_remember_email';
 const TRIAL_DAYS       = 90;
 
 function custKey(name) { return (name || '').trim().toLowerCase(); }
@@ -73,6 +89,7 @@ let state = {
     companyNumber: '',
     vatNumber: '',
     logo: '',
+    socialLinks: { facebook: '', instagram: '', twitter: '' },
     payMethods: [],
     bankAccHolder: '', bankName: '', bankSort: '', bankAcc: '',
     paypalRef: '', payOther: '',
@@ -81,6 +98,7 @@ let state = {
     brandBg:      DEFAULT_COLOURS.bg
   },
   priceList: [],
+  customers: [],
   quote: {
     type: '',
     custTitle: '', custFirstName: '', custLastName: '',
@@ -188,7 +206,7 @@ function personaliseText() {
 }
 
 /* ===== INIT ===== */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   // About You — show more toggle
   const aboutYouMoreBtn = document.getElementById('aboutYouMoreBtn');
   const aboutYouExtra   = document.getElementById('aboutYouExtra');
@@ -202,7 +220,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  setupAuthScreen();
+  const canOpenApp = await initialiseAuth();
+  if (!canOpenApp) return;
+
   loadFromStorage();
+  await loadBusinessFromSupabase();
+  await loadPriceListFromSupabase();
+  await loadCustomersFromSupabase();
+  await loadSavedDocsFromSupabase();
+  savedDocsSyncReady = true;
+  syncAllLocalCustomersToSupabase();
+  queueSavedDocsSync();
   setupOnboarding();
   setupNewJobPicker();
   setupDescriptionHelp();
@@ -243,12 +272,884 @@ document.addEventListener('DOMContentLoaded', () => {
 
 });
 
+/* ===== AUTH ===== */
+function setAuthMode(mode) {
+  authMode = mode;
+  const signupTab = document.getElementById('authSignupTab');
+  const loginTab = document.getElementById('authLoginTab');
+  const submitBtn = document.getElementById('authSubmitBtn');
+  const password = document.getElementById('authPassword');
+  const hint = document.getElementById('authHint');
+  signupTab?.classList.toggle('active', mode === 'signup');
+  loginTab?.classList.toggle('active', mode === 'login');
+  if (submitBtn) submitBtn.textContent = mode === 'signup' ? 'Create my free account' : 'Log in';
+  if (password) password.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  if (hint) {
+    hint.textContent = mode === 'signup'
+      ? "Use uppercase, lowercase and a number. I'll send a confirmation email before you log in."
+      : 'Log in with the email and password you used to create your Lexi account.';
+  }
+  setAuthMessage('');
+}
+
+function setAuthMessage(message, type = '') {
+  const el = document.getElementById('authMessage');
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.remove('success', 'error');
+  if (type) el.classList.add(type);
+}
+
+function setupAuthScreen() {
+  const rememberedEmail = localStorage.getItem(KEY_AUTH_REMEMBER_EMAIL) || '';
+  const emailInput = document.getElementById('authEmail');
+  const rememberInput = document.getElementById('authRemember');
+  if (emailInput && rememberedEmail) emailInput.value = rememberedEmail;
+  if (rememberInput) rememberInput.checked = !!rememberedEmail;
+
+  document.getElementById('authSignupTab')?.addEventListener('click', () => setAuthMode('signup'));
+  document.getElementById('authLoginTab')?.addEventListener('click', () => setAuthMode('login'));
+  document.getElementById('authSubmitBtn')?.addEventListener('click', handleEmailAuth);
+  document.getElementById('authPassword')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') handleEmailAuth();
+  });
+  document.getElementById('authPasswordToggle')?.addEventListener('click', () => {
+    const password = document.getElementById('authPassword');
+    const toggle = document.getElementById('authPasswordToggle');
+    if (!password || !toggle) return;
+    const showPassword = password.type === 'password';
+    password.type = showPassword ? 'text' : 'password';
+    toggle.classList.toggle('is-visible', showPassword);
+    toggle.setAttribute('aria-pressed', showPassword ? 'true' : 'false');
+    toggle.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+  });
+  document.getElementById('authGoogleBtn')?.addEventListener('click', handleGoogleAuth);
+  setAuthMode('signup');
+}
+
+async function initialiseAuth() {
+  if (!lexiSupabase) {
+    console.warn('Supabase is not configured. Opening Lexi in local-only mode.');
+    return true;
+  }
+  const authScreen = document.getElementById('authScreen');
+  const { data, error } = await lexiSupabase.auth.getSession();
+  if (error) {
+    if (authScreen) authScreen.style.display = 'flex';
+    setAuthMessage(error.message || 'I could not check your login. Try again.', 'error');
+    return false;
+  }
+  lexiAuthSession = data?.session || null;
+  if (!lexiAuthSession) {
+    if (authScreen) authScreen.style.display = 'flex';
+    return false;
+  }
+  await ensureSupabaseProfile(lexiAuthSession.user);
+  if (authScreen) authScreen.style.display = 'none';
+  return true;
+}
+
+async function handleEmailAuth() {
+  if (!lexiSupabase) {
+    setAuthMessage('Supabase is not configured yet.', 'error');
+    return;
+  }
+  const email = document.getElementById('authEmail')?.value.trim();
+  const password = document.getElementById('authPassword')?.value;
+  const submitBtn = document.getElementById('authSubmitBtn');
+  if (!email || !password) {
+    setAuthMessage('Add your email and password first.', 'error');
+    return;
+  }
+  if (document.getElementById('authRemember')?.checked) {
+    localStorage.setItem(KEY_AUTH_REMEMBER_EMAIL, email);
+  } else {
+    localStorage.removeItem(KEY_AUTH_REMEMBER_EMAIL);
+  }
+  if (authMode === 'signup' && password.length < 8) {
+    setAuthMessage('Use at least 8 characters.', 'error');
+    return;
+  }
+  submitBtn.disabled = true;
+  submitBtn.textContent = authMode === 'signup' ? 'Creating account...' : 'Logging in...';
+  try {
+    if (authMode === 'signup') {
+      const { data, error } = await lexiSupabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.origin + window.location.pathname }
+      });
+      if (error) throw error;
+      if (data?.session) {
+        lexiAuthSession = data.session;
+        await ensureSupabaseProfile(data.user);
+        location.reload();
+        return;
+      }
+      setAuthMessage('Check your email to confirm your account, then come back and log in.', 'success');
+      setAuthMode('login');
+    } else {
+      const { data, error } = await lexiSupabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      lexiAuthSession = data?.session || null;
+      await ensureSupabaseProfile(data?.user);
+      location.reload();
+    }
+  } catch (error) {
+    setAuthMessage(authErrorMessage(error), 'error');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = authMode === 'signup' ? 'Create my free account' : 'Log in';
+  }
+}
+
+async function handleGoogleAuth() {
+  if (!lexiSupabase) {
+    setAuthMessage('Supabase is not configured yet.', 'error');
+    return;
+  }
+  const { error } = await lexiSupabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin + window.location.pathname }
+  });
+  if (error) setAuthMessage(authErrorMessage(error), 'error');
+}
+
+function authErrorMessage(error) {
+  const msg = error?.message || String(error || '');
+  if (/invalid login/i.test(msg)) return 'Those login details do not match. Check your email and password.';
+  if (/email not confirmed/i.test(msg)) return 'Check your email and confirm your account first.';
+  if (/password/i.test(msg) && /weak|short|characters/i.test(msg)) return 'Use at least 8 characters with uppercase, lowercase and a number.';
+  return msg || 'Something went wrong. Try again.';
+}
+
+async function ensureSupabaseProfile(user) {
+  if (!lexiSupabase || !user?.id) return;
+  const now = new Date();
+  const trialEnd = new Date(now);
+  trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS);
+  await lexiSupabase.from('profiles').upsert({
+    id: user.id,
+    email: user.email || '',
+    trial_started_at: now.toISOString(),
+    trial_ends_at: trialEnd.toISOString()
+  }, { onConflict: 'id', ignoreDuplicates: true });
+
+  const { data: existingSub } = await lexiSupabase
+    .from('subscriptions')
+    .select('id')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle();
+  if (!existingSub) {
+    await lexiSupabase.from('subscriptions').insert({
+      user_id: user.id,
+      plan_name: 'trial',
+      status: 'trialing',
+      trial_started_at: now.toISOString(),
+      trial_ends_at: trialEnd.toISOString()
+    });
+  }
+  if (!localStorage.getItem(KEY_TRIAL_START)) {
+    localStorage.setItem(KEY_TRIAL_START, now.toISOString());
+    localStorage.setItem(KEY_TRIAL_END, trialEnd.toISOString());
+  }
+}
+
+async function signOutOfLexi() {
+  if (lexiSupabase) await lexiSupabase.auth.signOut();
+  localStorage.removeItem(KEY_ONBOARDED);
+  localStorage.removeItem(KEY_PL_ONBOARDED);
+  location.reload();
+}
+
+function businessRowToCompany(row) {
+  if (!row) return {};
+  const payment = row.payment_details || {};
+  return {
+    firstName: row.first_name || '',
+    lastName: row.last_name || '',
+    preferredName: row.preferred_name || '',
+    businessName: row.business_name || '',
+    trade: row.trade || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    website: row.website || '',
+    address: row.address || '',
+    postcode: row.postcode || '',
+    companyNumber: row.company_number || '',
+    vatNumber: row.vat_number || '',
+    logo: row.logo_url || '',
+    qrCode: row.qr_code_url || '',
+    socialLinks: row.social_links || { facebook: '', instagram: '', twitter: '' },
+    payMethods: payment.payMethods || [],
+    bankAccHolder: payment.bankAccHolder || '',
+    bankName: payment.bankName || '',
+    bankSort: payment.bankSort || '',
+    bankAcc: payment.bankAcc || '',
+    paypalRef: payment.paypalRef || '',
+    payOther: payment.payOther || '',
+    brandPrimary: row.brand_primary || DEFAULT_COLOURS.primary,
+    brandAccent: row.brand_accent || DEFAULT_COLOURS.accent,
+    brandBg: row.brand_background || DEFAULT_COLOURS.bg
+  };
+}
+
+function companyToBusinessRow(company) {
+  return {
+    first_name: company.firstName || '',
+    last_name: company.lastName || '',
+    preferred_name: company.preferredName || '',
+    business_name: company.businessName || '',
+    trade: company.trade || '',
+    phone: company.phone || '',
+    email: company.email || '',
+    website: company.website || '',
+    address: company.address || '',
+    postcode: company.postcode || '',
+    company_number: company.companyNumber || '',
+    vat_number: company.vatNumber || '',
+    logo_url: company.logo || '',
+    qr_code_url: company.qrCode || '',
+    social_links: {
+      facebook: company.socialLinks?.facebook || '',
+      instagram: company.socialLinks?.instagram || '',
+      twitter: company.socialLinks?.twitter || ''
+    },
+    brand_primary: company.brandPrimary || DEFAULT_COLOURS.primary,
+    brand_accent: company.brandAccent || DEFAULT_COLOURS.accent,
+    brand_background: company.brandBg || DEFAULT_COLOURS.bg,
+    payment_details: {
+      payMethods: company.payMethods || [],
+      bankAccHolder: company.bankAccHolder || '',
+      bankName: company.bankName || '',
+      bankSort: company.bankSort || '',
+      bankAcc: company.bankAcc || '',
+      paypalRef: company.paypalRef || '',
+      payOther: company.payOther || ''
+    }
+  };
+}
+
+async function loadBusinessFromSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
+  const { data, error } = await lexiSupabase
+    .from('businesses')
+    .select('*')
+    .eq('user_id', lexiAuthSession.user.id)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Could not load business from Supabase:', error);
+    return false;
+  }
+  if (!data) return false;
+
+  state.company = { ...state.company, ...businessRowToCompany(data) };
+  save();
+  return true;
+}
+
+async function saveBusinessToSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  const payload = companyToBusinessRow(state.company);
+  const { data: existing, error: existingError } = await lexiSupabase
+    .from('businesses')
+    .select('id')
+    .eq('user_id', lexiAuthSession.user.id)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+
+  const result = existing?.id
+    ? await lexiSupabase.from('businesses').update(payload).eq('id', existing.id)
+    : await lexiSupabase.from('businesses').insert({
+        ...payload,
+        user_id: lexiAuthSession.user.id
+      });
+
+  if (result.error && String(result.error.message || '').includes('social_links')) {
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.social_links;
+    const fallbackResult = existing?.id
+      ? await lexiSupabase.from('businesses').update(fallbackPayload).eq('id', existing.id)
+      : await lexiSupabase.from('businesses').insert({
+          ...fallbackPayload,
+          user_id: lexiAuthSession.user.id
+        });
+    if (fallbackResult.error) throw fallbackResult.error;
+    console.warn('Business synced without social links. Add the social_links column in Supabase to sync social accounts.');
+    return;
+  }
+
+  if (result.error) throw result.error;
+}
+
+function priceItemRowToJob(row) {
+  return {
+    id: row.local_id || row.id || uid(),
+    name: row.name || '',
+    price: Number(row.price || 0),
+    unit: row.unit || ''
+  };
+}
+
+function jobToPriceItemRow(job) {
+  return {
+    local_id: job.id || uid(),
+    name: job.name || '',
+    price: Number(job.price || 0),
+    unit: job.unit || ''
+  };
+}
+
+async function loadPriceListFromSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
+  const { data, error } = await lexiSupabase
+    .from('price_items')
+    .select('*')
+    .eq('user_id', lexiAuthSession.user.id)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.warn('Could not load price list from Supabase:', error);
+    return false;
+  }
+
+  if (Array.isArray(data) && data.length) {
+    state.priceList = data.map(priceItemRowToJob).filter(job => job.name);
+    save();
+    return true;
+  }
+
+  if (state.priceList.length) {
+    queuePriceListSync();
+  }
+  return false;
+}
+
+async function savePriceListToSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  const userId = lexiAuthSession.user.id;
+  const rows = state.priceList.map(job => ({
+    ...jobToPriceItemRow(job),
+    user_id: userId
+  }));
+
+  const deleteResult = await lexiSupabase
+    .from('price_items')
+    .delete()
+    .eq('user_id', userId);
+  if (deleteResult.error) throw deleteResult.error;
+  if (!rows.length) return;
+
+  const insertResult = await lexiSupabase.from('price_items').insert(rows);
+  if (insertResult.error && String(insertResult.error.message || '').includes('local_id')) {
+    const fallbackRows = rows.map(({ local_id, ...row }) => row);
+    const fallbackResult = await lexiSupabase.from('price_items').insert(fallbackRows);
+    if (fallbackResult.error) throw fallbackResult.error;
+    console.warn('Price list synced without local_id. Add local_id to price_items for stronger cross-device matching.');
+    return;
+  }
+  if (insertResult.error) throw insertResult.error;
+}
+
+function queuePriceListSync(showError = false) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  clearTimeout(priceListSyncTimer);
+  priceListSyncTimer = setTimeout(() => {
+    savePriceListToSupabase().catch(error => {
+      console.warn('Price list saved locally but did not sync to Supabase:', error);
+      if (showError) toast('Price list saved here. Supabase sync needs another try.', 'error');
+    });
+  }, 250);
+}
+
+function normalisePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function customerQuoteFromForm() {
+  return {
+    custTitle:     getVal('custTitle'),
+    custFirstName: getVal('custFirstName'),
+    custLastName:  getVal('custLastName'),
+    custAddr:      getVal('custAddr'),
+    custPostcode:  getVal('custPostcode'),
+    custPhone:     getVal('custPhone'),
+    custEmail:     getVal('custEmail')
+  };
+}
+
+function customerHasUsefulData(q = {}) {
+  return !![
+    q.custTitle,
+    q.custFirstName,
+    q.custLastName,
+    q.custAddr,
+    q.custPostcode,
+    q.custPhone,
+    q.custEmail
+  ].some(value => String(value || '').trim());
+}
+
+function customerToRow(q = {}) {
+  return {
+    title:      q.custTitle || '',
+    first_name: q.custFirstName || '',
+    last_name:  q.custLastName || '',
+    address:    q.custAddr || '',
+    postcode:   q.custPostcode || '',
+    phone:      q.custPhone || '',
+    email:      q.custEmail || ''
+  };
+}
+
+function customerRowToQuote(row = {}) {
+  return {
+    custTitle:     row.title || '',
+    custFirstName: row.first_name || '',
+    custLastName:  row.last_name || '',
+    custAddr:      row.address || '',
+    custPostcode:  row.postcode || '',
+    custPhone:     row.phone || '',
+    custEmail:     row.email || ''
+  };
+}
+
+function customerLocalKey(q = {}) {
+  const email = String(q.custEmail || '').trim().toLowerCase();
+  if (email) return `email:${email}`;
+  const phone = normalisePhone(q.custPhone);
+  if (phone) return `phone:${phone}`;
+  return [
+    q.custFirstName,
+    q.custLastName,
+    q.custPostcode
+  ].map(value => String(value || '').trim().toLowerCase()).join('|');
+}
+
+function upsertLocalCustomer(q = {}, saveAfter = true) {
+  if (!customerHasUsefulData(q)) return null;
+  const quote = {
+    custTitle:     q.custTitle || '',
+    custFirstName: q.custFirstName || '',
+    custLastName:  q.custLastName || '',
+    custAddr:      q.custAddr || '',
+    custPostcode:  q.custPostcode || '',
+    custPhone:     q.custPhone || '',
+    custEmail:     q.custEmail || ''
+  };
+  const key = customerLocalKey(quote);
+  const name = buildCustName(quote) || 'Customer';
+  const existingIdx = state.customers.findIndex(customer => customer.key === key);
+  const row = {
+    id: existingIdx > -1 ? state.customers[existingIdx].id : uid(),
+    key,
+    name,
+    quote,
+    updatedAt: new Date().toISOString()
+  };
+  if (existingIdx > -1) state.customers[existingIdx] = { ...state.customers[existingIdx], ...row };
+  else state.customers.unshift(row);
+  if (saveAfter) save();
+  return row;
+}
+
+async function loadCustomersFromSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
+  const { data, error } = await lexiSupabase
+    .from('customers')
+    .select('*')
+    .eq('user_id', lexiAuthSession.user.id)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    console.warn('Could not load customers from Supabase:', error);
+    return false;
+  }
+
+  if (Array.isArray(data) && data.length) {
+    data.forEach(row => upsertLocalCustomer(customerRowToQuote(row), false));
+    save();
+    return true;
+  }
+  return false;
+}
+
+function customerMatchesQuote(row, q = {}) {
+  const email = String(q.custEmail || '').trim().toLowerCase();
+  const phone = normalisePhone(q.custPhone);
+  const first = String(q.custFirstName || '').trim().toLowerCase();
+  const last = String(q.custLastName || '').trim().toLowerCase();
+  const postcode = String(q.custPostcode || '').trim().toLowerCase();
+
+  if (email && String(row.email || '').trim().toLowerCase() === email) return true;
+  if (phone && normalisePhone(row.phone) === phone) return true;
+  return !!(
+    first &&
+    last &&
+    String(row.first_name || '').trim().toLowerCase() === first &&
+    String(row.last_name || '').trim().toLowerCase() === last &&
+    (!postcode || String(row.postcode || '').trim().toLowerCase() === postcode)
+  );
+}
+
+async function saveCustomerToSupabase(q = {}) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id || !customerHasUsefulData(q)) return;
+  const userId = lexiAuthSession.user.id;
+  const payload = customerToRow(q);
+  const { data: existingRows, error: findError } = await lexiSupabase
+    .from('customers')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (findError) throw findError;
+
+  const existing = (existingRows || []).find(row => customerMatchesQuote(row, q));
+  const result = existing?.id
+    ? await lexiSupabase.from('customers').update(payload).eq('id', existing.id)
+    : await lexiSupabase.from('customers').insert({
+        ...payload,
+        user_id: userId
+      });
+
+  if (result.error && /title|address|postcode/i.test(String(result.error.message || ''))) {
+    const fallbackPayload = {
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      phone: payload.phone,
+      email: payload.email
+    };
+    const fallbackResult = existing?.id
+      ? await lexiSupabase.from('customers').update(fallbackPayload).eq('id', existing.id)
+      : await lexiSupabase.from('customers').insert({
+          ...fallbackPayload,
+          user_id: userId
+        });
+    if (fallbackResult.error) throw fallbackResult.error;
+    console.warn('Customer synced with basic contact fields. Add title/address/postcode columns to sync full customer details.');
+    return;
+  }
+
+  if (result.error) throw result.error;
+}
+
+async function getSupabaseCustomerId(q = {}) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id || !customerHasUsefulData(q)) return null;
+  const userId = lexiAuthSession.user.id;
+  const { data: existingRows, error: findError } = await lexiSupabase
+    .from('customers')
+    .select('*')
+    .eq('user_id', userId);
+  if (findError) throw findError;
+
+  const existing = (existingRows || []).find(row => customerMatchesQuote(row, q));
+  if (existing?.id) return existing.id;
+
+  const payload = customerToRow(q);
+  const { data, error } = await lexiSupabase
+    .from('customers')
+    .insert({
+      ...payload,
+      user_id: userId
+    })
+    .select('id')
+    .maybeSingle();
+
+  if (error && /title|address|postcode/i.test(String(error.message || ''))) {
+    const fallbackPayload = {
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      phone: payload.phone,
+      email: payload.email
+    };
+    const fallback = await lexiSupabase
+      .from('customers')
+      .insert({
+        ...fallbackPayload,
+        user_id: userId
+      })
+      .select('id')
+      .maybeSingle();
+    if (fallback.error) throw fallback.error;
+    return fallback.data?.id || null;
+  }
+
+  if (error) throw error;
+  return data?.id || null;
+}
+
+function queueCustomerSync(q, showError = false) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id || !customerHasUsefulData(q)) return;
+  clearTimeout(customerSyncTimer);
+  customerSyncTimer = setTimeout(() => {
+    saveCustomerToSupabase(q).catch(error => {
+      console.warn('Customer saved locally but did not sync to Supabase:', error);
+      if (showError) toast('Customer saved here. Supabase sync needs another try.', 'error');
+    });
+  }, 250);
+}
+
+async function syncAllLocalCustomersToSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  const customers = new Map();
+
+  (state.customers || []).forEach(customer => {
+    const q = customer.quote || {};
+    if (customerHasUsefulData(q)) customers.set(customerLocalKey(q), q);
+  });
+
+  (state.saved || []).forEach(doc => {
+    const q = doc.quote || {};
+    if (!customerHasUsefulData(q)) return;
+    upsertLocalCustomer(q, false);
+    customers.set(customerLocalKey(q), q);
+  });
+
+  if (!customers.size) return;
+  save();
+
+  for (const q of customers.values()) {
+    try {
+      await saveCustomerToSupabase(q);
+    } catch (error) {
+      console.warn('Could not backfill customer to Supabase:', error);
+    }
+  }
+}
+
+function documentJsonFromRow(row = {}) {
+  return row.document_data || row.payload || row.data || row.content || row.document_json || null;
+}
+
+function savedDocRowToDoc(row = {}) {
+  const stored = documentJsonFromRow(row);
+  const doc = stored && typeof stored === 'object' ? { ...stored } : {};
+  doc.id = doc.id || row.local_id || row.id || uid();
+  doc.type = doc.type || row.type || row.document_type || doc.quote?.type || 'Estimate';
+  doc.ref = doc.ref || row.ref || row.reference || doc.quote?.ref || '';
+  doc.custName = doc.custName || row.customer_name || '';
+  doc.total = Number(doc.total ?? row.total ?? 0);
+  doc.date = doc.date || row.document_date || row.date || doc.quote?.date || '';
+  return doc;
+}
+
+function mergeSavedDocs(localDocs = [], remoteDocs = []) {
+  const byId = new Map();
+  [...remoteDocs, ...localDocs].forEach(doc => {
+    if (!doc?.id) return;
+    byId.set(doc.id, { ...(byId.get(doc.id) || {}), ...doc });
+  });
+  return [...byId.values()].sort((a, b) => (b.date || b.quote?.date || '').localeCompare(a.date || a.quote?.date || ''));
+}
+
+function getDocStatus(doc = {}) {
+  if (doc.paid) return 'paid';
+  if (doc.acceptStatus === 'accepted' || doc.jobAccepted) return 'accepted';
+  if (doc.invoiceSent || doc.type === 'Invoice') return 'sent';
+  return 'draft';
+}
+
+function getDocTypeForSupabase(doc = {}) {
+  const type = String(doc.type || doc.quote?.type || 'Estimate').trim().toLowerCase();
+  if (['estimate', 'quote', 'invoice', 'receipt'].includes(type)) return type;
+  return 'estimate';
+}
+
+function savedDocRowBase(doc = {}) {
+  const q = doc.quote || {};
+  return {
+    local_id: doc.id || uid(),
+    type: doc.type || q.type || 'Estimate',
+    status: getDocStatus(doc),
+    ref: doc.ref || q.ref || '',
+    customer_name: buildCustName(q) || doc.custName || '',
+    total: Number(doc.total || calcTotal(q) || 0),
+    document_date: doc.date || q.date || null
+  };
+}
+
+function toSupabaseDate(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function savedDocStandardRow(userId, doc = {}, customerId = null) {
+  const q = doc.quote || {};
+  const docType = getDocTypeForSupabase(doc);
+  const ref = doc.ref || q.ref || '';
+  const subtotal = Number((q.items || []).reduce((sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.qty) || 1), 0));
+  const total = Number(doc.total || calcTotal(q) || 0);
+  const issueDate = toSupabaseDate(doc.date || q.date);
+  const dueDate = toSupabaseDate(doc.invoiceDueDate);
+  return {
+    user_id: userId,
+    local_id: doc.id || uid(),
+    customer_id: customerId,
+    document_type: docType,
+    document_number: ref,
+    status: getDocStatus(doc),
+    subtotal,
+    tax_amount: 0,
+    vat_amount: 0,
+    total,
+    total_amount: total,
+    issue_date: issueDate,
+    document_date: issueDate,
+    due_date: dueDate,
+    notes: q.notes || '',
+    terms: Array.isArray(q.selectedTerms) ? q.selectedTerms.join(', ') : '',
+    document_data: doc
+  };
+}
+
+function omitKeys(row, keys) {
+  const copy = { ...row };
+  keys.forEach(key => delete copy[key]);
+  return copy;
+}
+
+function savedDocInsertCandidates(userId, doc = {}, customerId = null) {
+  const standard = savedDocStandardRow(userId, doc, customerId);
+  return [
+    standard,
+    omitKeys(standard, ['vat_amount', 'total', 'document_date']),
+    omitKeys(standard, ['tax_amount', 'total_amount', 'issue_date', 'due_date', 'notes', 'terms']),
+    omitKeys(standard, ['vat_amount', 'total', 'document_date', 'due_date', 'notes', 'terms', 'document_data']),
+    {
+      user_id: userId,
+      customer_id: customerId,
+      document_type: standard.document_type,
+      document_number: standard.document_number,
+      status: standard.status,
+      subtotal: standard.subtotal,
+      tax_amount: 0,
+      total_amount: standard.total_amount,
+      issue_date: standard.issue_date,
+      document_data: doc
+    }
+  ];
+}
+
+function savedDocRowsWithJsonColumn(userId, jsonColumn) {
+  return (state.saved || []).map(doc => ({
+    user_id: userId,
+    ...savedDocRowBase(doc),
+    [jsonColumn]: doc
+  }));
+}
+
+async function loadSavedDocsFromSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
+  let { data, error } = await lexiSupabase
+    .from('documents')
+    .select('*')
+    .eq('user_id', lexiAuthSession.user.id)
+    .order('created_at', { ascending: false });
+
+  if (error && /created_at/i.test(String(error.message || ''))) {
+    const retry = await lexiSupabase
+      .from('documents')
+      .select('*')
+      .eq('user_id', lexiAuthSession.user.id);
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) {
+    console.warn('Could not load saved documents from Supabase:', error);
+    return false;
+  }
+
+  if (Array.isArray(data) && data.length) {
+    const remoteDocs = data.map(savedDocRowToDoc).filter(doc => doc.id);
+    state.saved = mergeSavedDocs(state.saved, remoteDocs);
+    state.saved.forEach(doc => {
+      const q = doc.quote || {};
+      if (customerHasUsefulData(q)) upsertLocalCustomer(q, false);
+    });
+    save();
+    return true;
+  }
+  return false;
+}
+
+async function saveSavedDocsToSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  const userId = lexiAuthSession.user.id;
+  const deleteResult = await lexiSupabase
+    .from('documents')
+    .delete()
+    .eq('user_id', userId);
+  if (deleteResult.error) throw deleteResult.error;
+
+  if (!state.saved.length) return;
+
+  const docsWithCustomers = [];
+  for (const doc of state.saved || []) {
+    docsWithCustomers.push({
+      doc,
+      customerId: await getSupabaseCustomerId(doc.quote || {})
+    });
+  }
+
+  const rows = docsWithCustomers.map(({ doc, customerId }) => savedDocStandardRow(userId, doc, customerId));
+  const result = await lexiSupabase.from('documents').insert(rows);
+  if (result.error) {
+    const message = String(result.error.message || '');
+    if (/document_data|schema cache|column/i.test(message)) {
+      throw new Error('Documents table needs a document_data JSONB column before Lexi can sync saved jobs.');
+    }
+    throw result.error;
+  }
+}
+
+function queueSavedDocsSync(showError = false) {
+  if (!savedDocsSyncReady || !lexiSupabase || !lexiAuthSession?.user?.id) return;
+  clearTimeout(savedDocsSyncTimer);
+  savedDocsSyncTimer = setTimeout(() => {
+    saveSavedDocsToSupabase().then(() => {
+      localStorage.removeItem('lexi_last_documents_sync_error');
+    }).catch(error => {
+      console.warn('Saved jobs saved locally but did not sync to Supabase:', error);
+      localStorage.setItem('lexi_last_documents_sync_error', error?.message || String(error || 'Unknown document sync error'));
+      toast(`Document sync failed: ${error?.message || 'check Supabase table setup'}`, 'error', 9000);
+      if (showError) toast('Jobs saved here. Supabase sync needs another try.', 'error');
+    });
+  }, 400);
+}
+
+window.lexiCheckDocumentSync = async function lexiCheckDocumentSync() {
+  try {
+    await saveSavedDocsToSupabase();
+    localStorage.removeItem('lexi_last_documents_sync_error');
+    toast(`Document sync worked. ${state.saved.length} job${state.saved.length === 1 ? '' : 's'} sent to Supabase.`, 'success', 8000);
+    return { ok: true, count: state.saved.length };
+  } catch (error) {
+    const message = error?.message || String(error || 'Unknown document sync error');
+    localStorage.setItem('lexi_last_documents_sync_error', message);
+    toast(`Document sync failed: ${message}`, 'error', 12000);
+    return { ok: false, message, error };
+  }
+};
+
 /* ===== STORAGE ===== */
 function save() {
   try {
     ls(KEY_CO,    state.company);
     ls(KEY_PL,    state.priceList);
     ls(KEY_SAVED, state.saved);
+    ls(KEY_CUSTOMERS, state.customers);
+    queueSavedDocsSync();
   } catch(e) { toast('Storage full. Some data may not have saved.', 'error'); }
 }
 
@@ -256,6 +1157,7 @@ function loadFromStorage() {
   state.company   = lsGet(KEY_CO)    || state.company;
   state.priceList = lsGet(KEY_PL)    || [];
   state.saved     = lsGet(KEY_SAVED) || [];
+  state.customers = lsGet(KEY_CUSTOMERS) || [];
   // Migrate: ensure every price list item has an id
   let needsSave = false;
   state.priceList.forEach(j => {
@@ -619,9 +1521,7 @@ function setupNavigation() {
     signOutBtn.addEventListener('click', () => {
       closeMenu();
       if (confirm('Sign out? Your saved jobs will remain on this device.')) {
-        localStorage.removeItem('tq_onboarded');
-        localStorage.removeItem('tq_pl_onboarded');
-        location.reload();
+        signOutOfLexi();
       }
     });
   }
@@ -657,6 +1557,9 @@ function setupNavigation() {
       document.getElementById('custFirstName').focus();
       return;
     }
+    Object.assign(state.quote, customerQuoteFromForm());
+    upsertLocalCustomer(state.quote);
+    queueCustomerSync(state.quote, true);
     showPage('page-jobs');
     setVal('jobPickerSearch', '');
     updateJobPicker();
@@ -775,6 +1678,19 @@ function setupPage1() {
     qualsFile.addEventListener('change', handleQualUpload);
   }
   qualsAddMore?.addEventListener('click', e => { e.stopPropagation(); qualsFile.click(); });
+
+  document.querySelectorAll('.social-link-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const fieldId = btn.getAttribute('aria-controls');
+      const field = document.getElementById(fieldId);
+      if (!field) return;
+      const open = field.hidden;
+      field.hidden = !open;
+      btn.classList.toggle('active', open);
+      btn.setAttribute('aria-expanded', String(open));
+      if (open) field.querySelector('input')?.focus();
+    });
+  });
 
   // Payment method toggles
   document.getElementById('payBankTransfer').addEventListener('change', e => {
@@ -1059,9 +1975,12 @@ function populatePage1Fields() {
   setVal('p1CompanyNumber', c.companyNumber || '');
   setVal('p1VatNumber',     c.vatNumber || '');
   setVal('p1Trade',         c.trade || '');
+  setVal('p1Facebook',      c.socialLinks?.facebook || '');
+  setVal('p1Instagram',     c.socialLinks?.instagram || '');
+  setVal('p1Twitter',       c.socialLinks?.twitter || '');
 
   // Auto-expand "Show more" if any hidden fields already have data
-  const extraFields = [c.phone, c.address, c.postcode, c.email, c.website, c.reviewLink, c.companyNumber, c.vatNumber, c.trade];
+  const extraFields = [c.phone, c.address, c.postcode, c.email, c.website, c.reviewLink, c.companyNumber, c.vatNumber, c.trade, c.socialLinks?.facebook, c.socialLinks?.instagram, c.socialLinks?.twitter];
   if (extraFields.some(v => v && String(v).trim())) {
     const extra = document.getElementById('aboutYouExtra');
     const btn   = document.getElementById('aboutYouMoreBtn');
@@ -1072,6 +1991,17 @@ function populatePage1Fields() {
       if (chevron) chevron.style.transform = 'rotate(180deg)';
     }
   }
+  ['facebook', 'instagram', 'twitter'].forEach(name => {
+    const value = c.socialLinks?.[name];
+    const btn = document.querySelector(`.social-link-toggle[data-social="${name}"]`);
+    const field = document.getElementById(`social${name.charAt(0).toUpperCase() + name.slice(1)}Field`);
+    const open = !!(value && String(value).trim());
+    if (field) field.hidden = !open;
+    if (btn) {
+      btn.classList.toggle('active', open);
+      btn.setAttribute('aria-expanded', String(open));
+    }
+  });
 
   showLogoState();
   showQRState();
@@ -1168,6 +2098,11 @@ function saveBusinessDetails(showToast = true) {
     reviewLink:    getVal('p1ReviewLink').trim(),
     companyNumber: getVal('p1CompanyNumber'),
     vatNumber:     getVal('p1VatNumber'),
+    socialLinks: {
+      facebook: getVal('p1Facebook').trim(),
+      instagram: getVal('p1Instagram').trim(),
+      twitter: getVal('p1Twitter').trim()
+    },
     payMethods:    methods,
     bankAccHolder: getVal('bankAccHolder'),
     bankName:     getVal('bankName'),
@@ -1180,6 +2115,10 @@ function saveBusinessDetails(showToast = true) {
     brandBg:      document.getElementById('colourBg').value
   };
   save();
+  saveBusinessToSupabase().catch(error => {
+    console.warn('Business details saved locally but did not sync to Supabase:', error);
+    if (showToast) toast('Saved on this device. Supabase sync needs another try.', 'error');
+  });
   updateColourPreview();
   personaliseText();
   if (showToast) showSavedPopup(
@@ -1593,6 +2532,7 @@ function setupPage2() {
     document.getElementById('selectAllJobs').checked = false;
     document.getElementById('deleteSelectedBtn').style.display = 'none';
     save();
+    queuePriceListSync(true);
     refreshPriceList();
     updateJobPicker();
     toast(`Deleted ${checked.length} job${checked.length===1?'':'s'}.`);
@@ -1647,7 +2587,7 @@ function parseJobLines(text) {
     addJob(name, price, unit);
     added++;
   });
-  if (added) { save(); refreshPriceList(); updateJobPicker(); }
+  if (added) { save(); queuePriceListSync(true); refreshPriceList(); updateJobPicker(); }
   return { added, skipped };
 }
 
@@ -1675,6 +2615,7 @@ function addIndividualJob() {
     showDuplicatePrompt(name, () => {
       addJob(name, price, unit);
       save();
+      queuePriceListSync(true);
       setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
       refreshPriceList();
       updateJobPicker();
@@ -1685,6 +2626,7 @@ function addIndividualJob() {
 
   addJob(name, price, unit);
   save();
+  queuePriceListSync(true);
   setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
   refreshPriceList();
   updateJobPicker();
@@ -1803,6 +2745,7 @@ function editJobInline(row, job) {
     if (idx > -1) state.priceList[idx] = { ...job, name, price, unit };
     done();
     save();
+    queuePriceListSync(true);
     refreshPriceList();
     updateJobPicker();
     showSavedPopup("Updated. Good to go.");
@@ -1819,6 +2762,7 @@ function editJobInline(row, job) {
 function deleteJob(id) {
   state.priceList = state.priceList.filter(j => j.id !== id);
   save();
+  queuePriceListSync(true);
   refreshPriceList();
   updateJobPicker();
   toast('Job deleted.');
@@ -1879,7 +2823,7 @@ function setupPageJobs() {
   document.getElementById('saveJobsGoToCompletionBtn')?.addEventListener('click', () => {
     recalcTotals();
     const titleEl = document.querySelector('#page-completion .page-title');
-    if (titleEl) titleEl.textContent = 'Save';
+    if (titleEl) titleEl.textContent = 'Add Jobs';
     showPage('page-completion');
   });
 }
@@ -2340,6 +3284,9 @@ function saveQuote() {
   }
 
   save();
+  queueSavedDocsSync(true);
+  upsertLocalCustomer(q);
+  queueCustomerSync(q, true);
   updateSavedBadge();
   refreshSavedDocs();
   const popupLabel = isEditing ? "Changes saved. Nice one." : `${docType} saved. Another one sorted.`;
@@ -2553,6 +3500,7 @@ function vnfSubmit(saveToList) {
     // Add to price list
     state.priceList.push({ id: uid(), name, price, unit });
     save();
+    queuePriceListSync(true);
     refreshPriceList();
   }
 
@@ -2603,16 +3551,37 @@ function closeExistingCustPicker() {
   document.getElementById('existingCustPickerModal').style.display = 'none';
 }
 
+function startJobForCustomer(quote = {}) {
+  const q = quote || {};
+  prepareNewQuote();
+  state.quote.custTitle     = q.custTitle     || '';
+  state.quote.custFirstName = q.custFirstName || '';
+  state.quote.custLastName  = q.custLastName  || '';
+  state.quote.custAddr      = q.custAddr      || '';
+  state.quote.custPostcode  = q.custPostcode  || '';
+  state.quote.custPhone     = q.custPhone     || '';
+  state.quote.custEmail     = q.custEmail     || '';
+  populateQuoteForm();
+  showPage('page-jobs');
+}
+
 function renderExistingCustList(query) {
   const q = (query || '').toLowerCase().trim();
-  // Collect unique customers from saved docs
+  // Collect unique customers from saved customer records and saved docs.
   const seen = new Map();
+  (state.customers || []).forEach(customer => {
+    const quote = customer.quote || {};
+    const name = buildCustName(quote) || customer.name || '';
+    if (!name) return;
+    const key = customer.key || customerLocalKey(quote) || name.toLowerCase();
+    if (!seen.has(key)) seen.set(key, { name, quote });
+  });
   state.saved.forEach(doc => {
     const quote = doc.quote || {};
     const name  = buildCustName(quote) || doc.custName || '';
     if (!name) return;
-    const key = name.toLowerCase();
-    if (!seen.has(key)) seen.set(key, { name, doc, quote });
+    const key = customerLocalKey(quote) || name.toLowerCase();
+    if (!seen.has(key)) seen.set(key, { name, quote });
   });
   let entries = [...seen.values()];
   if (q) entries = entries.filter(e => e.name.toLowerCase().includes(q));
@@ -2628,7 +3597,7 @@ function renderExistingCustList(query) {
   }
   empty.style.display = 'none';
 
-  entries.forEach(({ name, doc }) => {
+  entries.forEach(({ name, quote }) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-outline';
@@ -2636,18 +3605,7 @@ function renderExistingCustList(query) {
     btn.textContent = name;
     btn.addEventListener('click', () => {
       closeExistingCustPicker();
-      // Pre-fill the quote state with this customer's details then go to Add Jobs
-      const q = doc.quote || {};
-      prepareNewQuote();
-      state.quote.custTitle     = q.custTitle     || '';
-      state.quote.custFirstName = q.custFirstName || '';
-      state.quote.custLastName  = q.custLastName  || '';
-      state.quote.custAddr      = q.custAddr      || '';
-      state.quote.custPostcode  = q.custPostcode  || '';
-      state.quote.custPhone     = q.custPhone     || '';
-      state.quote.custEmail     = q.custEmail     || '';
-      populateQuoteForm();
-      showPage('page-jobs');
+      startJobForCustomer(quote);
     });
     list.appendChild(btn);
   });
@@ -2839,6 +3797,29 @@ function refreshSavedDocs() {
     });
   }
 
+  const savedCustomerKeys = new Set(
+    (state.saved || [])
+      .map(d => customerLocalKey(d.quote || {}))
+      .filter(Boolean)
+  );
+  let standaloneCustomers = filter === 'all'
+    ? (state.customers || []).filter(customer => {
+        const quote = customer.quote || {};
+        const key = customer.key || customerLocalKey(quote);
+        return key && !savedCustomerKeys.has(key);
+      })
+    : [];
+  if (q) {
+    standaloneCustomers = standaloneCustomers.filter(customer => {
+      const quote = customer.quote || {};
+      const name = (buildCustName(quote) || customer.name || '').toLowerCase();
+      return name.includes(q) ||
+        String(quote.custEmail || '').toLowerCase().includes(q) ||
+        String(quote.custPhone || '').toLowerCase().includes(q);
+    });
+  }
+  standaloneCustomers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
   // Sort
   const sortKey = d => {
     const q = d.quote || {};
@@ -2869,11 +3850,41 @@ function refreshSavedDocs() {
     if (child !== empty) child.remove();
   });
 
-  if (!docs.length) {
+  if (!docs.length && !standaloneCustomers.length) {
     empty.style.display = 'flex';
     return;
   }
   empty.style.display = 'none';
+
+  standaloneCustomers.forEach(customer => {
+    const quote = customer.quote || {};
+    const name = buildCustName(quote) || customer.name || 'Customer';
+    const card = document.createElement('div');
+    card.className = 'saved-doc-card status-estimate';
+    card.innerHTML = `
+      <div class="saved-doc-header">
+        <div>
+          <span class="saved-doc-name">${esc(name)}</span>
+          <div class="saved-doc-ref">No job yet</div>
+        </div>
+        <div style="text-align:right">
+          <div class="saved-doc-total">${fmtPrice(0)}</div>
+          <span class="type-badge estimate">Customer</span>
+        </div>
+      </div>
+      <div class="job-card-actions">
+        <button type="button" class="jca-open">Start Job</button>
+        <button type="button" class="jca-primary jca-send">Add Jobs</button>
+      </div>
+      <div class="saved-doc-payment-tally">
+        <span class="sdpt-payment-info">Saved customer. No paperwork created yet.</span>
+      </div>
+    `;
+    const start = () => startJobForCustomer(quote);
+    card.querySelector('.jca-open')?.addEventListener('click', start);
+    card.querySelector('.jca-send')?.addEventListener('click', start);
+    container.appendChild(card);
+  });
 
   docs.forEach(doc => {
     const card = document.createElement('div');
@@ -4280,6 +5291,7 @@ function createNewCustomerFromPicker() {
 /* ===== SEND CHOICE ===== */
 const BIZ_SECTIONS  = ['contact', 'phone', 'companyNum', 'vatNum'];
 const PAY_SECTIONS  = ['bank', 'paypal', 'cash', 'other'];
+const SOCIAL_QR_SECTIONS = ['facebook', 'instagram', 'twitter', 'qrCode'];
 
 function openSendChoiceModal() {
   document.getElementById('sendChoiceModal').style.display = 'flex';
@@ -4326,6 +5338,10 @@ function setupSendChoice() {
     document.getElementById('sendChoiceModal').style.display = 'none';
     openBizInfoModal('payment');
   });
+  document.getElementById('sendChoiceSocialQr')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+    openBizInfoModal('socialQr');
+  });
   document.getElementById('sendChoiceQuals')?.addEventListener('click', () => {
     document.getElementById('sendChoiceModal').style.display = 'none';
     openBizInfoModal('qualifications');
@@ -4368,6 +5384,20 @@ function bizInfoSections() {
   // ── VAT Registration number ──────────────────────────────────
   if (c.vatNumber) {
     sections.push({ id: 'vatNum', label: `VAT Reg No:  ${c.vatNumber}`, text: `VAT Registration Number: ${c.vatNumber}`, checked: false });
+  }
+
+  const socialLinks = c.socialLinks || {};
+  if (socialLinks.facebook) {
+    sections.push({ id: 'facebook', label: `Facebook:  ${socialLinks.facebook}`, text: `Facebook: ${socialLinks.facebook}`, checked: true });
+  }
+  if (socialLinks.instagram) {
+    sections.push({ id: 'instagram', label: `Instagram:  ${socialLinks.instagram}`, text: `Instagram: ${socialLinks.instagram}`, checked: true });
+  }
+  if (socialLinks.twitter) {
+    sections.push({ id: 'twitter', label: `X / Twitter:  ${socialLinks.twitter}`, text: `X / Twitter: ${socialLinks.twitter}`, checked: true });
+  }
+  if (c.qrCode) {
+    sections.push({ id: 'qrCode', label: 'QR Code', text: 'I have a QR code ready to scan.', checked: false });
   }
 
   // ── Bank transfer ────────────────────────────────────────────
@@ -4453,12 +5483,16 @@ function openBizInfoModal(filter) {
   } else if (filter === 'payment') {
     sections = allSections.filter(s => PAY_SECTIONS.includes(s.id));
     if (titleEl) titleEl.textContent = 'Send Payment Details';
+  } else if (filter === 'socialQr') {
+    sections = allSections.filter(s => SOCIAL_QR_SECTIONS.includes(s.id));
+    if (titleEl) titleEl.textContent = 'Send Social Media or QR Code';
   } else {
     if (titleEl) titleEl.textContent = 'Send My Business Info';
   }
 
   if (sections.length === 0) {
-    container.innerHTML = `<p style="color:#999;text-align:center;padding:20px 0;font-size:0.9rem">No ${filter === 'payment' ? 'payment' : 'business'} details saved yet.<br><small>Add them from <strong>Edit My Business</strong>.</small></p>`;
+    const detailType = filter === 'payment' ? 'payment' : filter === 'socialQr' ? 'social media or QR code' : 'business';
+    container.innerHTML = `<p style="color:#999;text-align:center;padding:20px 0;font-size:0.9rem">No ${detailType} details saved yet.<br><small>Add them from <strong>Edit My Business</strong>.</small></p>`;
     if (previewWrap) previewWrap.style.display = 'none';
     if (footerEl)    footerEl.style.display    = 'none';
     document.getElementById('bizInfoModal').style.display = 'flex';
@@ -5092,7 +6126,9 @@ function persistCustomerDetailsForm() {
     doc.custName = buildCustName(doc.quote);
   });
   group.name = buildCustName(sharedUpdates).trim() || group.name;
+  upsertLocalCustomer(sharedUpdates, false);
   save();
+  queueCustomerSync(sharedUpdates, true);
   refreshSavedDocs();
 }
 

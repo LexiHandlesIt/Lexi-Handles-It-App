@@ -14,6 +14,52 @@
 </head>
 <body>
 
+  <!-- AUTH SCREEN -->
+  <div id="authScreen" class="auth-screen" style="display:none" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" class="auth-logo-img" onerror="this.style.display='none'">
+        <img src="2 So you dont have to transparent.png" alt="So you don't have to" class="auth-strap-img" onerror="this.style.display='none'">
+      </div>
+      <h1 id="authTitle">Welcome to Lexi</h1>
+      <p class="auth-sub">Your AI assistant for the business side of your trade.</p>
+      <p class="auth-trial">Start with 3 months free. No card needed.</p>
+
+      <div class="auth-tabs" role="tablist" aria-label="Choose sign up or log in">
+        <button type="button" class="auth-tab active" id="authSignupTab">Create account</button>
+        <button type="button" class="auth-tab" id="authLoginTab">Log in</button>
+      </div>
+
+      <div class="auth-form">
+        <label for="authEmail">Email</label>
+        <input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com">
+
+        <label for="authPassword">Password</label>
+        <div class="auth-password-wrap">
+          <input type="password" id="authPassword" autocomplete="current-password" placeholder="Minimum 8 characters">
+          <button type="button" class="auth-password-toggle" id="authPasswordToggle" aria-label="Show password" aria-pressed="false">
+            <svg class="auth-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="auth-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.58 10.58A2 2 0 0 0 12 14a2 2 0 0 0 1.42-.58"/><path d="M9.88 5.24A9.8 9.8 0 0 1 12 5c6.5 0 10 7 10 7a17.4 17.4 0 0 1-3.22 4.23"/><path d="M6.61 6.61C3.59 8.62 2 12 2 12s3.5 7 10 7a9.8 9.8 0 0 0 4.39-1.02"/></svg>
+          </button>
+        </div>
+
+        <label class="auth-remember">
+          <input type="checkbox" id="authRemember">
+          <span>Remember me</span>
+        </label>
+
+        <p class="auth-hint" id="authHint">Use uppercase, lowercase and a number. I'll send a confirmation email before you log in.</p>
+        <div class="auth-message" id="authMessage" role="status" aria-live="polite"></div>
+
+        <button type="button" class="btn btn-sage btn-full" id="authSubmitBtn">Create my free account</button>
+        <button type="button" class="auth-google-btn" id="authGoogleBtn">
+          <span aria-hidden="true">G</span>
+          Continue with Google
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- PAUSED SCREEN — shown when app is in quiet season -->
   <div id="pausedScreen" class="paused-screen" style="display:none" role="dialog" aria-modal="true">
     <div class="paused-card">
@@ -229,6 +275,10 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
           My Business
         </button>
+        <button class="nav-menu-item nav-submenu-item" id="menuQuickQr">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4"/><path d="M21 14v7"/></svg>
+          Show QR Code
+        </button>
         <button class="nav-menu-item nav-submenu-item" data-target="page2" id="menuPriceList">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           My Price List
@@ -428,6 +478,35 @@
                 <option value="Tiler">Tiler</option>
                 <option value="Other">Other</option>
               </select>
+            </div>
+          </div>
+
+          <div class="social-links-mini">
+            <button type="button" class="social-link-toggle" data-social="facebook" aria-expanded="false" aria-controls="socialFacebookField">
+              <span class="social-icon">f</span>
+              <span>Facebook</span>
+            </button>
+            <button type="button" class="social-link-toggle" data-social="instagram" aria-expanded="false" aria-controls="socialInstagramField">
+              <span class="social-icon">IG</span>
+              <span>Instagram</span>
+            </button>
+            <button type="button" class="social-link-toggle" data-social="twitter" aria-expanded="false" aria-controls="socialTwitterField">
+              <span class="social-icon">X</span>
+              <span>X / Twitter</span>
+            </button>
+          </div>
+          <div class="social-link-fields">
+            <div class="form-group social-link-field" id="socialFacebookField" hidden>
+              <label for="p1Facebook">Facebook link or handle</label>
+              <input type="text" id="p1Facebook" inputmode="url" autocomplete="url" placeholder="facebook.com/yourbusiness">
+            </div>
+            <div class="form-group social-link-field" id="socialInstagramField" hidden>
+              <label for="p1Instagram">Instagram link or handle</label>
+              <input type="text" id="p1Instagram" inputmode="url" autocomplete="url" placeholder="@yourbusiness">
+            </div>
+            <div class="form-group social-link-field" id="socialTwitterField" hidden>
+              <label for="p1Twitter">X / Twitter link or handle</label>
+              <input type="text" id="p1Twitter" inputmode="url" autocomplete="url" placeholder="@yourbusiness">
             </div>
           </div>
 
@@ -981,9 +1060,8 @@
 
         <input type="hidden" id="authSig">
         <div class="form-group" style="margin-top:24px">
-          <label>Authorised Signature Preview</label>
+          <label for="custSigText">Authorised Signature Preview <button type="button" class="field-info-btn" data-title="Authorised Signature Preview" data-body="To change this signature, delete and type your preferred name. Leave it blank if you would rather print and sign by hand.">?</button></label>
           <input type="text" id="custSigText" class="sig-text-input" placeholder="">
-          <p class="sig-hint-text">To change this signature, delete and type preferred name or leave blank if you would prefer to print and sign.</p>
         </div>
       </div>
 
@@ -1629,6 +1707,16 @@
           </div>
           <svg class="send-choice-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
+        <button type="button" class="send-choice-btn" id="sendChoiceSocialQr">
+          <div class="send-choice-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </div>
+          <div class="send-choice-text">
+            <span class="send-choice-title">Social Media / QR Code</span>
+            <span class="send-choice-desc">Send socials or show your QR code</span>
+          </div>
+          <svg class="send-choice-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
         <button type="button" class="send-choice-btn" id="sendChoiceQuals">
           <div class="send-choice-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="18" rx="2"/><path d="M10 3h8l4 4v14a2 2 0 0 1-2 2h-6"/><line x1="6" y1="9" x2="10" y2="9"/><line x1="6" y1="13" x2="10" y2="13"/></svg>
@@ -1639,6 +1727,23 @@
           </div>
           <svg class="send-choice-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUICK QR MODAL -->
+  <div id="quickQrModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="My QR Code">
+    <div class="modal-card modal-card-sm quick-qr-card">
+      <div class="modal-header">
+        <h2 class="modal-title">My QR Code</h2>
+        <button type="button" class="modal-close" id="closeQuickQrBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body quick-qr-body">
+        <div id="quickQrContent"></div>
+      </div>
+      <div class="modal-footer" id="quickQrFooter">
+        <button type="button" class="btn btn-outline" id="copyQrInfoBtn">Copy social links</button>
+        <button type="button" class="btn btn-primary" id="shareQrCodeBtn">Share QR code</button>
       </div>
     </div>
   </div>
@@ -2112,6 +2217,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js"></script>
 </body>
 </html>
