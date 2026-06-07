@@ -1133,6 +1133,10 @@
             <span id="filterToggleLabel">Filter &amp; Sort</span>
             <svg id="filterToggleChevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
+          <button type="button" class="jobs-refresh-btn" id="jobsRefreshBtn" title="Refresh — check for new acceptances and scroll to top" onclick="jobsRefresh()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Refresh
+          </button>
         </div>
 
         <!-- Attention widget — populated by JS -->
@@ -1538,6 +1542,14 @@
         <div id="editPaymentsList"></div>
         <div class="add-payment-section">
           <h3 class="section-sub">Add Payment</h3>
+          <div class="form-group" style="margin-bottom:12px">
+            <label for="epPaymentType">Payment Type</label>
+            <select id="epPaymentType" onchange="_epPaymentType = this.value">
+              <option value="full">Full Payment</option>
+              <option value="deposit">Deposit</option>
+              <option value="part">Part Payment</option>
+            </select>
+          </div>
           <div class="form-grid-2">
             <div class="form-group">
               <label for="epAddAmount">Amount</label>
@@ -1568,8 +1580,9 @@
         <button type="button" class="modal-close" id="closeEditChoiceBtn" aria-label="Close">✕</button>
       </div>
       <div class="modal-body stacked-actions">
-        <button type="button" class="btn btn-success btn-full" id="editChoiceMoneyBtn">Money In</button>
+        <button type="button" class="btn btn-outline btn-full" id="editChoiceCustomerBtn">Customer Details</button>
         <button type="button" class="btn btn-primary btn-full" id="editChoiceJobBtn">Job Details</button>
+        <button type="button" class="btn btn-success btn-full" id="editChoiceMoneyBtn">Money In</button>
       </div>
     </div>
   </div>
@@ -2222,6 +2235,53 @@
         <p style="font-size:0.9rem;color:#666;margin-bottom:24px;line-height:1.5">Everything is here waiting for you. Tap below when you are ready to get back on the tools.</p>
         <button type="button" class="btn btn-primary w-100" id="qsLockedResumeBtn" style="margin-bottom:10px">I am back. Let us go.</button>
         <button type="button" class="btn btn-outline w-100" id="qsLockedCloseBtn">Not yet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOOKING CONTACT CHOICE MODAL -->
+  <div id="bookingContactModal" class="modal-overlay" style="display:none;z-index:620" role="dialog" aria-modal="true">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-header">
+        <h2 class="modal-title" id="bookingContactTitle">How would you like to contact your customer?</h2>
+        <button type="button" class="modal-close" onclick="document.getElementById('bookingContactModal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body stacked-actions" style="padding-bottom:20px">
+        <button type="button" class="btn btn-success btn-full" id="bookingWhatsappBtn">💬 WhatsApp</button>
+        <button type="button" class="btn btn-primary btn-full" id="bookingEmailBtn">✉️ Email</button>
+        <button type="button" class="btn btn-outline btn-full" id="bookingCallBtn">📞 Call</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMAIL COMPOSE PANEL MODAL -->
+  <div id="emailComposeModal" class="modal-overlay" style="display:none;z-index:630" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width:500px">
+      <div class="modal-header">
+        <h2 class="modal-title">Send Email</h2>
+        <button type="button" class="modal-close" onclick="document.getElementById('emailComposeModal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px 4px">
+        <div id="ecAttachBanner" class="email-attach-banner" style="display:none">
+          📎 <strong>Don't forget:</strong> attach the downloaded document file to this email before sending.
+        </div>
+        <div class="email-compose-row">
+          <span class="email-compose-lbl">To</span>
+          <span class="email-compose-val" id="ecTo"></span>
+          <button class="email-compose-copy" onclick="copyEmailField('ecTo')">Copy</button>
+        </div>
+        <div class="email-compose-row">
+          <span class="email-compose-lbl">Subject</span>
+          <span class="email-compose-val" id="ecSubject"></span>
+          <button class="email-compose-copy" onclick="copyEmailField('ecSubject')">Copy</button>
+        </div>
+        <div class="email-compose-body-lbl">Message</div>
+        <textarea id="ecBody" class="email-compose-body" readonly></textarea>
+        <button class="btn btn-ghost btn-sm" style="margin-bottom:8px" onclick="copyEmailField('ecBody')">📋 Copy Message</button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('emailComposeModal').style.display='none'">Close</button>
+        <button class="btn btn-primary" id="ecOpenBtn">Open in Email App</button>
       </div>
     </div>
   </div>

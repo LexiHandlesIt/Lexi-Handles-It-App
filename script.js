@@ -3561,6 +3561,26 @@ function restoreCustomerFieldsFromDocQuote(targetQuote = {}, sourceQuote = {}) {
   return targetQuote;
 }
 
+async function jobsRefresh() {
+  const btn = document.getElementById('jobsRefreshBtn');
+  if (btn) btn.style.opacity = '0.5';
+  // 1. Close any stuck modals
+  ['customerDashboardModal','quoteModal','invoiceModal','receiptModal',
+   'editChoiceModal','customerEditChoiceModal','previewModal'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  activeCustomerGroup = null;
+  // 2. Scroll to top of jobs list
+  scrollMyJobsToTop();
+  // 3. Re-render the jobs list
+  refreshSavedDocs();
+  // 4. Check for new acceptances
+  await checkQuoteAcceptances();
+  if (btn) btn.style.opacity = '';
+  toast('Jobs list refreshed.', 'success', 2000);
+}
+
 function scrollMyJobsToTop() {
   requestAnimationFrame(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -4242,7 +4262,8 @@ function refreshSavedDocs() {
 
     card.querySelector('.type-badge')?.addEventListener('click', () => {
       const status = statusBadge;
-      if      (status === 'estimate')                    openQuoteModal(doc.id);
+      if      (status === 'accepted')                    showBookingContactModal(doc);
+      else if (status === 'estimate')                    openQuoteModal(doc.id);
       else if (status === 'quote')                       openQuoteModal(doc.id);
       else if (status === 'invoiced' || status === 'invoice' || status === 'overdue') previewInvoice(doc.id);
       else if (status === 'paid')                        handleReceiptRequest(doc.id);
@@ -4517,6 +4538,11 @@ function setupModals() {
     if (activeJobDetailsDocId) openJobTermsEdit(activeJobDetailsDocId);
   });
   document.getElementById('clientPickerNewCustomerBtn')?.addEventListener('click', createNewCustomerFromPicker);
+  document.getElementById('editChoiceCustomerBtn')?.addEventListener('click', () => {
+    const docId = activeEditChoiceDocId;
+    document.getElementById('editChoiceModal').style.display = 'none';
+    if (docId) openCustomerDetailsEditStandalone(docId);
+  });
   document.getElementById('editChoiceMoneyBtn')?.addEventListener('click', () => {
     const docId = activeEditChoiceDocId;
     document.getElementById('editChoiceModal').style.display = 'none';
@@ -4525,14 +4551,7 @@ function setupModals() {
   document.getElementById('editChoiceJobBtn')?.addEventListener('click', () => {
     const docId = activeEditChoiceDocId;
     document.getElementById('editChoiceModal').style.display = 'none';
-    if (docId) {
-      openQuoteModal(docId);
-      // Override the modal title so it says "Edit Quote/Estimate" not "Send"
-      const doc = state.saved.find(d => d.id === docId);
-      const docType = doc?.quote?.type || doc?.type || 'Quote';
-      const titleEl = document.getElementById('quoteModalTitle');
-      if (titleEl) titleEl.textContent = 'Edit ' + docType;
-    }
+    if (docId) openJobDetailsEdit(docId);
   });
   document.getElementById('beforePhotosInput')?.addEventListener('change', e => handlePhotoUpload(e, 'before'));
   document.getElementById('afterPhotosInput')?.addEventListener('change', e => handlePhotoUpload(e, 'after'));
@@ -4573,9 +4592,9 @@ function setupModals() {
       openCustomerEditChoice(docId);
       return;
     }
-    // Otherwise fall back to direct edit
+    // Otherwise show the edit choice modal so user can pick what to edit
     if (type === 'quote' && docId) {
-      openJobDetailsEdit(docId);
+      openEditChoice(docId);
     } else if (type === 'quote' && !docId) {
       // New quote in progress — already on page3, nothing needed
     }
@@ -4770,7 +4789,7 @@ function setupModals() {
       document.getElementById('customerDashboardModal').style.display = 'flex';
       openCustomerEditChoice(activeDocId);
     } else if (activeDocId) {
-      editDoc(activeDocId);
+      openEditChoice(activeDocId);
     }
   });
   document.getElementById('quoteSaveBtn')?.addEventListener('click', () => {
@@ -4845,9 +4864,10 @@ function setupModals() {
     if (!doc) return;
     const amount = parseFloat(document.getElementById('epAddAmount').value) || 0;
     const date   = document.getElementById('epAddDate').value || todayStr();
+    const type   = _epPaymentType || 'standard';
     if (!amount) { toast('Please enter an amount.', 'error'); return; }
     if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
-    doc.payments.push({ amount, date });
+    doc.payments.push({ amount, date, type });
     sortPaymentsByDate(doc.payments);
     recalcDocPayments(doc);
     save();
@@ -5343,8 +5363,9 @@ function openEditPayments(docId) {
   // Migrate legacy single-payment docs
   if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
   renderEditPaymentsList(doc);
-  // Pre-fill date for add payment form
+  // Pre-fill date and reset payment type toggle
   setVal('epAddDate', todayStr());
+  resetEpType();
   document.getElementById('epAddAmount').value = '';
   document.getElementById('editPaymentsModal').style.display = 'flex';
 }
@@ -5511,8 +5532,59 @@ function recordReceiptPayment(doc, recData) {
 }
 
 function openEditChoice(docId) {
+  // Always use the full customer edit choice modal so users get all options
+  // regardless of whether they arrived from the dashboard or the send flow.
   activeEditChoiceDocId = docId;
-  document.getElementById('editChoiceModal').style.display = 'flex';
+  activeEditDocId = docId;
+  // Ensure activeCustomerGroup is set so the full modal's handlers work
+  if (!activeCustomerGroup) {
+    const groups = buildCustomerGroups();
+    const group  = groups.find(g => g.docs.some(d => d.id === docId));
+    if (group) {
+      activeCustomerGroup = group;
+    } else {
+      // Fallback: build a minimal group from the doc alone
+      const doc = state.saved.find(d => d.id === docId);
+      if (doc) activeCustomerGroup = { docs: [doc], key: docId };
+    }
+  }
+  openCustomerEditChoice(docId);
+}
+
+/* Opens the customer details edit modal without needing a customer dashboard group */
+function openCustomerDetailsEditStandalone(docId) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  activeEditChoiceDocId = docId;
+  // Temporarily set group so openCustomerDetailsEdit doesn't bail out
+  const wasGroup = activeCustomerGroup;
+  if (!activeCustomerGroup) {
+    activeCustomerGroup = { docs: [doc], key: doc.id };
+  }
+  activeEditDocId = docId;
+  openCustomerDetailsEdit(docId);
+  if (!wasGroup) activeCustomerGroup = null; // restore after the modal opens
+}
+
+/* Payment type toggle for editPaymentsModal */
+let _epPaymentType = 'full';
+
+function resetEpType() {
+  _epPaymentType = 'full';
+  const sel = document.getElementById('epPaymentType');
+  if (sel) sel.value = 'full';
+}
+
+function paymentTypeLabel(type) {
+  if (type === 'deposit') return 'Deposit';
+  if (type === 'part')    return 'Part Payment';
+  return 'Payment';
+}
+
+function paymentTypeDocLabel(type) {
+  if (type === 'deposit') return 'Deposit Received';
+  if (type === 'part')    return 'Part Payment Received';
+  return 'Payment Received';
 }
 
 function closePhotosAndReturn() {
@@ -6132,6 +6204,7 @@ function openCustomerDashboard() {
 function getCustomerDisplayName(doc) {
   const q = doc.quote || {};
   const built = buildCustName(q).trim();
+  // NOTE: do NOT fall back to doc.acceptedBy — that is the signer, not the customer
   return built || (doc.custName || '').trim() || 'Customer details missing';
 }
 
@@ -6239,7 +6312,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
       ${payLabelRow}
       ${payments.map((p, i) => `
         <div class="cdv-payment-row">
-          <span class="cdv-pay-num">Payment ${i + 1}</span>
+          <span class="cdv-pay-num">${p.type && p.type !== 'full' ? paymentTypeLabel(p.type) : `Payment ${i + 1}`}</span>
           <span class="cdv-pay-date">${formatDate(p.date)}</span>
           <span class="cdv-pay-amount">${fmtPrice(p.amount)}</span>
         </div>`).join('')}
@@ -7725,6 +7798,21 @@ function buildDocHtml(doc, docType, extra = {}) {
       <td style="text-align:right;padding:3px 10px;font-size:0.82rem;">${value}</td>
     </tr>`;
   const discRow = disc > 0 ? tCell(`Discount (${disc}%):`, `-${fmtPrice(sub*disc/100)}`) : '';
+
+  // ── Prior payments (deposit / part payment rows under TOTAL) ─────
+  const docPayments    = getDocPayments(doc).filter(p => p.amount > 0);
+  const totalPaid      = docPayments.reduce((s, p) => s + (p.amount || 0), 0);
+  const balanceDue     = Math.max(0, total - totalPaid);
+  const paymentRows    = docPayments.map(p =>
+    tCell(`${paymentTypeDocLabel(p.type)}:`, `-${fmtPrice(p.amount)}`)
+  ).join('');
+  const balanceRow     = totalPaid > 0
+    ? `<tr class="totals-total" style="background:#2e7d32">
+         <td colspan="3" style="text-align:right;padding:8px 10px;font-size:0.9rem;font-weight:700;color:#fff;border:none">BALANCE DUE:</td>
+         <td style="text-align:right;padding:8px 10px;font-size:0.9rem;font-weight:700;color:#fff;border:none">${fmtPrice(balanceDue)}</td>
+       </tr>`
+    : '';
+
   const totalsRows = `
     <tr class="totals-sep"><td colspan="4"></td></tr>
     ${tCell('Subtotal:', fmtPrice(afterDisc), true)}
@@ -7733,7 +7821,9 @@ function buildDocHtml(doc, docType, extra = {}) {
     <tr class="totals-total" style="background:${accent}">
       <td colspan="3" style="text-align:right;padding:8px 10px;font-size:0.9rem;font-weight:700;color:#fff;border:none">TOTAL:</td>
       <td style="text-align:right;padding:8px 10px;font-size:0.9rem;font-weight:700;color:#fff;border:none">${fmtPrice(total)}</td>
-    </tr>`;
+    </tr>
+    ${paymentRows}
+    ${balanceRow}`;
 
   // ── Description of work — only shown when a description was entered ──
   const descHtml = q.notes
@@ -7753,8 +7843,7 @@ function buildDocHtml(doc, docType, extra = {}) {
       const totalPrior = priorPayments.reduce((s, p) => s + (p.amount || 0), 0);
       const balance    = Math.max(0, (doc.total || 0) - totalPrior);
       const payLines   = priorPayments.map(p => {
-        const label = p.type && p.type !== 'Full Payment' ? p.type : 'Payment Received';
-        return `${label}: <strong>${fmtPrice(p.amount)}</strong> on ${formatDate(p.date)}`;
+        return `${paymentTypeDocLabel(p.type)}: <strong>${fmtPrice(p.amount)}</strong> on ${formatDate(p.date)}`;
       }).join('<br>');
       extraHtml += `<div class="section"><h3>Payments Already Received</h3><p>${payLines}</p><p style="margin-top:6px">Total Received: <strong>${fmtPrice(totalPrior)}</strong><br>Balance Due: <strong>${fmtPrice(balance)}</strong></p></div>`;
     }
@@ -7762,8 +7851,9 @@ function buildDocHtml(doc, docType, extra = {}) {
     extraHtml += buildPaymentSection(co, docType, extra.payMethod);
     if (extra.notes)   extraHtml += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
   } else if (docType === 'receipt') {
-    const methodLine = extra.method ? `<br>Paid by: ${esc(extra.method)}` : '';
-    extraHtml = `<div class="section"><h3>Payment Received</h3><p>Amount: <strong>${fmtPrice(parseFloat(extra.amount)||0)}</strong><br>Date: ${formatDate(extra.date||todayStr())}${methodLine}</p></div>`;
+    const methodLine   = extra.method ? `<br>Paid by: ${esc(extra.method)}` : '';
+    const payTypeLabel = paymentTypeDocLabel(extra.paymentType);
+    extraHtml = `<div class="section"><h3>${payTypeLabel}</h3><p>Amount: <strong>${fmtPrice(parseFloat(extra.amount)||0)}</strong><br>Date: ${formatDate(extra.date||todayStr())}${methodLine}</p></div>`;
     if (extra.notes) extraHtml += `<div class="section"><h3>Notes</h3><p>${esc(extra.notes)}</p></div>`;
   }
 
@@ -8078,54 +8168,78 @@ function printRaw(inner) {
   setTimeout(() => { win.print(); win.close(); }, 400);
 }
 
-async function sendDoc(html, filename, message = '', custEmail = '') {
-  sendDocRaw(wrapDoc(html), filename, message, custEmail);
+/* ── Upload a document to Supabase Storage and return its public URL ── */
+async function uploadDocToStorage(htmlStr, filename) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return null;
+  try {
+    const blob = new Blob([htmlStr], { type: 'text/html' });
+    const path = `${lexiAuthSession.user.id}/${filename}`;
+    const { error } = await lexiSupabase.storage
+      .from('Documents')
+      .upload(path, blob, { contentType: 'text/html', upsert: true });
+    if (error) throw error;
+    const { data } = lexiSupabase.storage.from('Documents').getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch (e) {
+    console.warn('Document storage upload failed:', e);
+    return null;
+  }
 }
 
-async function sendDocRaw(htmlStr, filename, message = '', custEmail = '') {
-  const blob = new Blob([htmlStr], { type: 'text/html' });
-  const file = new File([blob], filename, { type: 'text/html' });
-  const isMobileShareDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+async function sendDoc(html, filename, message = '', custEmail = '') {
+  const htmlStr = wrapDoc(html);
 
-  if (isMobileShareDevice && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      const shareData = { files: [file], title: 'Document from Lexi Handles It' };
-      if (message) shareData.text = message;
-      await navigator.share(shareData);
-      return;
-    } catch(e) {
-      if (e.name !== 'AbortError') console.warn('Share failed', e);
+  // Upload to Supabase Storage for a permanent shareable link
+  const docUrl = await uploadDocToStorage(htmlStr, filename);
+
+  sendDocRaw(htmlStr, filename, message, custEmail, docUrl);
+}
+
+async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUrl = null) {
+  const docType = filename.match(/^(estimate|quote|invoice|receipt)/i)?.[0] || 'Document';
+  const bizName = state.company?.businessName || [state.company?.firstName, state.company?.lastName].filter(Boolean).join(' ') || 'Lexi Handles It';
+  const subject = `Your ${docType} from ${bizName}`;
+
+  // Append the document link to the message if we have one
+  const fullMsg = docUrl
+    ? message + `\n\n📄 View your ${docType.toLowerCase()} here:\n${docUrl}\n\n(Open on any device to view, save or print.)`
+    : message;
+
+  if (custEmail) {
+    // Always use the compose panel — no native share dialog, works on all devices
+    openEmailCompose(custEmail, subject, fullMsg, !docUrl);
+    if (!docUrl) {
+      // No storage URL — download locally so they can attach manually
+      const blob = new Blob([htmlStr], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Document downloaded. Attach it to your email before sending.', '', 6000);
+    } else {
+      toast('Email ready — the document link is in the message. No attachment needed.', 'success', 5000);
     }
+    return;
   }
 
-  // Download the file
+  // No email address — download locally and copy to clipboard
+  const blob = new Blob([htmlStr], { type: 'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 
-  // If we have the customer's email, open a pre-filled email after a short delay
-  if (custEmail && message) {
-    const subject = filename.replace(/\.html$/i, '').replace(/-/g, ' ');
-    setTimeout(() => {
-      const mailto = `mailto:${encodeURIComponent(custEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-      window.location.href = mailto;
-    }, 800);
-    toast('Document downloaded. Your email is opening — attach the downloaded file before sending.', '', 7000);
-    return;
-  }
-
-  // No email — fall back to clipboard
-  if (message && navigator.clipboard) {
+  if (fullMsg && navigator.clipboard) {
     try {
-      await navigator.clipboard.writeText(message);
-      toast('Document downloaded. Message copied to clipboard — paste it into WhatsApp or email.', '', 6000);
+      await navigator.clipboard.writeText(fullMsg);
+      toast('Document downloaded. Message with link copied — paste it into WhatsApp or email.', '', 6000);
     } catch(e) {
-      toast('Document downloaded. Open WhatsApp or email and attach this file.', '', 5000);
+      toast('Document downloaded.', '', 4000);
     }
   } else {
-    toast('Document downloaded. Open WhatsApp or email and attach this file.', '', 5000);
+    toast('Document downloaded.', '', 4000);
   }
 }
 
@@ -9116,18 +9230,18 @@ function getAcceptUrl(token) {
   const base = window.location.protocol === 'file:'
     ? LIVE_APP_URL.replace(/\/$/, '')
     : `${window.location.origin}${currentPathBase}`.replace(/\/$/, '');
-  const doc = (state.saved || []).find(d => d.acceptToken === token);
-  const ref = doc?.ref || doc?.quote?.ref || '';
-  return `${base}/accept.html?token=${encodeURIComponent(token)}${ref ? '&ref=' + encodeURIComponent(ref) : ''}`;
+  const doc  = (state.saved || []).find(d => d.acceptToken === token);
+  const ref  = doc?.ref || doc?.quote?.ref || '';
+  const biz  = (state.company?.businessName || [state.company?.firstName, state.company?.lastName].filter(Boolean).join(' ') || '').trim();
+  const type = (doc?.quote?.type || doc?.type || 'quote').toLowerCase();
+  return `${base}/accept.html?token=${encodeURIComponent(token)}${ref ? '&ref=' + encodeURIComponent(ref) : ''}${biz ? '&biz=' + encodeURIComponent(biz) : ''}${type ? '&type=' + encodeURIComponent(type) : ''}`;
 }
 
 function buildAcceptanceMessage(doc, baseMessage) {
   const q = doc.quote || {};
   const token = prepareAcceptTokenForSend(doc.id);
   const url = getAcceptUrl(token);
-  // Try first name, then first word of full name, then full name, then fallback
-  const fullName = buildCustName(q) || doc.custName || '';
-  const customerName = (q.custFirstName || fullName.split(' ')[0] || fullName || 'there').trim() || 'there';
+  const customerName = getCustomerFirstName(doc) || 'there';
   const docType = String(q.type || doc.type || 'quote').toLowerCase() === 'estimate' ? 'estimate' : 'quote';
   const traderName = [state.company.firstName, state.company.lastName].filter(Boolean).join(' ').trim();
   const companyName = (state.company.businessName || '').trim();
@@ -9199,9 +9313,26 @@ function applyAcceptanceToDoc(doc, data = {}) {
   if (!doc || !data?.status) return false;
   if (data.status === 'accepted') {
     doc.acceptStatus = 'accepted';
-    doc.acceptedBy   = data.accepted_by || data.name || data.customer_name || '';
+    // acceptedBy = who physically signed — may differ from the customer on the job
+    doc.acceptedBy   = data.accepted_by || data.name || '';
     doc.acceptedAt   = data.accepted_at || data.timestamp || '';
     doc.jobAccepted  = true;
+    // Restore customer name fields if they were lost — use the acceptance row's customer_name
+    const q = doc.quote || {};
+    if (!q.custFirstName && !q.custLastName && !doc.custName) {
+      const restoredName = data.customer_name || '';
+      if (restoredName) {
+        doc.custName = restoredName;
+        // Try to split into first/last if not already set
+        const parts = restoredName.split(/,\s*|\s+/);
+        if (parts.length >= 2 && !q.custFirstName) {
+          q.custFirstName = parts[0];
+          q.custLastName  = parts.slice(1).join(' ');
+        } else if (parts.length === 1) {
+          q.custLastName = parts[0];
+        }
+      }
+    }
     return true;
   }
   if (data.status === 'declined') {
@@ -9213,9 +9344,11 @@ function applyAcceptanceToDoc(doc, data = {}) {
 }
 
 async function checkSupabaseQuoteAcceptances() {
-  if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
-  const pending = (state.saved || []).filter(doc => doc.acceptToken && doc.acceptStatus === 'pending');
-  if (!pending.length) return false;
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return [];
+  const pending = (state.saved || []).filter(doc =>
+    doc.acceptToken && doc.acceptStatus !== 'accepted' && doc.acceptStatus !== 'declined'
+  );
+  if (!pending.length) return [];
   const tokens = pending.map(doc => doc.acceptToken);
   const { data, error } = await lexiSupabase
     .from('quote_acceptances')
@@ -9223,54 +9356,62 @@ async function checkSupabaseQuoteAcceptances() {
     .in('token', tokens);
   if (error) {
     console.warn('Could not check quote acceptances from Supabase:', error);
-    return false;
+    return [];
   }
-  let changed = false;
+  const changed = [];
   (data || []).forEach(row => {
     if (!['accepted', 'declined'].includes(String(row.status || '').toLowerCase())) return;
     const doc = pending.find(item => item.acceptToken === row.token);
-    if (doc && applyAcceptanceToDoc(doc, row)) {
-      changed = true;
-      notifySupabaseQuoteAccepted(doc, row);
-    }
+    if (doc && applyAcceptanceToDoc(doc, row)) changed.push(doc);
   });
   return changed;
 }
 
 async function checkQuoteAcceptances() {
-  let anyAccepted = false;
-  if (await checkSupabaseQuoteAcceptances()) anyAccepted = true;
+  const newlyAccepted = [];
+
+  // 1. Check Supabase quote_acceptances table
+  const supabaseDocs = await checkSupabaseQuoteAcceptances();
+  if (supabaseDocs?.length) newlyAccepted.push(...supabaseDocs);
+
+  // 2. Check localStorage fallback (offline / same-device acceptance)
   (state.saved || []).forEach(doc => {
-    if (doc.acceptToken && doc.acceptStatus === 'pending') {
+    if (doc.acceptToken && doc.acceptStatus !== 'accepted' && doc.acceptStatus !== 'declined') {
       const stored = localStorage.getItem(KEY_ACCEPT_BASE + doc.acceptToken);
       if (stored) {
         try {
           const data = JSON.parse(stored);
-          if (applyAcceptanceToDoc(doc, data)) {
-            anyAccepted = true;
-            notifySupabaseQuoteAccepted(doc, data);
-          }
+          if (applyAcceptanceToDoc(doc, data)) newlyAccepted.push(doc);
         } catch(e) {}
       }
     }
   });
-  if (anyAccepted) {
-    save();
-    refreshSavedDocs();
-    showQuoteAcceptedNotification();
-  }
+
+  if (!newlyAccepted.length) return;
+
+  save();
+  refreshSavedDocs();
+  // Show popup for the first newly accepted doc — reset acceptNotified so it always shows
+  const doc = newlyAccepted[0];
+  doc.acceptNotified = false;
+  showQuoteAcceptedNotification();
+  // Sync to Supabase after the popup (don't block the UI)
+  saveSavedDocsToSupabase().catch(e => console.warn('Acceptance sync failed:', e));
 }
+
+let _quoteAcceptedDoc = null;
 
 function showQuoteAcceptedNotification() {
   const accepted = (state.saved || []).filter(d => d.acceptStatus === 'accepted' && !d.acceptNotified);
   if (!accepted.length) return;
   const doc = accepted[0];
+  _quoteAcceptedDoc = doc;
   const q = doc.quote || {};
   const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Your customer';
   const ref = q.ref || doc.ref || '';
   const el = document.getElementById('quoteAcceptedModal');
   const msg = document.getElementById('quoteAcceptedMsg');
-  if (msg) msg.innerHTML = `<strong>${custName}</strong> has accepted your quote${ref ? ' (' + ref + ')' : ''}.<br><br>
+  if (msg) msg.innerHTML = `<strong>${custName}</strong> has accepted your ${(q.type || 'quote').toLowerCase()}${ref ? ' (' + ref + ')' : ''}.<br><br>
     ${doc.acceptedBy ? 'Signed off by: <strong>' + doc.acceptedBy + '</strong><br>' : ''}
     ${doc.acceptedAt ? 'At: ' + new Date(doc.acceptedAt).toLocaleString('en-GB') : ''}`;
   if (el) el.style.display = 'flex';
@@ -9302,6 +9443,7 @@ function subscribeToQuoteAcceptances() {
       if (!['accepted', 'declined'].includes(status)) return;
       const doc = (state.saved || []).find(d => d.acceptToken === row.token);
       if (doc && applyAcceptanceToDoc(doc, row)) {
+        if (status === 'accepted') doc.acceptNotified = false; // always show popup for live updates
         save();
         refreshSavedDocs();
         if (status === 'accepted') showQuoteAcceptedNotification();
@@ -9638,10 +9780,16 @@ function setupChaseAndPause() {
   checkQuoteAcceptances();
   if (isPaused()) showPausedScreen();
 
-  // Poll for quote acceptances every 30 seconds (fallback for all browsers)
-  setInterval(() => checkQuoteAcceptances(), 30000);
+  // Poll for quote acceptances every 8 seconds
+  setInterval(() => checkQuoteAcceptances(), 8000);
+
+  // Also check immediately when the tradesperson tabs back to the app
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkQuoteAcceptances();
+  });
 
   // Supabase real-time: instant notification when a customer accepts
+  // (requires quote_acceptances table enabled in Supabase → Database → Replication)
   subscribeToQuoteAcceptances();
 
   // Show seasonal banner if applicable
@@ -9694,10 +9842,109 @@ function maybeAskForReview(doc) {
   };
 }
 
+/* ── Email compose panel ── */
+function openEmailCompose(toAddr, subject, body, hasAttachment = false) {
+  const modal      = document.getElementById('emailComposeModal');
+  const toEl       = document.getElementById('ecTo');
+  const subEl      = document.getElementById('ecSubject');
+  const bodyEl     = document.getElementById('ecBody');
+  const openBtn    = document.getElementById('ecOpenBtn');
+  const attachBanner = document.getElementById('ecAttachBanner');
+  if (!modal) return;
+  if (toEl)   toEl.textContent  = toAddr;
+  if (subEl)  subEl.textContent = subject;
+  if (bodyEl) bodyEl.value      = body;
+  if (attachBanner) attachBanner.style.display = hasAttachment ? 'block' : 'none';
+  if (openBtn) openBtn.onclick = () => {
+    window.open(`mailto:?to=${encodeURIComponent(toAddr)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+  };
+  modal.style.display = 'flex';
+}
+
+function copyEmailField(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const text = el.tagName === 'TEXTAREA' ? el.value : el.textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => toast('Copied!', 'success', 1500));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    toast('Copied!', 'success', 1500);
+  }
+}
+
+/* ── Get the best first name available from a doc ── */
+function getCustomerFirstName(doc) {
+  const q = doc?.quote || {};
+  if (q.custFirstName?.trim()) return q.custFirstName.trim();
+  // Try custLastName then the combined custName field (never acceptedBy — that is the signer)
+  const raw = (q.custLastName || doc.custName || '').trim();
+  if (!raw) return '';
+  // Handle "Last, First" format from buildCustName
+  if (raw.includes(',')) return raw.split(',')[1]?.trim() || raw.split(',')[0]?.trim();
+  return raw.split(' ')[0];
+}
+
+/* ── Contact choice modal after quote acceptance ── */
+function showBookingContactModal(doc) {
+  if (!doc) return;
+  _quoteAcceptedDoc = null;
+  const q = doc.quote || {};
+  const traderName = (state.company?.preferredName || state.company?.firstName || '').trim();
+  const custFirst  = getCustomerFirstName(doc);
+  const phone      = (q.custPhone || '').replace(/\D/g, '');
+  const email      = (q.custEmail || '').trim();
+  const docType    = (q.type || 'quote').toLowerCase();
+  const bizName    = (state.company?.businessName || traderName || '').trim();
+  const signoff    = [traderName, bizName].filter((v, i, a) => v && a.indexOf(v) === i).join('\n');
+
+  const titleEl = document.getElementById('bookingContactTitle');
+  if (titleEl) titleEl.textContent = traderName
+    ? `${traderName}, how would you like to contact ${custFirst || 'your customer'}?`
+    : `How would you like to contact ${custFirst || 'your customer'}?`;
+
+  const waBtn    = document.getElementById('bookingWhatsappBtn');
+  const emailBtn = document.getElementById('bookingEmailBtn');
+  const callBtn  = document.getElementById('bookingCallBtn');
+
+  if (waBtn) {
+    waBtn.disabled = !phone;
+    waBtn.style.opacity = phone ? '' : '0.4';
+    waBtn.onclick = () => {
+      document.getElementById('bookingContactModal').style.display = 'none';
+      const msg = `Hi ${custFirst || 'there'}, great news — I have received your acceptance and I am looking forward to getting started!\n\nI will be in touch shortly to confirm the booking details.\n\n${signoff}`.trim();
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    };
+  }
+  if (emailBtn) {
+    emailBtn.disabled = !email;
+    emailBtn.style.opacity = email ? '' : '0.4';
+    emailBtn.onclick = () => {
+      document.getElementById('bookingContactModal').style.display = 'none';
+      const subject = `Booking confirmation — your ${docType}`;
+      const body    = `Hi ${custFirst || 'there'},\n\nThank you for accepting the ${docType}. I am really looking forward to getting the work done for you!\n\nI will be in touch shortly to confirm the booking details.\n\nKind regards\n${signoff}`.trim();
+      openEmailCompose(email, subject, body);
+    };
+  }
+  if (callBtn) {
+    callBtn.disabled = !phone;
+    callBtn.style.opacity = phone ? '' : '0.4';
+    callBtn.onclick = () => {
+      document.getElementById('bookingContactModal').style.display = 'none';
+      window.location.href = `tel:${phone}`;
+    };
+  }
+
+  document.getElementById('bookingContactModal').style.display = 'flex';
+}
+
 function setupReviewModal() {
   // Quote accepted modal
   document.getElementById('quoteAcceptedOkBtn')?.addEventListener('click', () => {
     document.getElementById('quoteAcceptedModal').style.display = 'none';
+    if (_quoteAcceptedDoc) showBookingContactModal(_quoteAcceptedDoc);
   });
   document.getElementById('quoteAcceptedModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';

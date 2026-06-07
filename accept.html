@@ -29,6 +29,7 @@
     }
     .logo { margin-bottom: 24px; }
     .logo img { height: 48px; width: auto; }
+    .biz-name-header { font-size: 1.1rem; font-weight: 800; color: #2c2c2c; margin-bottom: 4px; letter-spacing: -0.3px; }
     .icon { font-size: 3rem; margin-bottom: 12px; }
     h1 { font-size: 1.4rem; font-weight: 700; color: #2c2c2c; margin-bottom: 8px; }
     .sub  { font-size: 0.95rem; color: #666; line-height: 1.6; margin-bottom: 24px; }
@@ -107,12 +108,12 @@
 
   <!-- ACCEPT SCREEN -->
   <div id="acceptScreen">
-    <div class="logo">
-      <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" onerror="this.style.display='none'">
+    <div class="logo" id="bizLogoWrap">
+      <!-- Replaced by JS with trader's name/logo -->
     </div>
     <div class="icon">📋</div>
-    <h1>Accept Your Quote</h1>
-    <p class="sub">Please review your quote and sign off below. Your tradesperson will be notified straight away.</p>
+    <h1 id="acceptHeading">Accept Your Quote</h1>
+    <p class="sub" id="acceptSub">Please review your quote and sign off below. Your tradesperson will be notified straight away.</p>
     <div id="refBadge" class="ref-badge" style="display:none"></div>
     <div class="name-group">
       <label for="custName">Your full name (as your signature)</label>
@@ -120,7 +121,7 @@
     </div>
     <button type="button" class="btn-accept" id="acceptBtn">Yes, I accept this quote</button>
     <button type="button" class="btn-decline" id="declineBtn">I do not wish to proceed</button>
-    <p class="legal">By tapping "I accept this quote" you are confirming your agreement to the terms and price set out in the quote document you received. This counts as your digital signature.</p>
+    <p class="legal" id="acceptLegal">By tapping "I accept this quote" you are confirming your agreement to the terms and price set out in the quote document you received. This counts as your digital signature.</p>
   </div>
 
   <!-- SUCCESS SCREEN -->
@@ -154,10 +155,27 @@
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
     : null;
 
-  const params = new URLSearchParams(window.location.search);
-  const token  = params.get('token');
-  const ref    = params.get('ref');
-  const KEY    = 'lexi_accept_' + token;
+  const params   = new URLSearchParams(window.location.search);
+  const token    = params.get('token');
+  const ref      = params.get('ref');
+  const bizName  = params.get('biz') || '';
+  const docType  = (params.get('type') || 'quote').toLowerCase();
+  const docLabel = docType === 'estimate' ? 'Estimate' : 'Quote';
+  const KEY      = 'lexi_accept_' + token;
+
+  // Show trader's business name (logo is not available on this page — use text)
+  const bizLogoWrap = document.getElementById('bizLogoWrap');
+  if (bizLogoWrap) {
+    bizLogoWrap.innerHTML = bizName
+      ? `<div class="biz-name-header">${bizName}</div>`
+      : '';
+  }
+
+  // Update headings/buttons to match document type (Quote vs Estimate)
+  document.getElementById('acceptHeading').textContent = `Accept Your ${docLabel}`;
+  document.getElementById('acceptSub').textContent     = `Please review your ${docLabel.toLowerCase()} and sign off below. Your tradesperson will be notified straight away.`;
+  document.getElementById('acceptBtn').textContent     = `Yes, I accept this ${docLabel.toLowerCase()}`;
+  document.getElementById('acceptLegal').textContent   = `By tapping "I accept this ${docLabel.toLowerCase()}" you are confirming your agreement to the terms and price set out in the ${docLabel.toLowerCase()} document you received. This counts as your digital signature.`;
 
   // Show ref badge if available
   if (ref) {
