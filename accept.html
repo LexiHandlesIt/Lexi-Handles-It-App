@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accept Your Quote — Lexi Handles It</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Mulish', sans-serif;
+      background: #F5F0E8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+      max-width: 420px;
+      width: 100%;
+      padding: 32px 28px;
+      text-align: center;
+    }
+    .logo { margin-bottom: 24px; }
+    .logo img { height: 48px; width: auto; }
+    .icon { font-size: 3rem; margin-bottom: 12px; }
+    h1 { font-size: 1.4rem; font-weight: 700; color: #2c2c2c; margin-bottom: 8px; }
+    .sub  { font-size: 0.95rem; color: #666; line-height: 1.6; margin-bottom: 24px; }
+    .ref-badge {
+      display: inline-block;
+      background: #f5f0e8;
+      border: 1px solid #e0d8cc;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #7D5730;
+      margin-bottom: 24px;
+    }
+    .name-group { margin-bottom: 20px; text-align: left; }
+    .name-group label { display: block; font-size: 0.82rem; font-weight: 700; color: #555; margin-bottom: 6px; }
+    .name-group input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #e0d8cc;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #2c2c2c;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .name-group input:focus { border-color: #7D5730; }
+    .btn-accept {
+      width: 100%;
+      padding: 16px;
+      background: #2e7d32;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      margin-bottom: 12px;
+      transition: background 0.2s;
+    }
+    .btn-accept:hover { background: #1e5c23; }
+    .btn-accept:disabled { background: #aaa; cursor: default; }
+    .btn-decline {
+      width: 100%;
+      padding: 12px;
+      background: transparent;
+      color: #999;
+      border: 1.5px solid #e0d8cc;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-decline:hover { border-color: #c0392b; color: #c0392b; }
+    .legal { font-size: 0.75rem; color: #aaa; margin-top: 20px; line-height: 1.5; }
+
+    /* Success state */
+    .success-screen { display: none; }
+    .success-screen .icon { color: #2e7d32; }
+    .success-screen h1 { color: #2e7d32; }
+
+    /* Declined state */
+    .declined-screen { display: none; }
+
+    /* Error state */
+    .error-screen { display: none; }
+    .error-screen h1 { color: #c0392b; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <!-- ACCEPT SCREEN -->
+  <div id="acceptScreen">
+    <div class="logo">
+      <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" onerror="this.style.display='none'">
+    </div>
+    <div class="icon">📋</div>
+    <h1>Accept Your Quote</h1>
+    <p class="sub">Please review your quote and sign off below. Your tradesperson will be notified straight away.</p>
+    <div id="refBadge" class="ref-badge" style="display:none"></div>
+    <div class="name-group">
+      <label for="custName">Your full name (as your signature)</label>
+      <input type="text" id="custName" placeholder="e.g. Sarah Mitchell" autocomplete="name">
+    </div>
+    <button type="button" class="btn-accept" id="acceptBtn">Yes, I accept this quote</button>
+    <button type="button" class="btn-decline" id="declineBtn">I do not wish to proceed</button>
+    <p class="legal">By tapping "I accept this quote" you are confirming your agreement to the terms and price set out in the quote document you received. This counts as your digital signature.</p>
+  </div>
+
+  <!-- SUCCESS SCREEN -->
+  <div class="success-screen" id="successScreen">
+    <div class="icon">✅</div>
+    <h1>Quote Accepted!</h1>
+    <p class="sub">Thank you, <strong id="acceptedName"></strong>. Your acceptance has been recorded and your tradesperson has been notified. They will be in touch to confirm the booking.</p>
+    <p class="legal" style="margin-top:16px">Lexi Handles It — so you don't have to.</p>
+  </div>
+
+  <!-- DECLINED SCREEN -->
+  <div class="declined-screen" id="declinedScreen">
+    <div class="icon">👋</div>
+    <h1>No problem at all.</h1>
+    <p class="sub">Your response has been recorded. If you change your mind or have any questions, just get back in touch with your tradesperson directly.</p>
+  </div>
+
+  <!-- ERROR SCREEN -->
+  <div class="error-screen" id="errorScreen">
+    <div class="icon">🔍</div>
+    <h1>Link not found</h1>
+    <p class="sub">This acceptance link may have already been used or has expired. Please contact your tradesperson directly to confirm.</p>
+  </div>
+
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://dwiqqtutsjainpvdizgt.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_c0HS04ZbqIBPrbXvzNdPXw_IpeKBzHN';
+  const acceptSupabase = window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+    : null;
+
+  const params = new URLSearchParams(window.location.search);
+  const token  = params.get('token');
+  const ref    = params.get('ref');
+  const KEY    = 'lexi_accept_' + token;
+
+  // Show ref badge if available
+  if (ref) {
+    const badge = document.getElementById('refBadge');
+    badge.textContent = 'Ref: ' + ref;
+    badge.style.display = 'inline-block';
+  }
+
+  let acceptanceRow = null;
+
+  initialiseAcceptancePage();
+
+  async function initialiseAcceptancePage() {
+    if (!token) {
+      showScreen('errorScreen');
+      return;
+    }
+    showScreen('acceptScreen');
+    const existing = localStorage.getItem(KEY);
+    if (existing) {
+      try {
+        const data = JSON.parse(existing);
+        if (data.status === 'accepted') {
+          document.getElementById('acceptedName').textContent = data.name || 'there';
+          showScreen('successScreen');
+          return;
+        }
+        if (data.status === 'declined') {
+          showScreen('declinedScreen');
+          return;
+        }
+      } catch(e) {}
+    }
+    if (!acceptSupabase) return;
+    try {
+      const { data, error } = await loadAcceptanceRow();
+      if (error) throw error;
+      if (!data) {
+        return;
+      }
+      acceptanceRow = data;
+      const badge = document.getElementById('refBadge');
+      const displayRef = data.document_number || ref || '';
+      if (displayRef && badge) {
+        badge.textContent = 'Ref: ' + displayRef;
+        badge.style.display = 'inline-block';
+      }
+      const status = String(data.status || '').toLowerCase();
+      if (status === 'accepted') {
+        document.getElementById('acceptedName').textContent = data.accepted_by || data.customer_name || 'there';
+        showScreen('successScreen');
+      } else if (status === 'declined') {
+        showScreen('declinedScreen');
+      } else {
+        showScreen('acceptScreen');
+      }
+    } catch (error) {
+      console.error('Could not load acceptance link:', error);
+      showScreen('errorScreen');
+    }
+  }
+
+  async function saveAcceptanceResponse(data) {
+    localStorage.setItem(KEY, JSON.stringify(data));
+    if (!acceptSupabase || !token) return;
+    const { data: updated, error } = await respondToAcceptance(data.status, data.name || '');
+    if (error) throw error;
+    if (!updated) throw new Error('Acceptance link could not be updated.');
+  }
+
+  async function loadAcceptanceRow() {
+    if (!acceptSupabase || !token) return { data: null, error: null };
+    const rpc = await acceptSupabase.rpc('get_quote_acceptance', { p_token: token });
+    if (!rpc.error) return { data: Array.isArray(rpc.data) ? rpc.data[0] : rpc.data, error: null };
+    if (!/function|get_quote_acceptance|schema cache/i.test(String(rpc.error.message || ''))) return rpc;
+    return acceptSupabase
+      .from('quote_acceptances')
+      .select('*')
+      .eq('token', token)
+      .maybeSingle();
+  }
+
+  async function respondToAcceptance(status, name) {
+    if (!acceptSupabase || !token) return { data: null, error: null };
+    const rpc = await acceptSupabase.rpc('respond_to_quote_acceptance', {
+      p_token: token,
+      p_status: status,
+      p_name: name || ''
+    });
+    if (!rpc.error) return { data: Array.isArray(rpc.data) ? rpc.data[0] : rpc.data, error: null };
+    if (!/function|respond_to_quote_acceptance|schema cache/i.test(String(rpc.error.message || ''))) return rpc;
+    const update = {
+      status: status,
+      accepted_by: name || '',
+      accepted_at: status === 'accepted' ? new Date().toISOString() : null,
+      declined_at: status === 'declined' ? new Date().toISOString() : null
+    };
+    return acceptSupabase
+      .from('quote_acceptances')
+      .update(update)
+      .eq('token', token)
+      .select('token,status,accepted_by,accepted_at,declined_at,document_number')
+      .maybeSingle();
+  }
+
+  document.getElementById('acceptBtn').addEventListener('click', async () => {
+    const name = document.getElementById('custName').value.trim();
+    if (!name) {
+      document.getElementById('custName').focus();
+      document.getElementById('custName').style.borderColor = '#c0392b';
+      return;
+    }
+    const btn = document.getElementById('acceptBtn');
+    btn.disabled = true;
+    btn.textContent = 'Recording acceptance...';
+    const data = {
+      status: 'accepted',
+      name: name,
+      token: token,
+      ref: ref || '',
+      timestamp: new Date().toISOString()
+    };
+    try {
+      await saveAcceptanceResponse(data);
+      document.getElementById('acceptedName').textContent = name;
+      showScreen('successScreen');
+    } catch (error) {
+      btn.disabled = false;
+      btn.textContent = 'Yes, I accept this quote';
+      alert('I could not record that acceptance online. Please try again, or contact your tradesperson directly.');
+      console.error('Quote acceptance failed:', error);
+    }
+  });
+
+  document.getElementById('declineBtn').addEventListener('click', async () => {
+    const data = {
+      status: 'declined',
+      token: token,
+      ref: ref || '',
+      timestamp: new Date().toISOString()
+    };
+    try {
+      await saveAcceptanceResponse(data);
+      showScreen('declinedScreen');
+    } catch (error) {
+      alert('I could not record that response online. Please try again, or contact your tradesperson directly.');
+      console.error('Quote decline failed:', error);
+    }
+  });
+
+  function showScreen(id) {
+    ['acceptScreen','successScreen','declinedScreen','errorScreen'].forEach(s => {
+      document.getElementById(s).style.display = s === id ? 'block' : 'none';
+    });
+  }
+</script>
+</body>
+</html>

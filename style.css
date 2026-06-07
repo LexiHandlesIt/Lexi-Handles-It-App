@@ -89,13 +89,13 @@ body {
 }
 .auth-sub {
   color: var(--sage);
-  font-weight: 800;
+  font-weight: 400;
   font-size: 0.92rem;
   margin-bottom: 10px;
 }
 .auth-trial {
   color: var(--terra);
-  font-weight: 800;
+  font-weight: 400;
   padding: 0;
   margin-bottom: 16px;
 }
@@ -114,7 +114,7 @@ body {
   background: transparent;
   color: var(--walnut-d);
   font: inherit;
-  font-weight: 800;
+  font-weight: 400;
   padding: 10px 8px;
   cursor: pointer;
 }
@@ -130,7 +130,7 @@ body {
 .auth-form label {
   color: var(--charcoal);
   font-size: 0.88rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 .auth-form input {
   width: 100%;
@@ -181,7 +181,7 @@ body {
   width: fit-content;
   color: var(--sage);
   font-size: 0.88rem;
-  font-weight: 800;
+  font-weight: 400;
   margin: 2px 0 4px;
 }
 .auth-remember input {
@@ -693,7 +693,7 @@ input[type="text"].sig-text-input:focus {
   color: var(--walnut-d);
   font: inherit;
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -707,13 +707,23 @@ input[type="text"].sig-text-input:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--gold-mid);
-  color: var(--walnut-d);
-  font-weight: 900;
+  width: 22px;
+  height: 22px;
+  color: var(--gold);
   line-height: 1;
+}
+.social-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: currentColor;
+}
+.social-link-toggle[data-social="instagram"] .social-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .social-link-fields {
@@ -1075,6 +1085,14 @@ input[type="text"].sig-text-input:focus {
   min-width: 0;
   position: relative;
   z-index: 1;
+}
+
+.ob-steps-title {
+  color: var(--walnut-d);
+  font-size: 1.05rem;
+  line-height: 1.2;
+  margin: 0 0 8px;
+  text-align: left;
 }
 
 /* ── Price list onboarding — single column ─────────────────── */
@@ -2634,6 +2652,7 @@ input[type="text"].sig-text-input:focus {
 .type-badge.invoiced { background: var(--walnut-tint); color: var(--walnut); border-color: var(--walnut); }
 .type-badge.invoice  { background: var(--walnut-tint); color: var(--walnut); border-color: var(--walnut); }
 .type-badge.paid     { background: #dcfce7; color: #166534; border-color: #86efac; }
+.type-badge.accepted { background: #dcfce7; color: #166534; border-color: #86efac; }
 .type-badge.overdue  { background: var(--danger-l); color: var(--danger); border-color: var(--danger); }
 
 /* Journey dropdown — replaces A/B/C buttons on View Jobs cards */
@@ -2878,6 +2897,46 @@ input[type="text"].sig-text-input:focus {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
+}
+
+.share-empty-setup {
+  text-align: center;
+  color: #777;
+  padding: 20px 0;
+}
+.share-empty-setup p {
+  margin: 0 0 4px;
+  color: #8a8a8a;
+  font-size: 0.95rem;
+}
+.share-empty-setup small {
+  display: block;
+  margin-bottom: 14px;
+  color: #777;
+}
+.share-empty-setup .btn {
+  width: 100%;
+  max-width: 260px;
+}
+
+.quick-qr-preview {
+  text-align: center;
+}
+.quick-qr-preview img {
+  display: block;
+  width: min(72vw, 280px);
+  aspect-ratio: 1;
+  object-fit: contain;
+  margin: 0 auto 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+}
+.quick-qr-preview p {
+  margin: 0;
+  color: var(--walnut);
+  font-weight: 700;
 }
 .customer-dashboard-card {
   border: 1px solid var(--border);
@@ -3182,6 +3241,11 @@ input[type="text"].sig-text-input:focus {
   display: flex;
   gap: 6px;
   margin-bottom: 10px;
+}
+.cdv-contact-update-btn {
+  min-height: 33px;
+  margin-left: auto;
+  align-self: center;
 }
 /* Brand SVG icons used in contact lines and section labels */
 .cdv-icon {
@@ -3496,6 +3560,24 @@ input[type="text"].sig-text-input:focus {
 .cdv-job-date {
   font-size: 0.82rem;
   color: #888;
+}
+.cdv-accepted-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  background: #dcfce7;
+  color: #166534;
+}
+.cdv-accepted-banner strong {
+  font-size: 0.9rem;
+}
+.cdv-accepted-banner span {
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 /* Line items */
@@ -3934,6 +4016,20 @@ input[type="text"].sig-text-input:focus {
 
 .modal-title { font-size: 1.1rem; color: var(--walnut); }
 
+.modal-back-btn {
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--walnut);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.modal-back-btn + .modal-close { margin-left: 8px; }
+.modal-back-btn:hover { background: var(--cream-d); }
 
 .modal-close {
   width: 36px;
@@ -4551,6 +4647,15 @@ input[type="text"].sig-text-input:focus {
 .nav-menu-item:last-child { border-bottom: none; }
 .nav-menu-item:hover { background: var(--cream); color: var(--walnut); }
 .nav-menu-item svg { color: var(--sage); flex-shrink: 0; }
+.nav-menu-pound {
+  width: 16px;
+  flex: 0 0 16px;
+  color: var(--sage);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
 .nav-menu-section-break {
   border-top: 2px solid var(--border);
 }
@@ -5934,8 +6039,85 @@ input[type="text"].sig-text-input:focus {
 .send-choice-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   padding: 16px 20px 24px;
+}
+.send-choice-category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.send-choice-category-list[hidden] {
+  display: none !important;
+}
+.send-choice-category-btn {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  align-items: center;
+  width: 100%;
+  padding: 16px 14px;
+  background: var(--cream-d);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  color: var(--charcoal);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.send-choice-category-btn:hover,
+.send-choice-category-btn.active {
+  background: var(--cream);
+  border-color: var(--sage);
+}
+.send-choice-category-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--walnut);
+}
+.send-choice-category-desc {
+  grid-column: 1;
+  font-size: 0.78rem;
+  color: #888;
+}
+.send-choice-category-btn .send-choice-arrow {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.send-choice-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.send-choice-group[hidden] {
+  display: none !important;
+}
+.send-choice-group + .send-choice-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.send-choice-group-title {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: var(--walnut);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 2px;
+}
+.send-choice-back-btn {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--sage);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 0 2px 4px;
+  cursor: pointer;
+}
+.send-choice-back-btn:hover {
+  color: var(--walnut);
 }
 .send-choice-btn {
   display: flex;

@@ -4,6 +4,7 @@
 const FORMSPREE_URL = 'YOUR_FORM_ID'; // Replace with your Formspree endpoint
 const SUPABASE_URL = 'https://dwiqqtutsjainpvdizgt.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_c0HS04ZbqIBPrbXvzNdPXw_IpeKBzHN';
+const LIVE_APP_URL = 'https://app.lexihandlesit.com';
 const lexiSupabase = (
   window.supabase &&
   SUPABASE_PUBLISHABLE_KEY !== 'PASTE_YOUR_SUPABASE_PUBLISHABLE_KEY_HERE'
@@ -129,6 +130,7 @@ let activeCustomerGroup = null;   // group object while customer dashboard is op
 let receiptPreviewed = false;
 let quotePreviewed = false;
 let activeQuoteDraftDoc = null;
+let pendingQrReturnContext = null;
 let voiceRecogniser = null;
 let voiceRecording = false;
 /* ===== PAYMENT HELPERS ===== */
@@ -1599,6 +1601,11 @@ function setupNavigation() {
   setupSubmenu('menuManageJobs',    'navManageJobsSubmenu');
   setupSubmenu('menuManageBusiness','navManageBusinessSubmenu');
 
+  document.getElementById('menuQuickQr')?.addEventListener('click', () => {
+    closeMenu();
+    openQuickQrModal(false);
+  });
+
   // Field info ? popup (CRN, VAT, etc.)
   document.querySelectorAll('.field-info-btn').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -1834,6 +1841,9 @@ function setupPage1() {
       state.company.qrCode = '';
       showQRState();
       save();
+      saveBusinessToSupabase().catch(error => {
+        console.warn('QR code removed locally but did not sync to Supabase:', error);
+      });
     });
   }
 
@@ -1961,8 +1971,9 @@ document.addEventListener('click', e => {
   if (id === 'markPaidModal') { e.target.style.display = 'none'; reopenDashboardAfterMoneyIn(); return; }
   if (id === 'customerDashboardModal') { e.target.style.display = 'none'; activeCustomerGroup = null; return; }
   if (id === 'previewModal') { closePreview(); return; }
-  if (id === 'invoiceModal' || id === 'receiptModal') {
+  if (id === 'quoteModal' || id === 'invoiceModal' || id === 'receiptModal') {
     e.target.style.display = 'none';
+    setShareBackButtons(false);
     if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
@@ -2007,6 +2018,11 @@ function handleQRUpload(e) {
     state.company.qrCode = ev.target.result;
     showQRState();
     save();
+    saveBusinessToSupabase().catch(error => {
+      console.warn('QR code saved locally but did not sync to Supabase:', error);
+      toast('QR saved on this device. Supabase sync needs another try.', 'error');
+    });
+    returnToPendingQrView();
     showSavedPopup('QR code saved — it will appear on all your documents.', null, 3500);
   };
   reader.readAsDataURL(file);
@@ -2283,7 +2299,9 @@ function saveBusinessDetails(showToast = true) {
     payOther:     getVal('payOtherText'),
     brandPrimary: document.getElementById('colourHeader').value,
     brandAccent:  document.getElementById('colourAccent').value,
-    brandBg:      document.getElementById('colourBg').value
+    brandBg:      document.getElementById('colourBg').value,
+    qrCode:       state.company.qrCode || '',
+    qualifications: state.company.qualifications || []
   };
   save();
   saveBusinessToSupabase().catch(error => {
@@ -4050,7 +4068,7 @@ function refreshSavedDocs() {
   else if (filter === 'overdue')  docs = docs.filter(d => !d.paid && d.invoiceSent && d.invoiceDueDate && todayStr() > d.invoiceDueDate);
   else if (filter === 'paid')     docs = docs.filter(d => d.paid);
   else if (filter === 'unpaid')   docs = docs.filter(d => !d.paid);
-  else if (filter === 'accepted') docs = docs.filter(d => d.accepted);
+  else if (filter === 'accepted') docs = docs.filter(d => d.acceptStatus === 'accepted' || d.jobAccepted);
 
   // Search filter
   const q = getJobSearchQuery();
@@ -4172,9 +4190,10 @@ function refreshSavedDocs() {
     const displayRef = doc.ref || doc.quote?.ref || '';
     const displayDate = doc.date || doc.quote?.date || '';
     const isOverdue = !doc.paid && doc.invoiceSent && doc.invoiceDueDate && todayStr() > doc.invoiceDueDate;
-    const statusBadge = doc.paid ? 'paid' : isOverdue ? 'overdue' : doc.invoiceSent ? 'invoiced' : docType.toLowerCase();
+    const isAccepted = doc.acceptStatus === 'accepted' || doc.jobAccepted;
+    const statusBadge = doc.paid ? 'paid' : isAccepted ? 'accepted' : isOverdue ? 'overdue' : doc.invoiceSent ? 'invoiced' : docType.toLowerCase();
     card.className = `saved-doc-card status-${statusBadge}`;
-    const statusLabel = doc.paid ? 'Paid' : isOverdue ? `Overdue since ${formatDate(doc.invoiceDueDate)}` : doc.invoiceSent ? 'Invoiced' : docType;
+    const statusLabel = doc.paid ? 'Paid' : isAccepted ? 'Accepted' : isOverdue ? `Overdue since ${formatDate(doc.invoiceDueDate)}` : doc.invoiceSent ? 'Invoiced' : docType;
 
     // Payment totals for card status only (history shown in modal, not on card)
     const payments   = getDocPayments(doc);
@@ -4366,13 +4385,18 @@ function setupModals() {
   document.getElementById('vnfAddOnceBtn').addEventListener('click', () => vnfSubmit(false));
 
   document.getElementById('closePreviewBtn').addEventListener('click', closePreview);
-  document.getElementById('closeQuoteBtn').addEventListener('click', () => document.getElementById('quoteModal').style.display = 'none');
+  document.getElementById('closeQuoteBtn').addEventListener('click', () => {
+    document.getElementById('quoteModal').style.display = 'none';
+    setShareBackButtons(false);
+  });
   document.getElementById('closeInvoiceBtn').addEventListener('click', () => {
     document.getElementById('invoiceModal').style.display = 'none';
+    setShareBackButtons(false);
     if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   document.getElementById('closeReceiptBtn').addEventListener('click', () => {
     document.getElementById('receiptModal').style.display = 'none';
+    setShareBackButtons(false);
     if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   document.getElementById('closeMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
@@ -4405,7 +4429,23 @@ function setupModals() {
     closePreviewFirstModal();
     if (fn) fn(false);
   });
+  document.getElementById('backPreviewBtn')?.addEventListener('click', backToSendChoiceModal);
+  document.getElementById('backQuoteBtn')?.addEventListener('click', backToSendChoiceModal);
+  document.getElementById('backInvoiceBtn')?.addEventListener('click', backToSendChoiceModal);
+  document.getElementById('backReceiptBtn')?.addEventListener('click', backToSendChoiceModal);
   document.getElementById('closeBizInfoBtn')?.addEventListener('click', () => document.getElementById('bizInfoModal').style.display = 'none');
+  document.getElementById('backBizInfoBtn')?.addEventListener('click', backToSendChoiceModal);
+  document.getElementById('closeQuickQrBtn')?.addEventListener('click', () => document.getElementById('quickQrModal').style.display = 'none');
+  document.getElementById('backQuickQrBtn')?.addEventListener('click', backToSendChoiceModal);
+  const closeMissingQrPrompt = () => {
+    pendingQrReturnContext = null;
+    document.getElementById('missingQrModal').style.display = 'none';
+  };
+  document.getElementById('closeMissingQrBtn')?.addEventListener('click', closeMissingQrPrompt);
+  document.getElementById('missingQrNoBtn')?.addEventListener('click', closeMissingQrPrompt);
+  document.getElementById('missingQrYesBtn')?.addEventListener('click', goToQrUploadFromModal);
+  document.getElementById('copyQrInfoBtn')?.addEventListener('click', copyQrInfo);
+  document.getElementById('shareQrCodeBtn')?.addEventListener('click', shareQrCode);
   document.getElementById('bizInfoOptions')?.addEventListener('change', updateBizInfoPreview);
   document.getElementById('copyBizInfoBtn')?.addEventListener('click', copyBizInfo);
   document.getElementById('shareBizInfoBtn')?.addEventListener('click', shareBizInfo);
@@ -4519,6 +4559,14 @@ function setupModals() {
   document.getElementById('previewEditBtn').addEventListener('click', () => {
     closePreview();
     const { type, docId } = previewContext;
+    if (type === 'receipt' && docId) {
+      openReceiptModal(docId);
+      return;
+    }
+    if (type === 'invoice' && docId) {
+      openInvoiceModal(docId);
+      return;
+    }
     // If in a customer dashboard context, open the full edit menu (gives access to Jobs, Terms, Signature etc.)
     if (activeCustomerGroup && docId) {
       document.getElementById('customerDashboardModal').style.display = 'flex';
@@ -4530,10 +4578,6 @@ function setupModals() {
       openJobDetailsEdit(docId);
     } else if (type === 'quote' && !docId) {
       // New quote in progress — already on page3, nothing needed
-    } else if (type === 'invoice') {
-      openInvoiceModal(docId);
-    } else if (type === 'receipt') {
-      openReceiptModal(docId);
     }
   });
 
@@ -4637,11 +4681,11 @@ function setupModals() {
     // Generate acceptance token and inject link into share message
     if (activeDocId) {
       const savedDoc = state.saved.find(d => d.id === activeDocId);
-      if (savedDoc && !savedDoc.acceptToken) generateAcceptToken(activeDocId);
       if (savedDoc) {
         const baseMsg = quoteData.quoteNotes || '';
         const shareMessage = buildAcceptanceMessage(savedDoc, baseMsg);
-        sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), shareMessage);
+        const custEmail = savedDoc.quote?.custEmail || savedDoc.custEmail || '';
+        sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), shareMessage, custEmail);
       } else {
         sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), quoteData.quoteNotes || '');
       }
@@ -4866,6 +4910,7 @@ function closePreview() {
   const modal = document.getElementById('previewModal');
   modal.style.display = 'none';
   modal.classList.remove('modal-front');
+  setShareBackButtons(false);
   if (document.getElementById('page4')?.classList.contains('active')) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -5576,59 +5621,207 @@ function createNewCustomerFromPicker() {
 /* ===== SEND CHOICE ===== */
 const BIZ_SECTIONS  = ['contact', 'phone', 'companyNum', 'vatNum'];
 const PAY_SECTIONS  = ['bank', 'paypal', 'cash', 'other'];
-const SOCIAL_QR_SECTIONS = ['facebook', 'instagram', 'twitter', 'qrCode'];
+const SOCIAL_SECTIONS = ['facebook', 'instagram', 'twitter'];
+let shareBackActive = false;
+
+function setShareBackButtons(active) {
+  shareBackActive = !!active;
+  document.querySelectorAll('.share-back-btn').forEach(btn => {
+    btn.style.display = shareBackActive ? 'inline-flex' : 'none';
+  });
+}
+
+function closeShareDetailModals() {
+  document.getElementById('bizInfoModal').style.display = 'none';
+  document.getElementById('quickQrModal').style.display = 'none';
+}
+
+function backToSendChoiceModal() {
+  setShareBackButtons(false);
+  closeShareDetailModals();
+  document.getElementById('quoteModal').style.display = 'none';
+  document.getElementById('invoiceModal').style.display = 'none';
+  document.getElementById('receiptModal').style.display = 'none';
+  const preview = document.getElementById('previewModal');
+  if (preview) {
+    preview.style.display = 'none';
+    preview.classList.remove('modal-front');
+  }
+  openSendChoiceModal();
+}
+
+function goToEditMyBusinessFromModal() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  activeCustomerGroup = null;
+  showPage('page1');
+}
+
+function goToQrUploadFromModal() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  if (typeof closeMenu === 'function') closeMenu();
+  showPage('page1');
+  setTimeout(() => {
+    const qrArea = document.getElementById('qrUploadArea');
+    if (qrArea) {
+      qrArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      qrArea.focus?.();
+    }
+    toast('Upload your QR code here, then I can show it or send it for you.', 'info');
+  }, 250);
+}
+
+function returnToPendingQrView() {
+  if (!pendingQrReturnContext) return;
+  const { fromShare } = pendingQrReturnContext;
+  pendingQrReturnContext = null;
+  setTimeout(() => {
+    openQuickQrModal(!!fromShare);
+  }, 450);
+}
+
+function openMissingQrPrompt(fromShare = false) {
+  pendingQrReturnContext = { fromShare: !!fromShare };
+  document.getElementById('quickQrModal').style.display = 'none';
+  document.getElementById('sendChoiceModal').style.display = 'none';
+  const modal = document.getElementById('missingQrModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function setupMissingHtml(typeLabel) {
+  return `
+    <div class="share-empty-setup">
+      <p>No ${esc(typeLabel)} saved yet.</p>
+      <small>Add it from Edit My Business and I'll keep it ready for next time.</small>
+      <button type="button" class="btn btn-primary" onclick="goToEditMyBusinessFromModal()">Go to Edit My Business</button>
+    </div>`;
+}
+
+function latestCustomerDocForShare(kind) {
+  const docs = activeCustomerGroup?.docs?.length
+    ? activeCustomerGroup.docs
+    : (activeDocId ? state.saved.filter(d => d.id === activeDocId) : []);
+  if (!docs.length) return null;
+  const ordered = [...docs].sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
+  if (kind === 'estimate') {
+    return ordered.find(d => {
+      const type = String(d.type || d.quote?.type || '').toLowerCase();
+      return type === 'estimate' || type === 'quote';
+    }) || ordered[0];
+  }
+  if (kind === 'invoice') {
+    return ordered.find(d => d.invoiceSent || String(d.type || '').toLowerCase() === 'invoice') || ordered[0];
+  }
+  if (kind === 'receipt') {
+    return ordered.find(d => d.paid || String(d.type || '').toLowerCase() === 'receipt' || getDocPayments(d).length) || ordered[0];
+  }
+  return ordered[0];
+}
+
+function getDocTimestamp(doc) {
+  const candidates = [
+    doc.updatedAt, doc.updated_at, doc.createdAt, doc.created_at,
+    doc.date, doc.quote?.date, doc.invoiceDate, doc.paidDate
+  ].filter(Boolean);
+  for (const value of candidates) {
+    const time = new Date(value).getTime();
+    if (!Number.isNaN(time)) return time;
+  }
+  return 0;
+}
+
+function openShareDocument(kind) {
+  const doc = latestCustomerDocForShare(kind);
+  document.getElementById('sendChoiceModal').style.display = 'none';
+  if (!doc) {
+    toast('No saved document found for this customer yet.', 'error');
+    return;
+  }
+  setShareBackButtons(true);
+  document.getElementById('customerDashboardModal').style.display = 'none';
+  if (kind === 'estimate') openQuoteModal(doc.id);
+  else if (kind === 'invoice') previewInvoice(doc.id);
+  else if (kind === 'receipt') handleReceiptRequest(doc.id);
+}
 
 function openSendChoiceModal() {
+  resetSendChoiceGroups();
   document.getElementById('sendChoiceModal').style.display = 'flex';
+}
+
+function resetSendChoiceGroups() {
+  const categories = document.getElementById('sendChoiceCategories');
+  if (categories) categories.hidden = false;
+  document.getElementById('sendChoiceDocumentsGroup')?.setAttribute('hidden', '');
+  document.getElementById('sendChoiceBusinessGroup')?.setAttribute('hidden', '');
+  document.getElementById('sendChoiceCustomerDocuments')?.classList.remove('active');
+  document.getElementById('sendChoiceBusinessInfo')?.classList.remove('active');
+}
+
+function revealSendChoiceGroup(groupId) {
+  const docs = document.getElementById('sendChoiceDocumentsGroup');
+  const biz = document.getElementById('sendChoiceBusinessGroup');
+  const categories = document.getElementById('sendChoiceCategories');
+  const docsBtn = document.getElementById('sendChoiceCustomerDocuments');
+  const bizBtn = document.getElementById('sendChoiceBusinessInfo');
+  if (categories) categories.hidden = true;
+  if (docs) docs.hidden = groupId !== 'documents';
+  if (biz) biz.hidden = groupId !== 'business';
+  docsBtn?.classList.toggle('active', groupId === 'documents');
+  bizBtn?.classList.toggle('active', groupId === 'business');
 }
 
 function setupSendChoice() {
   document.getElementById('closeSendChoiceBtn')?.addEventListener('click', () => {
     document.getElementById('sendChoiceModal').style.display = 'none';
+    setShareBackButtons(false);
   });
   document.getElementById('sendChoiceModal')?.addEventListener('click', e => {
-    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+    if (e.target === e.currentTarget) {
+      e.currentTarget.style.display = 'none';
+      setShareBackButtons(false);
+    }
+  });
+  document.getElementById('sendChoiceCustomerDocuments')?.addEventListener('click', () => {
+    revealSendChoiceGroup('documents');
+  });
+  document.getElementById('sendChoiceBusinessInfo')?.addEventListener('click', () => {
+    revealSendChoiceGroup('business');
+  });
+  document.querySelectorAll('[data-send-choice-back]').forEach(btn => {
+    btn.addEventListener('click', resetSendChoiceGroups);
   });
   document.getElementById('sendChoiceEstimate')?.addEventListener('click', () => {
-    document.getElementById('sendChoiceModal').style.display = 'none';
-    // Open the quote send modal for the active doc
-    if (activeDocId) {
-      const doc = state.saved.find(d => d.id === activeDocId);
-      if (doc) populateQuoteSendModal(doc);
-    }
+    openShareDocument('estimate');
   });
   document.getElementById('sendChoiceInvoice')?.addEventListener('click', () => {
-    document.getElementById('sendChoiceModal').style.display = 'none';
-    if (activeDocId) {
-      const doc = state.saved.find(d => d.id === activeDocId);
-      if (doc) populateQuoteSendModal(doc);
-    } else {
-      startNewInvoice();
-    }
+    openShareDocument('invoice');
   });
   document.getElementById('sendChoiceReceipt')?.addEventListener('click', () => {
-    document.getElementById('sendChoiceModal').style.display = 'none';
-    if (activeDocId) {
-      const doc = state.saved.find(d => d.id === activeDocId);
-      if (doc) populateQuoteSendModal(doc);
-    } else {
-      startNewReceipt();
-    }
+    openShareDocument('receipt');
   });
   document.getElementById('sendChoiceBusiness')?.addEventListener('click', () => {
     document.getElementById('sendChoiceModal').style.display = 'none';
+    setShareBackButtons(false);
     openBizInfoModal('business');
   });
   document.getElementById('sendChoicePayment')?.addEventListener('click', () => {
     document.getElementById('sendChoiceModal').style.display = 'none';
+    setShareBackButtons(false);
     openBizInfoModal('payment');
   });
   document.getElementById('sendChoiceSocialQr')?.addEventListener('click', () => {
     document.getElementById('sendChoiceModal').style.display = 'none';
-    openBizInfoModal('socialQr');
+    setShareBackButtons(false);
+    openBizInfoModal('social');
+  });
+  document.getElementById('sendChoiceQr')?.addEventListener('click', () => {
+    document.getElementById('sendChoiceModal').style.display = 'none';
+    setShareBackButtons(true);
+    openQuickQrModal(true);
   });
   document.getElementById('sendChoiceQuals')?.addEventListener('click', () => {
     document.getElementById('sendChoiceModal').style.display = 'none';
+    setShareBackButtons(false);
     openBizInfoModal('qualifications');
   });
 }
@@ -5649,12 +5842,15 @@ function bizInfoSections() {
   if (c.postcode)  contactLines.push(c.postcode);
   if (c.email)     contactLines.push(c.email);
   if (c.website)   contactLines.push(c.website);
-  sections.push({
-    id: 'contact',
-    label: `Business Name & Address${c.email ? ' / Email' : ''}${c.website ? ' / Website' : ''}`,
-    text: contactLines.filter(Boolean).join('\n'),
-    checked: false
-  });
+  const cleanContactLines = contactLines.filter(Boolean);
+  if (cleanContactLines.length) {
+    sections.push({
+      id: 'contact',
+      label: `Business Name & Address${c.email ? ' / Email' : ''}${c.website ? ' / Website' : ''}`,
+      text: cleanContactLines.join('\n'),
+      checked: false
+    });
+  }
 
   // ── Phone ────────────────────────────────────────────────────
   if (c.phone) {
@@ -5727,7 +5923,7 @@ function updateBizInfoPreview() {
 }
 
 function openBizInfoModal(filter) {
-  // filter: 'business' | 'payment' | 'qualifications' | undefined (all)
+  // filter: 'business' | 'payment' | 'social' | 'qualifications' | undefined (all)
   const allSections = bizInfoSections();
   const container   = document.getElementById('bizInfoOptions');
   const titleEl     = document.querySelector('#bizInfoModal .modal-title');
@@ -5740,7 +5936,7 @@ function openBizInfoModal(filter) {
     const quals = state.company.qualifications || [];
     if (titleEl) titleEl.textContent = 'My Qualifications';
     container.innerHTML = quals.length === 0
-      ? `<p style="color:#999;text-align:center;padding:20px 0;font-size:0.9rem">No qualifications uploaded yet.<br><small>Add them from <strong>Edit My Business</strong>.</small></p>`
+      ? setupMissingHtml('qualifications')
       : quals.map((q, i) => `
           <div class="biz-info-qual-row">
             <span class="biz-info-qual-name" title="${esc(q.name)}">${esc(q.name)}</span>
@@ -5768,16 +5964,16 @@ function openBizInfoModal(filter) {
   } else if (filter === 'payment') {
     sections = allSections.filter(s => PAY_SECTIONS.includes(s.id));
     if (titleEl) titleEl.textContent = 'Send Payment Details';
-  } else if (filter === 'socialQr') {
-    sections = allSections.filter(s => SOCIAL_QR_SECTIONS.includes(s.id));
-    if (titleEl) titleEl.textContent = 'Send Social Media or QR Code';
+  } else if (filter === 'social') {
+    sections = allSections.filter(s => SOCIAL_SECTIONS.includes(s.id));
+    if (titleEl) titleEl.textContent = 'Send Social Media';
   } else {
     if (titleEl) titleEl.textContent = 'Send My Business Info';
   }
 
   if (sections.length === 0) {
-    const detailType = filter === 'payment' ? 'payment' : filter === 'socialQr' ? 'social media or QR code' : 'business';
-    container.innerHTML = `<p style="color:#999;text-align:center;padding:20px 0;font-size:0.9rem">No ${detailType} details saved yet.<br><small>Add them from <strong>Edit My Business</strong>.</small></p>`;
+    const detailType = filter === 'payment' ? 'payment details' : filter === 'social' ? 'social media links' : 'business details';
+    container.innerHTML = setupMissingHtml(detailType);
     if (previewWrap) previewWrap.style.display = 'none';
     if (footerEl)    footerEl.style.display    = 'none';
     document.getElementById('bizInfoModal').style.display = 'flex';
@@ -5807,6 +6003,80 @@ function openBizInfoModal(filter) {
 
   updateBizInfoPreview();
   document.getElementById('bizInfoModal').style.display = 'flex';
+}
+
+function getSocialShareText() {
+  const sections = bizInfoSections().filter(s => SOCIAL_SECTIONS.includes(s.id));
+  return sections.map(s => s.text).join('\n') || '';
+}
+
+async function dataUrlToFile(dataUrl, filename) {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'png';
+  return new File([blob], `${filename}.${ext}`, { type: blob.type || 'image/png' });
+}
+
+function openQuickQrModal(fromShare = false) {
+  const modal = document.getElementById('quickQrModal');
+  const content = document.getElementById('quickQrContent');
+  const footer = document.getElementById('quickQrFooter');
+  const backBtn = document.getElementById('backQuickQrBtn');
+  if (!modal || !content) return;
+
+  const qrSrc = state.company.qrCode || '';
+  if (!qrSrc) {
+    openMissingQrPrompt(fromShare);
+    return;
+  }
+  content.innerHTML = `
+    <div class="quick-qr-preview">
+      <img src="${qrSrc}" alt="QR code">
+      <p>Let your customer scan this now, or send it on.</p>
+    </div>`;
+  if (footer) footer.style.display = '';
+  if (backBtn) backBtn.style.display = fromShare ? '' : 'none';
+  modal.style.display = 'flex';
+}
+
+async function copyQrInfo() {
+  const text = getSocialShareText();
+  if (!text) {
+    toast('No social links saved yet.', 'error');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Social links copied.', 'success');
+  } catch {
+    toast('Select and copy your social links manually.', 'info');
+  }
+}
+
+async function shareQrCode() {
+  const qrSrc = state.company.qrCode || '';
+  if (!qrSrc) {
+    openQuickQrModal();
+    return;
+  }
+  const text = getSocialShareText();
+  try {
+    const file = await dataUrlToFile(qrSrc, 'lexi-qr-code');
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'My QR Code', text: text || undefined });
+      return;
+    }
+  } catch(e) {
+    console.warn('QR share failed', e);
+  }
+  if (text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('QR shown. Social links copied too.', 'success');
+      return;
+    } catch(e) {}
+  }
+  toast('QR code is ready to scan from this screen.', 'success');
 }
 
 async function copyBizInfo() {
@@ -5922,8 +6192,9 @@ function buildCustomerJobSection(d, jobNum = 0) {
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const outstanding = Math.max(0, (d.total || 0) - totalPaid);
   const isOverdue = !d.paid && d.invoiceSent && d.invoiceDueDate && todayStr() > d.invoiceDueDate;
-  const statusClass = d.paid ? 'paid' : isOverdue ? 'overdue' : d.invoiceSent ? 'invoiced' : (q.type || 'estimate').toLowerCase();
-  const statusLabel = d.paid ? 'Paid' : isOverdue ? 'Overdue' : d.invoiceSent ? 'Invoiced' : (q.type || 'Estimate');
+  const isAccepted = d.acceptStatus === 'accepted' || d.jobAccepted;
+  const statusClass = d.paid ? 'paid' : isAccepted ? 'accepted' : isOverdue ? 'overdue' : d.invoiceSent ? 'invoiced' : (q.type || 'estimate').toLowerCase();
+  const statusLabel = d.paid ? 'Paid' : isAccepted ? 'Accepted' : isOverdue ? 'Overdue' : d.invoiceSent ? 'Invoiced' : (q.type || 'Estimate');
   const ref = d.invoiceRef || d.receiptRef || q.ref || d.ref || '-';
   const docDate = q.date || d.date || '';
   const photos = d.photos || {};
@@ -6076,6 +6347,11 @@ function buildCustomerJobSection(d, jobNum = 0) {
         </div>
       </div>
     </div>`;
+  const acceptanceHtml = isAccepted ? `
+    <div class="cdv-accepted-banner">
+      <strong>Quote accepted</strong>
+      <span>${d.acceptedBy ? `Signed by ${esc(d.acceptedBy)}` : 'Customer has accepted this quote'}${d.acceptedAt ? ` on ${new Date(d.acceptedAt).toLocaleDateString('en-GB')}` : ''}</span>
+    </div>` : '';
 
   return `
     <div class="cdv-job-card">
@@ -6090,6 +6366,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
       </div>
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
+      ${acceptanceHtml}
       ${progressionHtml}
       ${scheduleHtml}
       ${paymentsHtml}
@@ -6128,6 +6405,7 @@ function renderSingleCustomerDashboard(group, groups) {
   const DSVG_WA    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
   const DSVG_PHONE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.44 2 2 0 0 1 3.57 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.29 6.29l1.12-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
   const DSVG_SHARE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
+  const DSVG_EDIT  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
   const contactBtns = `
     <div class="cdv-contact-btns">
       <button type="button" class="cal-icon-btn cal-icon-email cdv-labeled${!dashEmail ? ' cal-btn-disabled' : ''}"
@@ -6140,6 +6418,7 @@ function renderSingleCustomerDashboard(group, groups) {
         ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Phone</span></a>`
         : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Phone</span></button>`}
       <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share My Details</span></button>
+      <button type="button" class="cdv-header-edit-btn cdv-contact-update-btn" id="custDashEditBtn" title="Update this customer">${DSVG_EDIT} Update</button>
     </div>`;
 
   // contentHtml = pure dashboard content (used for download — no buttons)
@@ -7799,15 +8078,16 @@ function printRaw(inner) {
   setTimeout(() => { win.print(); win.close(); }, 400);
 }
 
-async function sendDoc(html, filename, message = '') {
-  sendDocRaw(wrapDoc(html), filename, message);
+async function sendDoc(html, filename, message = '', custEmail = '') {
+  sendDocRaw(wrapDoc(html), filename, message, custEmail);
 }
 
-async function sendDocRaw(htmlStr, filename, message = '') {
+async function sendDocRaw(htmlStr, filename, message = '', custEmail = '') {
   const blob = new Blob([htmlStr], { type: 'text/html' });
   const file = new File([blob], filename, { type: 'text/html' });
+  const isMobileShareDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
 
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (isMobileShareDevice && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       const shareData = { files: [file], title: 'Document from Lexi Handles It' };
       if (message) shareData.text = message;
@@ -7818,12 +8098,25 @@ async function sendDocRaw(htmlStr, filename, message = '') {
     }
   }
 
-  // Fallback: download the file and (if possible) copy the message to clipboard
+  // Download the file
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
+
+  // If we have the customer's email, open a pre-filled email after a short delay
+  if (custEmail && message) {
+    const subject = filename.replace(/\.html$/i, '').replace(/-/g, ' ');
+    setTimeout(() => {
+      const mailto = `mailto:${encodeURIComponent(custEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+      window.location.href = mailto;
+    }, 800);
+    toast('Document downloaded. Your email is opening — attach the downloaded file before sending.', '', 7000);
+    return;
+  }
+
+  // No email — fall back to clipboard
   if (message && navigator.clipboard) {
     try {
       await navigator.clipboard.writeText(message);
@@ -8800,41 +9093,162 @@ function generateAcceptToken(docId) {
   doc.acceptToken = token;
   doc.acceptStatus = 'pending'; // pending | accepted | declined
   save();
+  saveQuoteAcceptancePending(doc).catch(error => {
+    console.warn('Quote acceptance token saved locally but did not sync to Supabase:', error);
+  });
   return token;
 }
 
+function prepareAcceptTokenForSend(docId) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return null;
+  if (doc.acceptToken && doc.acceptStatus === 'pending') {
+    saveQuoteAcceptancePending(doc).catch(error => {
+      console.warn('Could not refresh quote acceptance row in Supabase:', error);
+    });
+    return doc.acceptToken;
+  }
+  return generateAcceptToken(docId);
+}
+
 function getAcceptUrl(token) {
-  // In production this would be your GitHub Pages URL
-  const base = window.location.origin + window.location.pathname.replace('index.html','').replace(/\/$/, '');
-  return `${base}/accept.html?token=${token}`;
+  const currentPathBase = window.location.pathname.replace(/index\.html$/,'').replace(/\/$/, '');
+  const base = window.location.protocol === 'file:'
+    ? LIVE_APP_URL.replace(/\/$/, '')
+    : `${window.location.origin}${currentPathBase}`.replace(/\/$/, '');
+  const doc = (state.saved || []).find(d => d.acceptToken === token);
+  const ref = doc?.ref || doc?.quote?.ref || '';
+  return `${base}/accept.html?token=${encodeURIComponent(token)}${ref ? '&ref=' + encodeURIComponent(ref) : ''}`;
 }
 
 function buildAcceptanceMessage(doc, baseMessage) {
   const q = doc.quote || {};
-  const firstName = q.custFirstName || '';
-  const token = doc.acceptToken || generateAcceptToken(doc.id);
+  const token = prepareAcceptTokenForSend(doc.id);
   const url = getAcceptUrl(token);
-  return `${baseMessage}\n\nTo accept this quote, simply tap the link below. It takes 10 seconds.\n${url}`;
+  // Try first name, then first word of full name, then full name, then fallback
+  const fullName = buildCustName(q) || doc.custName || '';
+  const customerName = (q.custFirstName || fullName.split(' ')[0] || fullName || 'there').trim() || 'there';
+  const docType = String(q.type || doc.type || 'quote').toLowerCase() === 'estimate' ? 'estimate' : 'quote';
+  const traderName = [state.company.firstName, state.company.lastName].filter(Boolean).join(' ').trim();
+  const companyName = (state.company.businessName || '').trim();
+  const signoff = [traderName, companyName].filter(Boolean).join('\n') || 'Lexi Handles It';
+
+  return `Hello ${customerName},
+
+Thank you for allowing me to provide you with a ${docType} to carry out the work attached.
+
+Please feel free to consider it and talk it over with whoever you need to. I am happy to answer any queries, so feel free to message me back.
+
+When you are ready, if you would like to accept the ${docType}, please click the secure acceptance link below.
+
+Secure acceptance link:
+${url}
+
+Kind regards
+${signoff}`;
 }
 
-function checkQuoteAcceptances() {
+function quoteAcceptanceBaseRow(doc = {}) {
+  const q = doc.quote || {};
+  return {
+    user_id: lexiAuthSession?.user?.id,
+    token: doc.acceptToken || '',
+    local_document_id: doc.id || '',
+    document_number: doc.ref || q.ref || '',
+    customer_name: buildCustName(q) || doc.custName || '',
+    customer_email: q.custEmail || '',
+    status: doc.acceptStatus || 'pending',
+    accepted_by: doc.acceptedBy || '',
+    accepted_at: doc.acceptedAt || null,
+    declined_at: doc.declinedAt || null
+  };
+}
+
+function quoteAcceptanceInsertCandidates(doc = {}) {
+  const standard = quoteAcceptanceBaseRow(doc);
+  return [
+    standard,
+    omitKeys(standard, ['declined_at', 'accepted_at']),
+    omitKeys(standard, ['declined_at', 'accepted_at', 'customer_email', 'customer_name']),
+    {
+      user_id: standard.user_id,
+      token: standard.token,
+      document_number: standard.document_number,
+      status: standard.status
+    }
+  ];
+}
+
+async function saveQuoteAcceptancePending(doc = {}) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id || !doc.acceptToken) return;
+  let lastError = null;
+  for (const row of quoteAcceptanceInsertCandidates(doc)) {
+    const result = await lexiSupabase
+      .from('quote_acceptances')
+      .upsert(row, { onConflict: 'token' });
+    if (!result.error) return true;
+    lastError = result.error;
+    const message = String(result.error.message || '');
+    if (!/column|schema cache|constraint|conflict/i.test(message)) throw result.error;
+  }
+  if (lastError) throw lastError;
+  return false;
+}
+
+function applyAcceptanceToDoc(doc, data = {}) {
+  if (!doc || !data?.status) return false;
+  if (data.status === 'accepted') {
+    doc.acceptStatus = 'accepted';
+    doc.acceptedBy   = data.accepted_by || data.name || data.customer_name || '';
+    doc.acceptedAt   = data.accepted_at || data.timestamp || '';
+    doc.jobAccepted  = true;
+    return true;
+  }
+  if (data.status === 'declined') {
+    doc.acceptStatus = 'declined';
+    doc.declinedAt   = data.declined_at || data.timestamp || '';
+    return true;
+  }
+  return false;
+}
+
+async function checkSupabaseQuoteAcceptances() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
+  const pending = (state.saved || []).filter(doc => doc.acceptToken && doc.acceptStatus === 'pending');
+  if (!pending.length) return false;
+  const tokens = pending.map(doc => doc.acceptToken);
+  const { data, error } = await lexiSupabase
+    .from('quote_acceptances')
+    .select('*')
+    .in('token', tokens);
+  if (error) {
+    console.warn('Could not check quote acceptances from Supabase:', error);
+    return false;
+  }
+  let changed = false;
+  (data || []).forEach(row => {
+    if (!['accepted', 'declined'].includes(String(row.status || '').toLowerCase())) return;
+    const doc = pending.find(item => item.acceptToken === row.token);
+    if (doc && applyAcceptanceToDoc(doc, row)) {
+      changed = true;
+      notifySupabaseQuoteAccepted(doc, row);
+    }
+  });
+  return changed;
+}
+
+async function checkQuoteAcceptances() {
   let anyAccepted = false;
+  if (await checkSupabaseQuoteAcceptances()) anyAccepted = true;
   (state.saved || []).forEach(doc => {
     if (doc.acceptToken && doc.acceptStatus === 'pending') {
       const stored = localStorage.getItem(KEY_ACCEPT_BASE + doc.acceptToken);
       if (stored) {
         try {
           const data = JSON.parse(stored);
-          if (data.status === 'accepted') {
-            doc.acceptStatus = 'accepted';
-            doc.acceptedBy   = data.name || '';
-            doc.acceptedAt   = data.timestamp || '';
-            doc.jobAccepted  = true;
+          if (applyAcceptanceToDoc(doc, data)) {
             anyAccepted = true;
             notifySupabaseQuoteAccepted(doc, data);
-          } else if (data.status === 'declined') {
-            doc.acceptStatus = 'declined';
-            doc.declinedAt   = data.timestamp || '';
           }
         } catch(e) {}
       }
@@ -8865,10 +9279,44 @@ function showQuoteAcceptedNotification() {
   save();
 }
 
+/* ── Real-time subscription: instant acceptance notification ── */
+let _acceptChannel = null;
+
+function subscribeToQuoteAcceptances() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  // Tear down any existing subscription first
+  if (_acceptChannel) {
+    lexiSupabase.removeChannel(_acceptChannel);
+    _acceptChannel = null;
+  }
+  _acceptChannel = lexiSupabase
+    .channel('lexi-quote-acceptances')
+    .on('postgres_changes', {
+      event:  'UPDATE',
+      schema: 'public',
+      table:  'quote_acceptances',
+      filter: `user_id=eq.${lexiAuthSession.user.id}`
+    }, payload => {
+      const row = payload.new || {};
+      const status = String(row.status || '').toLowerCase();
+      if (!['accepted', 'declined'].includes(status)) return;
+      const doc = (state.saved || []).find(d => d.acceptToken === row.token);
+      if (doc && applyAcceptanceToDoc(doc, row)) {
+        save();
+        refreshSavedDocs();
+        if (status === 'accepted') showQuoteAcceptedNotification();
+      }
+    })
+    .subscribe(subscribeStatus => {
+      if (subscribeStatus === 'SUBSCRIBED') {
+        console.log('[Real-time] Listening for quote acceptances');
+      }
+    });
+}
+
 // ── Supabase / Mailchimp stubs ──
 function notifySupabaseQuoteAccepted(doc, data) {
   console.log('[Quote Acceptance] Supabase notify — doc:', doc.id, 'accepted by:', data.name, 'at:', data.timestamp);
-  // TODO: POST to Supabase edge function to send push/email notification to tradesman
 }
 function sendAcceptanceConfirmationEmail(custEmail, ref) {
   console.log('[Quote Acceptance] Confirmation email stub — to:', custEmail, 'ref:', ref);
@@ -9189,6 +9637,12 @@ function setupChaseAndPause() {
   checkPauseExpiry();
   checkQuoteAcceptances();
   if (isPaused()) showPausedScreen();
+
+  // Poll for quote acceptances every 30 seconds (fallback for all browsers)
+  setInterval(() => checkQuoteAcceptances(), 30000);
+
+  // Supabase real-time: instant notification when a customer accepts
+  subscribeToQuoteAcceptances();
 
   // Show seasonal banner if applicable
   checkSeasonalPrompt();
