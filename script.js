@@ -172,6 +172,28 @@ function hasRequiredSetup() {
          (state.company.lastName  || '').trim() !== '';
 }
 
+function hasReturningAccountData() {
+  const c = state.company || {};
+  const businessFields = [
+    c.firstName,
+    c.lastName,
+    c.businessName,
+    c.trade,
+    c.phone,
+    c.email,
+    c.address,
+    c.postcode
+  ];
+  return businessFields.some(value => (value || '').trim() !== '') ||
+         (state.priceList || []).length > 0 ||
+         (state.customers || []).length > 0 ||
+         (state.saved || []).length > 0;
+}
+
+function canUseMainApp() {
+  return hasRequiredSetup() || hasReturningAccountData();
+}
+
 function requireSetupGuard() {
   toast('Please enter your first and last name to continue.', 'error');
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -264,7 +286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   personaliseText();
 
   // Returning user lands on their jobs page; new users start onboarding
-  if (hasRequiredSetup()) {
+  if (canUseMainApp()) {
     showPage('page4');
   } else {
     showPage('page1');
@@ -711,6 +733,7 @@ function customerToRow(q = {}) {
 
 function customerRowToQuote(row = {}) {
   return {
+    supabaseId:    row.id || '',
     custTitle:     row.title || '',
     custFirstName: row.first_name || '',
     custLastName:  row.last_name || '',
@@ -749,6 +772,7 @@ function upsertLocalCustomer(q = {}, saveAfter = true) {
   const existingIdx = state.customers.findIndex(customer => customer.key === key);
   const row = {
     id: existingIdx > -1 ? state.customers[existingIdx].id : uid(),
+    supabaseId: q.supabaseId || q.id || (existingIdx > -1 ? state.customers[existingIdx].supabaseId : '') || '',
     key,
     name,
     quote,
@@ -931,9 +955,20 @@ function savedDocRowToDoc(row = {}) {
   const stored = documentJsonFromRow(row);
   const doc = stored && typeof stored === 'object' ? { ...stored } : {};
   doc.id = doc.id || row.local_id || row.id || uid();
+  doc.createdAt = doc.createdAt || row.created_at || row.inserted_at || '';
+  doc.updatedAt = doc.updatedAt || row.updated_at || '';
   doc.type = doc.type || row.type || row.document_type || doc.quote?.type || 'Estimate';
-  doc.ref = doc.ref || row.ref || row.reference || doc.quote?.ref || '';
+  doc.ref = doc.ref || row.document_number || row.ref || row.reference || doc.quote?.ref || '';
+  if (doc.quote && !doc.quote.ref && doc.ref) doc.quote.ref = doc.ref;
   doc.custName = doc.custName || row.customer_name || '';
+  if ((!doc.quote || !customerHasUsefulData(doc.quote)) && row.customer_id) {
+    const linkedCustomer = (state.customers || []).find(customer => customer.supabaseId === row.customer_id);
+    if (linkedCustomer?.quote) {
+      doc.quote = restoreCustomerFieldsFromDocQuote({ ...(doc.quote || {}) }, linkedCustomer.quote);
+      if (!doc.quote.ref && doc.ref) doc.quote.ref = doc.ref;
+      doc.custName = doc.custName || linkedCustomer.name || buildCustName(doc.quote);
+    }
+  }
   doc.total = Number(doc.total ?? row.total ?? 0);
   doc.date = doc.date || row.document_date || row.date || doc.quote?.date || '';
   return doc;
@@ -1040,6 +1075,99 @@ function savedDocInsertCandidates(userId, doc = {}, customerId = null) {
   ];
 }
 
+function getDocLineItems(doc = {}) {
+  const q = doc.quote || {};
+  if (Array.isArray(q.items) && q.items.length) return q.items;
+  if (Array.isArray(doc.items) && doc.items.length) return doc.items;
+  return [];
+}
+
+function getJobSummaryTitle(doc = {}) {
+  const firstItem = getDocLineItems(doc)[0];
+  return (firstItem?.name || 'Job details not saved').trim();
+}
+
+function isServiceNameList(text = '', doc = {}) {
+  const cleaned = String(text || '').trim();
+  if (!cleaned) return false;
+  if (/[.!?]\s|[\r\n]/.test(cleaned)) return false;
+  const knownNames = new Set([
+    ...getDocLineItems(doc).map(item => item.name),
+    ...(state.priceList || []).map(item => item.name)
+  ].filter(Boolean).map(name => String(name).trim().toLowerCase()));
+  if (!knownNames.size) return false;
+  const parts = cleaned.split(',').map(part => part.trim().toLowerCase()).filter(Boolean);
+  return parts.length > 0 && parts.every(part => knownNames.has(part));
+}
+
+function getJobSummaryDescription(doc = {}) {
+  const q = doc.quote || {};
+  if (q.notes && !isServiceNameList(q.notes, doc)) return q.notes.trim();
+  return '';
+}
+
+function getJobSummaryStatus(doc = {}) {
+  if (doc.paid) return 'paid';
+  if (doc.invoiceSent || doc.type === 'Invoice') return 'invoiced';
+  if (doc.jobCompleted) return 'completed';
+  if (doc.jobAccepted || doc.acceptStatus === 'accepted') return 'accepted';
+  const type = String(doc.type || doc.quote?.type || '').toLowerCase();
+  if (type === 'quote') return 'quote';
+  return 'estimate';
+}
+
+function getDocOutstandingAmount(doc = {}) {
+  const total = Number(doc.total || calcTotal(doc.quote || {}) || 0);
+  const paid = getDocPayments(doc).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+  return Math.max(0, total - paid);
+}
+
+function jobSummaryRowBase(userId, doc = {}, customerId = null) {
+  ensureDocumentRefAndDate(doc);
+  const q = doc.quote || {};
+  const total = Number(doc.total || calcTotal(q) || 0);
+  const title = getJobSummaryTitle(doc);
+  return {
+    user_id: userId,
+    customer_id: customerId,
+    local_id: doc.id || uid(),
+    document_number: doc.ref || q.ref || '',
+    document_type: getDocTypeForSupabase(doc),
+    job_title: title,
+    job_description: getJobSummaryDescription(doc),
+    status: getJobSummaryStatus(doc),
+    total_amount: total,
+    outstanding_amount: getDocOutstandingAmount(doc),
+    start_date: toSupabaseDate(doc.jobStartDate),
+    completed_date: toSupabaseDate(doc.jobCompletedDate),
+    job_data: doc
+  };
+}
+
+function jobSummaryInsertCandidates(userId, doc = {}, customerId = null) {
+  const standard = jobSummaryRowBase(userId, doc, customerId);
+  return [
+    standard,
+    omitKeys(standard, ['job_data', 'completed_date', 'outstanding_amount']),
+    omitKeys(standard, ['job_data', 'completed_date', 'outstanding_amount', 'document_type', 'document_number']),
+    {
+      user_id: userId,
+      customer_id: customerId,
+      status: standard.status,
+      job_title: standard.job_title,
+      job_description: standard.job_description,
+      total_amount: standard.total_amount,
+      start_date: standard.start_date
+    },
+    {
+      user_id: userId,
+      customer_id: customerId,
+      status: standard.status,
+      job_title: standard.job_title
+    }
+  ];
+}
+
 function savedDocRowsWithJsonColumn(userId, jsonColumn) {
   return (state.saved || []).map(doc => ({
     user_id: userId,
@@ -1111,6 +1239,45 @@ async function saveSavedDocsToSupabase() {
     }
     throw result.error;
   }
+  try {
+    await saveJobSummariesToSupabase(userId, docsWithCustomers);
+    localStorage.removeItem('lexi_last_jobs_sync_error');
+  } catch (error) {
+    console.warn('Documents synced, but job summaries did not sync to Supabase:', error);
+    localStorage.setItem('lexi_last_jobs_sync_error', error?.message || String(error || 'Unknown jobs sync error'));
+    toast(`Documents synced, but job summaries need checking: ${error?.message || 'jobs table setup'}`, 'error', 9000);
+  }
+}
+
+async function insertJobSummaryRows(rows) {
+  let lastError = null;
+  for (const rowSet of rows) {
+    const result = await lexiSupabase.from('jobs').insert(rowSet);
+    if (!result.error) return true;
+    lastError = result.error;
+    const message = String(result.error.message || '');
+    if (!/column|schema cache|relationship|foreign key|violates/i.test(message)) throw result.error;
+  }
+  if (lastError) throw lastError;
+  return false;
+}
+
+async function saveJobSummariesToSupabase(userId, docsWithCustomers = []) {
+  if (!lexiSupabase || !userId) return;
+  const deleteResult = await lexiSupabase
+    .from('jobs')
+    .delete()
+    .eq('user_id', userId);
+  if (deleteResult.error) throw deleteResult.error;
+
+  if (!docsWithCustomers.length) return;
+
+  const candidateSets = [0, 1, 2, 3, 4].map(candidateIndex =>
+    docsWithCustomers
+      .map(({ doc, customerId }) => jobSummaryInsertCandidates(userId, doc, customerId)[candidateIndex])
+      .filter(Boolean)
+  );
+  await insertJobSummaryRows(candidateSets.filter(rows => rows.length));
 }
 
 function queueSavedDocsSync(showError = false) {
@@ -1255,7 +1422,7 @@ function setupNavHint() {
 
 /* ===== PAGE NAVIGATION ===== */
 function showPage(pageId) {
-  if (pageId !== 'page1' && !hasRequiredSetup()) {
+  if (pageId !== 'page1' && !canUseMainApp()) {
     requireSetupGuard();
     return;
   }
@@ -1385,7 +1552,7 @@ function setupNavigation() {
   window.closeMenu = closeMenu;
 
   hamburger.addEventListener('click', () => {
-    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (!canUseMainApp()) { requireSetupGuard(); return; }
     const onCompletion = document.getElementById('page-completion')?.classList.contains('active');
     if (onCompletion && !state.quote.type) { docTypeGuard(); return; }
     navMenu.classList.contains('open') ? closeMenu() : openMenu();
@@ -1466,7 +1633,7 @@ function setupNavigation() {
 
   // New Invoice from menu
   document.getElementById('menuNewInvoice')?.addEventListener('click', () => {
-    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (!canUseMainApp()) { requireSetupGuard(); return; }
     if (quietSeasonGuard()) { closeMenu(); return; }
     closeMenu();
     openClientPicker('invoice');
@@ -1474,7 +1641,7 @@ function setupNavigation() {
 
   // New Receipt from menu
   document.getElementById('menuNewReceipt')?.addEventListener('click', () => {
-    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (!canUseMainApp()) { requireSetupGuard(); return; }
     if (quietSeasonGuard()) { closeMenu(); return; }
     closeMenu();
     openClientPicker('receipt');
@@ -1482,7 +1649,7 @@ function setupNavigation() {
 
 
   document.getElementById('menuBizInfo')?.addEventListener('click', () => {
-    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (!canUseMainApp()) { requireSetupGuard(); return; }
     closeMenu();
     setTimeout(openSendChoiceModal, 180);
   });
@@ -1490,7 +1657,7 @@ function setupNavigation() {
   // Qualifications are now shared from within Send My Business Info — no separate menu item needed
 
   document.getElementById('menuShareLexi')?.addEventListener('click', () => {
-    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (!canUseMainApp()) { requireSetupGuard(); return; }
     closeMenu();
     shareLexiApp();
   });
@@ -1499,7 +1666,7 @@ function setupNavigation() {
   const backupBtn = document.getElementById('menuBackupRestore');
   if (backupBtn) {
     backupBtn.addEventListener('click', () => {
-      if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+      if (!canUseMainApp()) { requireSetupGuard(); return; }
       closeMenu();
       document.getElementById('backupRestoreModal').style.display = 'flex';
     });
@@ -1577,7 +1744,11 @@ function setupNavigation() {
 function setupOnboarding() {
   const modal = document.getElementById('onboardingModal');
   const onboarded = localStorage.getItem(KEY_ONBOARDED);
-  if (onboarded) { modal.style.display = 'none'; return; }
+  if (onboarded || canUseMainApp()) {
+    localStorage.setItem(KEY_ONBOARDED, '1');
+    if (modal) modal.style.display = 'none';
+    return;
+  }
 
   modal.style.display = 'flex';
   modal.classList.add('for-onboarding');
@@ -1588,7 +1759,7 @@ function setupOnboarding() {
     ensureTrialStarted();
     localStorage.setItem(KEY_ONBOARDED, '1');
     modal.style.display = 'none';
-    showPage('page1');
+    showPage(canUseMainApp() ? 'page4' : 'page1');
   });
 }
 
@@ -2926,6 +3097,7 @@ function loadQuoteFromDoc(doc) {
   const q = doc.quote || {};
   state.quote = {
     ...q,
+    ref: q.ref || doc.ref || '',
     // Deep-copy items so editing never mutates the stored doc's array
     items: (q.items || []).map(i => ({ ...i }))
   };
@@ -3035,6 +3207,30 @@ function generateRef() {
   const stored = parseInt(localStorage.getItem(KEY_REF) || '100');
   pendingRefNum = Math.max(stored, 100) + 1;
   el.value = buildRef(pendingRefNum);
+}
+
+function ensureDocumentRefAndDate(doc = {}) {
+  if (!doc.quote) doc.quote = {};
+  if (!doc.ref && doc.quote.ref) doc.ref = doc.quote.ref;
+  if (!doc.quote.ref && doc.ref) doc.quote.ref = doc.ref;
+  if (!doc.ref && !doc.quote.ref) {
+    const stored = parseInt(localStorage.getItem(KEY_REF) || '100');
+    const next = Math.max(stored, 100) + 1;
+    const ref = buildRef(next);
+    localStorage.setItem(KEY_REF, next);
+    doc.ref = ref;
+    doc.quote.ref = ref;
+    doc.updatedAt = new Date().toISOString();
+  }
+  if (!doc.date && doc.quote.date) doc.date = doc.quote.date;
+  if (!doc.quote.date && doc.date) doc.quote.date = doc.date;
+  if (!doc.date && !doc.quote.date) {
+    const date = toSupabaseDate(doc.createdAt) || todayStr();
+    doc.date = date;
+    doc.quote.date = date;
+    doc.updatedAt = new Date().toISOString();
+  }
+  return doc;
 }
 
 function updateJobPicker() {
@@ -3244,6 +3440,10 @@ function saveQuote() {
   if (state.editingDocId) {
     const idx = state.saved.findIndex(d => d.id === state.editingDocId);
     if (idx > -1) {
+      restoreCustomerFieldsFromDocQuote(q, state.saved[idx].quote || {});
+      if (!q.ref && (state.saved[idx].ref || state.saved[idx].quote?.ref)) {
+        q.ref = state.saved[idx].ref || state.saved[idx].quote.ref;
+      }
       state.saved[idx] = {
         ...state.saved[idx],
         quote: q,
@@ -3251,6 +3451,7 @@ function saveQuote() {
         custName: buildCustName(q),
         total: calcTotal(q),
         type: q.type,
+        updatedAt: new Date().toISOString(),
         invoiceSent: q.type === 'Invoice' || q.type === 'Receipt'
       };
     }
@@ -3269,6 +3470,8 @@ function saveQuote() {
       type: q.type,
       date: q.date,
       ref: q.ref,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       invoiceSent: q.type === 'Invoice' || q.type === 'Receipt',
       paid: false,
       paidAmount: 0,
@@ -3307,6 +3510,7 @@ function saveQuote() {
   } else {
     showSavedPopup(popupLabel);
     showPage('page4');
+    scrollMyJobsToTop();
     showNavHint();
   }
 }
@@ -3328,6 +3532,54 @@ function calcTotal(q) {
   const disc   = parseFloat(q.discount) || 0;
   const after  = sub - sub * disc / 100;
   return after + after * vatRate / 100;
+}
+
+function restoreCustomerFieldsFromDocQuote(targetQuote = {}, sourceQuote = {}) {
+  ['custTitle', 'custFirstName', 'custLastName', 'custAddr', 'custPostcode', 'custPhone', 'custEmail', 'privateNotes'].forEach(key => {
+    if (!String(targetQuote[key] || '').trim() && String(sourceQuote[key] || '').trim()) {
+      targetQuote[key] = sourceQuote[key];
+    }
+  });
+  return targetQuote;
+}
+
+function scrollMyJobsToTop() {
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    document.getElementById('page4')?.scrollTo?.({ top: 0, left: 0, behavior: 'auto' });
+  });
+}
+
+function timestampFromLexiId(id) {
+  const text = String(id || '');
+  if (text.length <= 8) return 0;
+  const parsed = parseInt(text.slice(8), 36);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function docAddedTime(doc = {}) {
+  const created = doc.createdAt || doc.created_at || '';
+  const parsed = created ? Date.parse(created) : 0;
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  const idTime = timestampFromLexiId(doc.id || doc.local_id);
+  if (idTime > 0) return idTime;
+  const docDate = doc.date || doc.quote?.date || '';
+  const dateParsed = docDate ? Date.parse(docDate) : 0;
+  return Number.isFinite(dateParsed) ? dateParsed : 0;
+}
+
+function docDocumentTime(doc = {}) {
+  const value = doc.date || doc.quote?.date || '';
+  const parsed = value ? Date.parse(value) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function docJobTime(doc = {}) {
+  const value = doc.jobStartDate || doc.jobCompletedDate || '';
+  const parsed = value ? Date.parse(value) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 /* ===== SIGNATURE CANVAS ===== */
@@ -3646,7 +3898,7 @@ function setupPage4() {
 
   // Quick Quote banner — goes straight to a blank quote form, one tap
   document.getElementById('quickQuoteBtn')?.addEventListener('click', () => {
-    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (!canUseMainApp()) { requireSetupGuard(); return; }
     if (quietSeasonGuard()) return;
     prepareNewQuote();
     showPage('page3');
@@ -3774,11 +4026,24 @@ function refreshSavedDocs() {
   const sel    = document.getElementById('savedFilterSelect');
   const filter = sel ? sel.value : 'all';
   const sortSel = document.getElementById('savedSortSelect');
-  const sort   = sortSel ? sortSel.value : 'date-newest';
+  const sort   = sortSel ? sortSel.value : 'added-newest';
   const container = document.getElementById('savedDocsList');
   const empty     = document.getElementById('savedDocsEmpty');
 
   let docs = [...state.saved];
+  let repairedDocs = false;
+  docs.forEach(doc => {
+    const beforeRef = doc.ref || doc.quote?.ref || '';
+    const beforeDate = doc.date || doc.quote?.date || '';
+    ensureDocumentRefAndDate(doc);
+    if ((doc.ref || doc.quote?.ref || '') !== beforeRef || (doc.date || doc.quote?.date || '') !== beforeDate) {
+      repairedDocs = true;
+    }
+  });
+  if (repairedDocs) {
+    save();
+    queueSavedDocsSync(true);
+  }
   if      (filter === 'Estimate') docs = docs.filter(d => d.type === 'Estimate');
   else if (filter === 'Quote')    docs = docs.filter(d => d.type === 'Quote');
   else if (filter === 'invoiced') docs = docs.filter(d => d.invoiceSent && !d.paid);
@@ -3818,7 +4083,12 @@ function refreshSavedDocs() {
         String(quote.custPhone || '').toLowerCase().includes(q);
     });
   }
-  standaloneCustomers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  standaloneCustomers.sort((a, b) => {
+    if (sort === 'added-oldest') return (a.updatedAt || '').localeCompare(b.updatedAt || '');
+    if (sort === 'name-az') return (a.name || '').localeCompare(b.name || '');
+    if (sort === 'name-za') return (b.name || '').localeCompare(a.name || '');
+    return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+  });
 
   // Sort
   const sortKey = d => {
@@ -3831,18 +4101,28 @@ function refreshSavedDocs() {
     docs.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
   } else if (sort === 'name-za') {
     docs.sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
-  } else if (sort === 'date-oldest') {
-    docs.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  } else if (sort === 'next-job') {
-    // Accepted jobs with start dates first (soonest), then no-start-date docs at end
+  } else if (sort === 'added-oldest') {
+    docs.sort((a, b) => docAddedTime(a) - docAddedTime(b));
+  } else if (sort === 'document-newest' || sort === 'date-newest') {
+    docs.sort((a, b) => docDocumentTime(b) - docDocumentTime(a));
+  } else if (sort === 'document-oldest' || sort === 'date-oldest') {
+    docs.sort((a, b) => docDocumentTime(a) - docDocumentTime(b));
+  } else if (sort === 'job-soonest' || sort === 'next-job') {
+    // Jobs with start/completion dates first (soonest), then no-date docs at end
     docs.sort((a, b) => {
-      const aDate = (a.jobAccepted && a.jobStartDate) ? a.jobStartDate : '9999';
-      const bDate = (b.jobAccepted && b.jobStartDate) ? b.jobStartDate : '9999';
-      return aDate.localeCompare(bDate);
+      const aTime = docJobTime(a) || Number.MAX_SAFE_INTEGER;
+      const bTime = docJobTime(b) || Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    });
+  } else if (sort === 'job-latest') {
+    docs.sort((a, b) => {
+      const aTime = docJobTime(a) || -1;
+      const bTime = docJobTime(b) || -1;
+      return bTime - aTime;
     });
   } else {
-    // date-newest (default): newest date first
-    docs.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    // added-newest (default): newest entry first
+    docs.sort((a, b) => docAddedTime(b) - docAddedTime(a));
   }
 
   // Remove all doc cards but keep the empty-state element in the DOM
@@ -3889,6 +4169,8 @@ function refreshSavedDocs() {
   docs.forEach(doc => {
     const card = document.createElement('div');
     const docType = doc.type || (doc.quote && doc.quote.type) || 'Estimate';
+    const displayRef = doc.ref || doc.quote?.ref || '';
+    const displayDate = doc.date || doc.quote?.date || '';
     const isOverdue = !doc.paid && doc.invoiceSent && doc.invoiceDueDate && todayStr() > doc.invoiceDueDate;
     const statusBadge = doc.paid ? 'paid' : isOverdue ? 'overdue' : doc.invoiceSent ? 'invoiced' : docType.toLowerCase();
     card.className = `saved-doc-card status-${statusBadge}`;
@@ -3902,7 +4184,7 @@ function refreshSavedDocs() {
       <div class="saved-doc-header">
         <div>
           <span class="saved-doc-name">${esc(buildCustName(doc.quote || {}) || doc.custName || 'Unknown Customer')}</span>
-          <div class="saved-doc-ref">${esc(doc.ref || '')} &bull; ${formatDate(doc.date)}</div>
+          <div class="saved-doc-ref">${esc(displayRef)} &bull; ${formatDate(displayDate)}</div>
         </div>
         <div style="text-align:right">
           <div class="saved-doc-total">${fmtPrice(doc.total || 0)}</div>
@@ -4525,6 +4807,7 @@ function setupModals() {
     sortPaymentsByDate(doc.payments);
     recalcDocPayments(doc);
     save();
+    queueSavedDocsSync(true);
     refreshSavedDocs();
     renderEditPaymentsList(doc);
     document.getElementById('epAddAmount').value = '';
@@ -4546,6 +4829,7 @@ function setupModals() {
     sortPaymentsByDate(doc.payments);
     recalcDocPayments(doc);
     save();
+    queueSavedDocsSync(true);
     refreshSavedDocs();
     document.getElementById('markPaidModal').style.display = 'none';
     // Return to customer dashboard if it was open when Money In was triggered
@@ -5053,6 +5337,7 @@ function renderEditPaymentsList(doc) {
       doc.payments.splice(idx, 1);
       recalcDocPayments(doc);
       save();
+      queueSavedDocsSync(true);
       refreshSavedDocs();
       renderEditPaymentsList(doc);
     });
@@ -5127,11 +5412,11 @@ function applyDocEdits(doc, data = {}) {
   if ('custFirstName' in data) q.custFirstName = data.custFirstName || '';
   if ('custLastName' in data) q.custLastName = data.custLastName || '';
   if ('ref' in data) {
-    q.ref = data.ref || '';
+    q.ref = data.ref || q.ref || doc.ref || doc.document_number || '';
     edited.ref = q.ref;
   }
   if ('date' in data) {
-    q.date = data.date || '';
+    q.date = data.date || q.date || doc.date || toSupabaseDate(doc.createdAt) || todayStr();
     edited.date = q.date;
   }
   if ('quoteNotes' in data) q.notes = data.quoteNotes || '';
@@ -5623,6 +5908,7 @@ function renderCustomerSelector(groups) {
 }
 
 function buildCustomerJobSection(d, jobNum = 0) {
+  ensureDocumentRefAndDate(d);
   const q = d.quote || {};
   // items may live in q.items or (legacy) d.items
   const items = (q.items && q.items.length ? q.items : null) || (d.items && d.items.length ? d.items : null) || [];
@@ -5930,6 +6216,7 @@ function renderSingleCustomerDashboard(group, groups) {
       }
     }
     save();
+    queueSavedDocsSync(true);
   });
 
   // Helper: date confirmed — hide prompt, show compact date wrap
@@ -5939,6 +6226,7 @@ function renderSingleCustomerDashboard(group, groups) {
     doc.jobCompleted      = true;
     doc.jobCompletedDate  = dateStr;
     save();
+    queueSavedDocsSync(true);
     const prompt   = body.querySelector(`.cdv-completed-prompt[data-doc-id="${docId}"]`);
     const cb       = body.querySelector(`.cdv-completed-cb[data-doc-id="${docId}"]`);
     const dateWrap = cb?.closest('.cdv-schedule-row')?.querySelector('.cdv-start-date-wrap');
@@ -5977,6 +6265,7 @@ function renderSingleCustomerDashboard(group, groups) {
       doc.jobCompletedDate = '';
     }
     save();
+    queueSavedDocsSync(true);
   });
 
   // "Today" button inside the completion prompt
@@ -6001,6 +6290,7 @@ function renderSingleCustomerDashboard(group, groups) {
     if (!doc) return;
     doc.jobStartDate = inp.value || '';
     save();
+    queueSavedDocsSync(true);
   });
 
   // Completed Date input (compact view) — save on change
@@ -6011,6 +6301,7 @@ function renderSingleCustomerDashboard(group, groups) {
     if (!doc) return;
     doc.jobCompletedDate = inp.value || '';
     save();
+    queueSavedDocsSync(true);
   });
 
 }
@@ -6854,6 +7145,7 @@ function persistJobDetailsForm() {
   const docId = activeJobDetailsDocId;
   const doc = state.saved.find(d => d.id === docId);
   if (!doc) return;
+  const previousQuote = { ...(doc.quote || {}) };
   const items = [];
   document.querySelectorAll('#jdeItemsList .jde-item-row').forEach(row => {
     const name  = (row.querySelector('.jde-item-name')?.value  || '').trim();
@@ -6863,8 +7155,10 @@ function persistJobDetailsForm() {
   const notes         = document.getElementById('jdeNotes')?.value || '';
   const totalOverride = parseFloat(document.getElementById('jdeTotalOverride')?.value) || 0;
   if (!doc.quote) doc.quote = {};
+  restoreCustomerFieldsFromDocQuote(doc.quote, previousQuote);
   doc.quote.items = items;
   doc.quote.notes = notes;
+  doc.updatedAt = new Date().toISOString();
   if (items.length > 0) {
     const subtotal  = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
     const discPct   = parseFloat(doc.quote.discount) || 0;
@@ -6876,6 +7170,7 @@ function persistJobDetailsForm() {
   }
   doc.custName = buildCustName(doc.quote);
   save();
+  queueSavedDocsSync(true);
   refreshSavedDocs();
 }
 
@@ -6897,6 +7192,7 @@ function saveJobDetails() {
   // Return to a live preview of the updated estimate/quote
   const html = buildDocHtml(doc, 'quote');
   openPreview(html, 'quote', docId);
+  scrollMyJobsToTop();
   showSavedPopup('Job details saved.');
 }
 
@@ -7071,6 +7367,7 @@ function buildQuoteDoc() {
 }
 
 function buildDocHtml(doc, docType, extra = {}) {
+  ensureDocumentRefAndDate(doc);
   const q  = doc.quote;
   const co = doc.company || state.company;
 
@@ -7090,10 +7387,10 @@ function buildDocHtml(doc, docType, extra = {}) {
 
   // ── Doc labels ───────────────────────────────────────────────────
   let docLabel  = q.type || 'Estimate';
-  let refLabel  = q.ref  || '';
-  let dateLabel = q.date;
-  if (docType === 'invoice') { docLabel = 'Invoice'; refLabel = extra.invRef||''; dateLabel = extra.invDate||q.date; }
-  if (docType === 'receipt') { docLabel = 'Receipt'; refLabel = extra.recRef||doc.receiptRef||''; dateLabel = extra.date||q.date; }
+  let refLabel  = q.ref || doc.ref || doc.document_number || '';
+  let dateLabel = q.date || doc.date || toSupabaseDate(doc.createdAt) || todayStr();
+  if (docType === 'invoice') { docLabel = 'Invoice'; refLabel = extra.invRef || doc.invoiceRef || doc.ref || q.ref || ''; dateLabel = extra.invDate || q.date || doc.date || todayStr(); }
+  if (docType === 'receipt') { docLabel = 'Receipt'; refLabel = extra.recRef || doc.receiptRef || doc.ref || q.ref || ''; dateLabel = extra.date || q.date || doc.date || todayStr(); }
 
   const isQuote = (docType !== 'invoice' && docType !== 'receipt');
 
@@ -8787,7 +9084,7 @@ function checkSeasonalPrompt() {
 function setupChaseAndPause() {
   // Chase payments menu
   document.getElementById('menuChasePayments')?.addEventListener('click', () => {
-    if (!hasRequiredSetup()) { requireSetupGuard(); return; }
+    if (!canUseMainApp()) { requireSetupGuard(); return; }
     closeMenu();
     setTimeout(openChasePaymentsModal, 180);
   });

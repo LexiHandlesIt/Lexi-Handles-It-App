@@ -94,12 +94,9 @@ body {
   margin-bottom: 10px;
 }
 .auth-trial {
-  background: var(--walnut-tint);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--walnut-d);
+  color: var(--terra);
   font-weight: 800;
-  padding: 10px 12px;
+  padding: 0;
   margin-bottom: 16px;
 }
 .auth-tabs {
@@ -220,19 +217,25 @@ body {
   background: var(--white);
   color: var(--charcoal);
   font: inherit;
-  font-weight: 800;
+  font-weight: 400;
   cursor: pointer;
 }
-.auth-google-btn span {
+.auth-google-logo {
   width: 24px;
   height: 24px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--gold-light);
-  color: var(--gold);
-  font-weight: 900;
+  flex: 0 0 auto;
+}
+
+.trial-promise {
+  color: var(--terra);
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 4px 0 8px;
+}
+
+.trial-promise strong,
+.trial-promise span {
+  display: block;
 }
 @media (max-width: 420px) {
   .auth-card { padding: 18px; }
@@ -6023,129 +6026,149 @@ input[type="text"].sig-text-input:focus {
 /* Small-phone resilience: keep onboarding controls visible and usable. */
 @media (max-width: 420px) {
   .ob-screen {
-    padding: 4px;
+    align-items: flex-start;
+    padding: 6px;
+    overflow-y: auto;
   }
 
   .ob-card {
-    height: calc(100dvh - 8px);
+    height: auto;
+    min-height: 0;
+    max-height: none;
     border-radius: 16px;
-    gap: 6px;
-    padding: 12px;
+    gap: 12px;
+    padding: 14px;
+    overflow: visible;
   }
 
   .ob-logo-pair {
-    gap: 4px;
-    margin-bottom: 5px;
+    gap: 5px;
+    margin-bottom: 8px;
     max-width: 100%;
     overflow: hidden;
   }
 
   .ob-logo-pair .ob-logo-img {
-    height: 27px;
-    max-width: 42%;
+    height: 34px;
+    max-width: 44%;
   }
 
   .ob-logo-pair .ob-strap-img {
-    height: 28px;
-    max-width: 56%;
+    height: 32px;
+    max-width: 54%;
   }
 
   .ob-intro {
-    font-size: 0.76rem;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    margin-bottom: 8px;
+  }
+
+  .trial-promise {
+    font-size: 0.86rem;
     line-height: 1.35;
+    padding: 9px 10px;
+    margin-bottom: 4px;
   }
 
   .ob-middle {
-    grid-template-columns: minmax(0, 0.66fr) minmax(86px, 0.34fr);
-    gap: 4px;
-    overflow: hidden;
+    grid-template-columns: minmax(0, 1fr) minmax(96px, 0.38fr);
+    gap: 8px;
+    align-items: start;
+    overflow: visible;
   }
 
   .ob-left {
     display: flex;
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
     flex-direction: column;
   }
 
   .ob-steps {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    gap: 7px;
-    margin-bottom: 6px;
-    padding: 9px;
-    overscroll-behavior: contain;
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 12px;
   }
 
   .ob-step {
-    gap: 7px;
+    gap: 9px;
   }
 
   .ob-num {
-    width: 28px;
-    height: 28px;
-    font-size: 0.88rem;
+    width: 31px;
+    height: 31px;
+    font-size: 0.95rem;
   }
 
   .ob-step-text strong {
-    font-size: 0.78rem;
+    font-size: 0.9rem;
     line-height: 1.25;
   }
 
   .ob-step-text span {
-    font-size: 0.7rem;
-    line-height: 1.3;
+    font-size: 0.8rem;
+    line-height: 1.35;
   }
 
   .ob-footer {
     flex: 0 0 auto;
-    padding-top: 2px;
+    padding-top: 0;
     background: #F5F0E8;
   }
 
   .ob-referral {
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
 
   .ob-referral-select,
   .ob-start-btn {
-    min-height: 38px;
-    padding-top: 8px;
-    padding-bottom: 8px;
-    font-size: 0.78rem;
+    min-height: 42px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-size: 0.9rem;
   }
 
   .ob-portrait {
-    top: 12px;
-    right: -54px;
-    width: calc(100% + 105px);
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 150%;
+    max-width: none;
+    margin-left: -18px;
   }
 }
 
 @media (max-width: 360px), (max-height: 700px) {
   .ob-card {
-    padding: 9px;
+    padding: 10px;
+    gap: 8px;
   }
 
   .ob-intro {
-    font-size: 0.7rem;
-    line-height: 1.28;
+    font-size: 0.86rem;
+    line-height: 1.35;
   }
 
   .ob-steps {
-    gap: 5px;
-    padding: 7px;
+    gap: 7px;
+    padding: 9px;
+  }
+
+  .ob-step-text strong {
+    font-size: 0.82rem;
   }
 
   .ob-step-text span {
-    font-size: 0.66rem;
+    font-size: 0.73rem;
   }
 
   .ob-portrait {
-    top: 8px;
-    right: -42px;
-    width: calc(100% + 82px);
+    width: 138%;
+    margin-left: -10px;
   }
 }
 
