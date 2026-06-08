@@ -4232,6 +4232,7 @@ input[type="text"].sig-text-input:focus {
   animation: pt-spin 0.7s linear infinite;
 }
 @keyframes pt-spin { to { transform: rotate(360deg); } }
+@keyframes spin { to { transform: rotate(360deg); } }
 .pt-error {
   background: #fff0ee;
   border: 1.5px solid #f5c6c0;
@@ -5982,6 +5983,7 @@ input[type="text"].sig-text-input:focus {
   transition: all 0.15s;
 }
 .jca-open:hover { border-color: var(--sage); color: var(--sage); background: #eef4ea; }
+.jca-badge { flex-shrink: 0; cursor: pointer; }
 .jca-primary {
   flex: 1;
   border: none;

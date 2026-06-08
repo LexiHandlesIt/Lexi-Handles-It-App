@@ -145,7 +145,7 @@ function sortPaymentsByDate(payments) {
 
 // Returns doc.payments array, synthesising one entry from legacy paidAmount/paidDate if needed
 function getDocPayments(doc) {
-  // If doc.payments array exists and is authoritative, always use it (even if empty — empty means no payments)
+  // If doc.payments array exists and is authoritative, always use it (even if empty -empty means no payments)
   if (Array.isArray(doc.payments)) return doc.payments;
   // Legacy docs that only have paidAmount scalar
   if (doc.paidAmount > 0) return [{ amount: doc.paidAmount, date: doc.paidDate || todayStr() }];
@@ -231,7 +231,7 @@ function personaliseText() {
 
 /* ===== INIT ===== */
 document.addEventListener('DOMContentLoaded', async () => {
-  // About You — show more toggle
+  // About You -show more toggle
   const aboutYouMoreBtn = document.getElementById('aboutYouMoreBtn');
   const aboutYouExtra   = document.getElementById('aboutYouExtra');
   if (aboutYouMoreBtn && aboutYouExtra) {
@@ -366,6 +366,8 @@ async function initialiseAuth() {
   lexiAuthSession = data?.session || null;
   if (!lexiAuthSession) {
     if (authScreen) authScreen.style.display = 'flex';
+    const overlay = document.getElementById('appLoadingOverlay');
+    if (overlay) overlay.style.display = 'none';
     return false;
   }
   await ensureSupabaseProfile(lexiAuthSession.user);
@@ -771,7 +773,13 @@ function upsertLocalCustomer(q = {}, saveAfter = true) {
   };
   const key = customerLocalKey(quote);
   const name = buildCustName(quote) || 'Customer';
-  const existingIdx = state.customers.findIndex(customer => customer.key === key);
+  let existingIdx = state.customers.findIndex(customer => customer.key === key);
+  // Fallback: if key changed (e.g. email added later), find by name to avoid duplicating
+  if (existingIdx === -1 && name && name !== 'Customer') {
+    existingIdx = state.customers.findIndex(customer =>
+      (customer.name || '').toLowerCase() === name.toLowerCase()
+    );
+  }
   const row = {
     id: existingIdx > -1 ? state.customers[existingIdx].id : uid(),
     supabaseId: q.supabaseId || q.id || (existingIdx > -1 ? state.customers[existingIdx].supabaseId : '') || '',
@@ -962,7 +970,20 @@ function savedDocRowToDoc(row = {}) {
   doc.type = doc.type || row.type || row.document_type || doc.quote?.type || 'Estimate';
   doc.ref = doc.ref || row.document_number || row.ref || row.reference || doc.quote?.ref || '';
   if (doc.quote && !doc.quote.ref && doc.ref) doc.quote.ref = doc.ref;
-  doc.custName = doc.custName || row.customer_name || '';
+  doc.custName = doc.custName || buildCustName(doc.quote || {}) || row.customer_name || '';
+  // If the stored quote has no customer name but the row's customer_name column does, rescue it
+  if (doc.custName && doc.quote && !doc.quote.custFirstName && !doc.quote.custLastName) {
+    const parts = doc.custName.includes(',')
+      ? doc.custName.split(',').map(s => s.trim())
+      : doc.custName.split(' ');
+    if (parts.length >= 2 && doc.custName.includes(',')) {
+      doc.quote.custLastName  = parts[0] || '';
+      doc.quote.custFirstName = parts[1] || '';
+    } else {
+      doc.quote.custFirstName = parts[0] || '';
+      doc.quote.custLastName  = parts.slice(1).join(' ') || '';
+    }
+  }
   if ((!doc.quote || !customerHasUsefulData(doc.quote)) && row.customer_id) {
     const linkedCustomer = (state.customers || []).find(customer => customer.supabaseId === row.customer_id);
     if (linkedCustomer?.quote) {
@@ -976,12 +997,40 @@ function savedDocRowToDoc(row = {}) {
   return doc;
 }
 
+const CUST_FIELDS = ['custTitle','custFirstName','custLastName','custAddr','custPostcode','custPhone','custEmail'];
+
+// Supabase is the source of truth.
+// localDocs  = from localStorage (fast startup cache -may be stale)
+// remoteDocs = from Supabase      (authoritative)
+// Strategy:
+//   1. Start with localDocs so any NEW docs not yet synced are included.
+//   2. Remote then overwrites every shared ID -Supabase always wins.
+//   3. Customer fields are rescued from local only if remote has them empty
+//      (covers the brief window between creation and first sync completing).
 function mergeSavedDocs(localDocs = [], remoteDocs = []) {
   const byId = new Map();
-  [...remoteDocs, ...localDocs].forEach(doc => {
+
+  // Pass 1: seed with local (cache) -gives us docs created but not yet synced
+  localDocs.forEach(doc => {
     if (!doc?.id) return;
-    byId.set(doc.id, { ...(byId.get(doc.id) || {}), ...doc });
+    byId.set(doc.id, doc);
   });
+
+  // Pass 2: remote (Supabase) overwrites -it is authoritative for every doc it knows about
+  remoteDocs.forEach(doc => {
+    if (!doc?.id) return;
+    const local = byId.get(doc.id) || {};
+    const localQ  = local.quote  || {};
+    const remoteQ = doc.quote    || {};
+    // Remote wins on all fields; local only rescues customer fields remote has empty
+    const mergedQ = { ...localQ, ...remoteQ };
+    CUST_FIELDS.forEach(field => {
+      if (!mergedQ[field] && localQ[field]) mergedQ[field] = localQ[field];
+    });
+    const mergedName = buildCustName(mergedQ) || doc.custName || local.custName || '';
+    byId.set(doc.id, { ...local, ...doc, quote: mergedQ, custName: mergedName });
+  });
+
   return [...byId.values()].sort((a, b) => (b.date || b.quote?.date || '').localeCompare(a.date || a.quote?.date || ''));
 }
 
@@ -1032,6 +1081,7 @@ function savedDocStandardRow(userId, doc = {}, customerId = null) {
     user_id: userId,
     local_id: doc.id || uid(),
     customer_id: customerId,
+    customer_name: buildCustName(q) || doc.custName || '',
     document_type: docType,
     document_number: ref,
     status: getDocStatus(doc),
@@ -1213,34 +1263,68 @@ async function loadSavedDocsFromSupabase() {
   return false;
 }
 
+async function upsertSingleDocToSupabase(userId, doc, customerId) {
+  // Delete the existing row for this doc (by user_id + local_id) then insert fresh.
+  // This avoids needing a unique constraint and keeps each statement tiny.
+  const localId = doc.id;
+  if (!localId) return;
+  await lexiSupabase.from('documents').delete().eq('user_id', userId).eq('local_id', localId);
+  const candidates = savedDocInsertCandidates(userId, doc, customerId);
+  for (const row of candidates) {
+    const { error } = await lexiSupabase.from('documents').insert(row);
+    if (!error) return; // success
+    const msg = String(error.message || '');
+    if (/column|schema cache|relationship|violates/i.test(msg)) continue; // try next candidate
+    throw error; // real error
+  }
+}
+
 async function saveSavedDocsToSupabase() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
   const userId = lexiAuthSession.user.id;
-  const deleteResult = await lexiSupabase
+
+  // Safety gate: if ALL in-memory docs lack customer data, recover from localStorage
+  if (state.saved.length > 0) {
+    const docsWithNames = state.saved.filter(d => buildCustName(d.quote || '') || d.custName);
+    if (docsWithNames.length === 0) {
+      const localBackup = lsGet(KEY_SAVED) || [];
+      if (localBackup.some(d => buildCustName(d.quote || '') || d.custName)) {
+        state.saved = mergeSavedDocs(localBackup, state.saved);
+        console.warn('saveSavedDocsToSupabase: recovered customer names from localStorage before sync');
+      }
+    }
+  }
+
+  // Step 1: find which remote rows should be deleted (docs that no longer exist locally)
+  const currentLocalIds = new Set((state.saved || []).map(d => d.id).filter(Boolean));
+  const { data: remoteRows } = await lexiSupabase
     .from('documents')
-    .delete()
+    .select('local_id')
     .eq('user_id', userId);
-  if (deleteResult.error) throw deleteResult.error;
+  const toDelete = (remoteRows || []).map(r => r.local_id).filter(lid => lid && !currentLocalIds.has(lid));
+  for (const lid of toDelete) {
+    await lexiSupabase.from('documents').delete().eq('user_id', userId).eq('local_id', lid);
+  }
 
   if (!state.saved.length) return;
 
+  // Step 2: upsert each doc individually (small statements = no timeout)
   const docsWithCustomers = [];
-  for (const doc of state.saved || []) {
-    docsWithCustomers.push({
-      doc,
-      customerId: await getSupabaseCustomerId(doc.quote || {})
-    });
+  for (const doc of state.saved) {
+    const customerId = await getSupabaseCustomerId(doc.quote || {});
+    docsWithCustomers.push({ doc, customerId });
+    try {
+      await upsertSingleDocToSupabase(userId, doc, customerId);
+    } catch (err) {
+      const message = String(err?.message || '');
+      if (/document_data|schema cache|column/i.test(message)) {
+        throw new Error('Documents table needs a document_data JSONB column before Lexi can sync saved jobs.');
+      }
+      throw err;
+    }
   }
 
-  const rows = docsWithCustomers.map(({ doc, customerId }) => savedDocStandardRow(userId, doc, customerId));
-  const result = await lexiSupabase.from('documents').insert(rows);
-  if (result.error) {
-    const message = String(result.error.message || '');
-    if (/document_data|schema cache|column/i.test(message)) {
-      throw new Error('Documents table needs a document_data JSONB column before Lexi can sync saved jobs.');
-    }
-    throw result.error;
-  }
+  // Step 3: sync job summaries
   try {
     await saveJobSummariesToSupabase(userId, docsWithCustomers);
     localStorage.removeItem('lexi_last_jobs_sync_error');
@@ -1266,20 +1350,30 @@ async function insertJobSummaryRows(rows) {
 
 async function saveJobSummariesToSupabase(userId, docsWithCustomers = []) {
   if (!lexiSupabase || !userId) return;
-  const deleteResult = await lexiSupabase
-    .from('jobs')
-    .delete()
-    .eq('user_id', userId);
-  if (deleteResult.error) throw deleteResult.error;
-
   if (!docsWithCustomers.length) return;
 
-  const candidateSets = [0, 1, 2, 3, 4].map(candidateIndex =>
-    docsWithCustomers
-      .map(({ doc, customerId }) => jobSummaryInsertCandidates(userId, doc, customerId)[candidateIndex])
-      .filter(Boolean)
-  );
-  await insertJobSummaryRows(candidateSets.filter(rows => rows.length));
+  // Upsert each job summary individually -no bulk delete to avoid statement timeouts
+  for (const { doc, customerId } of docsWithCustomers) {
+    const localId = doc.id;
+    if (!localId) continue;
+    // Remove the old row for this doc, then insert fresh
+    await lexiSupabase.from('jobs').delete().eq('user_id', userId).eq('local_id', localId);
+    const candidates = jobSummaryInsertCandidates(userId, doc, customerId);
+    for (const row of candidates) {
+      const { error } = await lexiSupabase.from('jobs').insert(row);
+      if (!error) break; // success
+      const msg = String(error?.message || '');
+      if (!/column|schema cache|relationship|foreign key|violates/i.test(msg)) throw error;
+    }
+  }
+
+  // Clean up job summary rows for docs that no longer exist locally
+  const currentLocalIds = new Set(docsWithCustomers.map(d => d.doc.id).filter(Boolean));
+  const { data: remoteJobs } = await lexiSupabase.from('jobs').select('local_id').eq('user_id', userId);
+  const toDelete = (remoteJobs || []).map(r => r.local_id).filter(lid => lid && !currentLocalIds.has(lid));
+  for (const lid of toDelete) {
+    await lexiSupabase.from('jobs').delete().eq('user_id', userId).eq('local_id', lid);
+  }
 }
 
 function queueSavedDocsSync(showError = false) {
@@ -1312,20 +1406,62 @@ window.lexiCheckDocumentSync = async function lexiCheckDocumentSync() {
 };
 
 /* ===== STORAGE ===== */
+// Strip bulky fields from docs before writing to localStorage.
+// company is already stored separately in KEY_CO and is restored on load.
+// This prevents localStorage from filling up when company has a logo (base64 image).
+function slimDocForStorage(doc) {
+  // Strip bulky fields: company (stored separately), HTML cache, and photos
+  // (base64 images can be hundreds of KB each — Supabase holds the full data)
+  // eslint-disable-next-line no-unused-vars
+  const { company, _html, photos, ...rest } = doc;
+  // Also strip photos from nested quote object if present
+  if (rest.quote && rest.quote.photos) {
+    const { photos: _p, ...slimQ } = rest.quote;
+    rest.quote = slimQ;
+  }
+  return rest;
+}
+
 function save() {
   try {
     ls(KEY_CO,    state.company);
     ls(KEY_PL,    state.priceList);
-    ls(KEY_SAVED, state.saved);
+    ls(KEY_SAVED, (state.saved || []).map(slimDocForStorage));
     ls(KEY_CUSTOMERS, state.customers);
     queueSavedDocsSync();
-  } catch(e) { toast('Storage full. Some data may not have saved.', 'error'); }
+  } catch(e) {
+    // localStorage full — clear the saved docs cache (Supabase holds everything)
+    // then retry with just company + price list + customers
+    console.warn('localStorage full, clearing saved docs cache and retrying:', e);
+    try {
+      localStorage.removeItem(KEY_SAVED);
+      ls(KEY_CO,    state.company);
+      ls(KEY_PL,    state.priceList);
+      ls(KEY_CUSTOMERS, state.customers);
+    } catch(e2) {
+      // Still full — only essential data matters; Supabase has everything
+      console.error('localStorage save failed even after clearing cache:', e2);
+    }
+  }
 }
 
 function loadFromStorage() {
+  // One-time cleanup: if old saved docs are bloated (company embedded in every doc),
+  // clear the cache now so it stops filling localStorage. Supabase will reload everything.
+  try {
+    const raw = localStorage.getItem(KEY_SAVED);
+    if (raw && raw.length > 200000) {
+      // Over ~200KB of saved docs in localStorage — clear it to free up space
+      localStorage.removeItem(KEY_SAVED);
+      console.warn('loadFromStorage: cleared oversized saved docs from localStorage — Supabase will restore them');
+    }
+  } catch(e) { /* ignore */ }
+
   state.company   = lsGet(KEY_CO)    || state.company;
   state.priceList = lsGet(KEY_PL)    || [];
-  state.saved     = lsGet(KEY_SAVED) || [];
+  // Restore company snapshot into each doc (it was stripped on save to save space)
+  const rawSaved  = lsGet(KEY_SAVED) || [];
+  state.saved     = rawSaved.map(doc => ({ company: { ...state.company }, ...doc }));
   state.customers = lsGet(KEY_CUSTOMERS) || [];
   // Migrate: ensure every price list item has an id
   let needsSave = false;
@@ -1434,6 +1570,9 @@ function showPage(pageId) {
     pg.classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+  // Hide loading overlay once the correct page is shown
+  const overlay = document.getElementById('appLoadingOverlay');
+  if (overlay) overlay.style.display = 'none';
 
   // Update page1 title if business already set up
   if (pageId === 'page1') {
@@ -1661,7 +1800,7 @@ function setupNavigation() {
     setTimeout(openSendChoiceModal, 180);
   });
 
-  // Qualifications are now shared from within Send My Business Info — no separate menu item needed
+  // Qualifications are now shared from within Send My Business Info -no separate menu item needed
 
   document.getElementById('menuShareLexi')?.addEventListener('click', () => {
     if (!canUseMainApp()) { requireSetupGuard(); return; }
@@ -1803,7 +1942,7 @@ async function submitReferral(source) {
   } catch {}
 }
 
-/* ===== PAGE 1 — BUSINESS SETUP ===== */
+/* ===== PAGE 1 -BUSINESS SETUP ===== */
 function setupPage1() {
   // Logo upload
   const logoArea   = document.getElementById('logoUploadArea');
@@ -2023,7 +2162,7 @@ function handleQRUpload(e) {
       toast('QR saved on this device. Supabase sync needs another try.', 'error');
     });
     returnToPendingQrView();
-    showSavedPopup('QR code saved — it will appear on all your documents.', null, 3500);
+    showSavedPopup('QR code saved -it will appear on all your documents.', null, 3500);
   };
   reader.readAsDataURL(file);
 }
@@ -2342,7 +2481,7 @@ function rgbToHsv(r, g, b) {
 function setupColourPicker(name, hexId, defaultVal) {
   const hexEl = document.getElementById(hexId);
   if (!hexEl) return;
-  // Always use our custom picker — same UI on every device
+  // Always use our custom picker -same UI on every device
   hexEl.addEventListener('pointerdown', e => { e.preventDefault(); openCustomColorPicker(hexEl); });
   hexEl.addEventListener('keydown', e => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCustomColorPicker(hexEl); }
@@ -2496,7 +2635,7 @@ function openCustomColorPicker(inputEl) {
   });
   overlay.addEventListener('pointerdown', e => { if (e.target === overlay) { inputEl.value = startHex; updateColourPreview(); overlay.remove(); } });
 
-  // Init — wait one frame for layout so offsetWidth is accurate
+  // Init -wait one frame for layout so offsetWidth is accurate
   requestAnimationFrame(() => {
     sizeCanvases();
     drawSV();
@@ -2567,7 +2706,7 @@ function extractLogoColours() {
     try { data = ctx.getImageData(0, 0, canvas.width, canvas.height).data; }
     catch (e) { return; } // tainted canvas safety
 
-    // Tally colours — quantize RGB to 32 levels per channel
+    // Tally colours -quantize RGB to 32 levels per channel
     const tally = {};
     for (let i = 0; i < data.length; i += 4) {
       if (data[i + 3] < 128) continue;                         // skip transparent
@@ -2621,7 +2760,7 @@ function extractLogoColours() {
   img.src = logo;
 }
 
-/* ===== PAGE 2 — PRICE LIST ===== */
+/* ===== PAGE 2 -PRICE LIST ===== */
 function setupPage2() {
   // CSV upload
   const csvZone = document.getElementById('csvUploadZone');
@@ -2675,7 +2814,7 @@ function setupPage2() {
           wrap.querySelector('.paste-img-clear').addEventListener('click', () => wrap.remove());
         };
         reader.readAsDataURL(file);
-        return; // image handled — stop checking items
+        return; // image handled -stop checking items
       }
     }
   });
@@ -2702,7 +2841,7 @@ function setupPage2() {
   document.getElementById('jobName').addEventListener('keydown', e => { if (e.key==='Enter') addIndividualJob(); });
   document.getElementById('jobPrice').addEventListener('keydown', e => { if (e.key==='Enter') addIndividualJob(); });
 
-  // Search — skip rebuild if an inline edit is active
+  // Search -skip rebuild if an inline edit is active
   document.getElementById('priceListSearch').addEventListener('input', () => {
     if (!editingJobId) refreshPriceList();
   });
@@ -2713,7 +2852,7 @@ function setupPage2() {
     document.getElementById('deleteSelectedBtn').style.display = e.target.checked ? 'flex' : 'none';
   });
 
-  // Delete selected — no confirm() as it is unreliable on mobile
+  // Delete selected -no confirm() as it is unreliable on mobile
   document.getElementById('deleteSelectedBtn').addEventListener('click', () => {
     const checked = [...document.querySelectorAll('.job-check:checked')].map(cb => cb.dataset.id);
     if (!checked.length) return;
@@ -2957,7 +3096,7 @@ function deleteJob(id) {
   toast('Job deleted.');
 }
 
-/* ===== PAGE 3 — CUSTOMER DETAILS ===== */
+/* ===== PAGE 3 -CUSTOMER DETAILS ===== */
 function setupPage3() {
   // Expand/collapse extra customer fields
   document.getElementById('custMoreToggle')?.addEventListener('click', () => {
@@ -2990,7 +3129,7 @@ function syncCustMoreToggle() {
   if (label)   label.textContent = hasExtra ? 'Show less' : 'Add more details';
 }
 
-/* ===== PAGE JOBS — ADD JOBS ===== */
+/* ===== PAGE JOBS -ADD JOBS ===== */
 function setupPageJobs() {
   // Job picker search
   document.getElementById('jobPickerSearch').addEventListener('input', () => updateJobPicker());
@@ -3017,7 +3156,7 @@ function setupPageJobs() {
   });
 }
 
-/* ===== PAGE COMPLETION — TOTALS, SIGNATURE & SAVE ===== */
+/* ===== PAGE COMPLETION -TOTALS, SIGNATURE & SAVE ===== */
 function setupPageCompletion() {
   // Doc type radio checkboxes
   document.getElementById('dtEstimate').addEventListener('change', () => setDocType('Estimate'));
@@ -3191,7 +3330,7 @@ function defaultAuthSig() {
   return first || last || state.company.businessName || '';
 }
 
-/* Formats any "First Last" string into "F.Last" — used when the name field changes */
+/* Formats any "First Last" string into "F.Last" -used when the name field changes */
 function formatSigFromName(name) {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
   if (parts.length < 2) return name || '';
@@ -3505,7 +3644,16 @@ function saveQuote() {
   }
 
   save();
-  queueSavedDocsSync(true);
+  // Sync immediately -don't rely on the debounced timer in case of a quick refresh
+  if (savedDocsSyncReady && lexiSupabase && lexiAuthSession?.user?.id) {
+    saveSavedDocsToSupabase().catch(err => {
+      console.warn('Save sync failed:', err);
+      localStorage.setItem('lexi_last_documents_sync_error', err?.message || String(err));
+      toast(`Saved here, but cloud sync failed: ${err?.message || 'check connection'}`, 'error', 8000);
+    });
+  } else {
+    queueSavedDocsSync(true);
+  }
   upsertLocalCustomer(q);
   queueCustomerSync(q, true);
   updateSavedBadge();
@@ -3513,7 +3661,7 @@ function saveQuote() {
   const popupLabel = isEditing ? "Changes saved. Nice one." : `${docType} saved. Another one sorted.`;
 
   if (returningFromTerms && activeCustomerGroup) {
-    // Came from Job Terms edit via customer dashboard — go back to dashboard
+    // Came from Job Terms edit via customer dashboard -go back to dashboard
     showSavedPopup(popupLabel, () => {
       try {
         const groups = buildCustomerGroups();
@@ -3737,7 +3885,7 @@ function matchVoiceToJob(transcript) {
   const matches = state.priceList.filter(j => j.name.toLowerCase().includes(t) || t.includes(j.name.toLowerCase()));
 
   if (matches.length === 1) {
-    // Exactly one match — add it directly
+    // Exactly one match -add it directly
     addJobToQuote(matches[0].id || matches[0].name);
     showVoiceBox(`Added: ${matches[0].name}`);
     setTimeout(() => document.getElementById('voiceBox')?.classList.add('hidden'), 2500);
@@ -3745,7 +3893,7 @@ function matchVoiceToJob(transcript) {
   }
 
   if (matches.length > 1) {
-    // Multiple matches — ask which one
+    // Multiple matches -ask which one
     document.getElementById('voiceBox')?.classList.add('hidden');
     const list = document.getElementById('voicePickList');
     list.innerHTML = '';
@@ -3764,7 +3912,7 @@ function matchVoiceToJob(transcript) {
     return;
   }
 
-  // No match — open the "not found" modal pre-filled with what was heard
+  // No match -open the "not found" modal pre-filled with what was heard
   document.getElementById('voiceBox')?.classList.add('hidden');
   setVal('vnfName', transcript);
   setVal('vnfPrice', '');
@@ -3920,7 +4068,7 @@ function setupNewJobPicker() {
   });
 }
 
-/* ===== PAGE 4 — SAVED DOCS ===== */
+/* ===== PAGE 4 -SAVED DOCS ===== */
 function setupPage4() {
   // Filter & Sort toggle
   document.getElementById('filterToggleBtn')?.addEventListener('click', () => {
@@ -3934,7 +4082,7 @@ function setupPage4() {
     if (label)   label.textContent = isOpen ? 'Filter & Sort' : 'Filter & Sort';
   });
 
-  // Quick Quote banner — goes straight to a blank quote form, one tap
+  // Quick Quote banner -goes straight to a blank quote form, one tap
   document.getElementById('quickQuoteBtn')?.addEventListener('click', () => {
     if (!canUseMainApp()) { requireSetupGuard(); return; }
     if (quietSeasonGuard()) return;
@@ -3988,18 +4136,19 @@ function renderAttentionWidget() {
       const days = Math.floor((new Date(today) - new Date(d.invoiceDueDate)) / 86400000);
       items.push({ docId: d.id, custName, ref, msg: `Invoice ${days}d overdue`, action: 'chase', color: '#c0392b' });
     } else if (!d.invoiceSent && !d.paid) {
-      const docDate = q.date || d.date;
+      const docDate = d.sentAt || d.sharedAt || null;
       const qType = (q.type || '').toLowerCase();
-      if ((qType === 'estimate' || qType === 'quote') && docDate) {
+      // Only nudge if the estimate was actually sent (acceptToken is created on send)
+      if ((qType === 'estimate' || qType === 'quote') && docDate && d.acceptToken) {
         const age = Math.floor((new Date(today) - new Date(docDate)) / 86400000);
         if (age >= 14) {
-          items.push({ docId: d.id, custName, ref, msg: `${qType === 'quote' ? 'Quote' : 'Estimate'} sent ${age} days ago — no reply`, action: 'send', color: '#e67e22' });
+          items.push({ docId: d.id, custName, ref, msg: `${qType === 'quote' ? 'Quote' : 'Estimate'} sent ${age} days ago - no reply`, action: 'send', color: '#e67e22' });
         }
       }
     }
   });
 
-  // Recurring customers — check if they're overdue for a visit
+  // Recurring customers -check if they're overdue for a visit
   const groups = buildCustomerGroups();
   const today2 = todayStr();
   groups.forEach(g => {
@@ -4105,11 +4254,17 @@ function refreshSavedDocs() {
       .map(d => customerLocalKey(d.quote || {}))
       .filter(Boolean)
   );
+  const savedCustomerNames = new Set(
+    (state.saved || [])
+      .map(d => (buildCustName(d.quote || '') || '').toLowerCase())
+      .filter(Boolean)
+  );
   let standaloneCustomers = filter === 'all'
     ? (state.customers || []).filter(customer => {
         const quote = customer.quote || {};
         const key = customer.key || customerLocalKey(quote);
-        return key && !savedCustomerKeys.has(key);
+        const name = (buildCustName(quote) || customer.name || '').toLowerCase();
+        return key && !savedCustomerKeys.has(key) && !savedCustomerNames.has(name);
       })
     : [];
   if (q) {
@@ -4227,7 +4382,6 @@ function refreshSavedDocs() {
         </div>
         <div style="text-align:right">
           <div class="saved-doc-total">${fmtPrice(doc.total || 0)}</div>
-          <button type="button" class="type-badge ${statusBadge}" data-badge-id="${doc.id}" data-badge-status="${statusBadge}">${statusLabel}</button>
         </div>
       </div>
       <div class="job-card-actions">
@@ -4238,8 +4392,9 @@ function refreshSavedDocs() {
             ? `<button type="button" class="jca-primary jca-paid" data-id="${doc.id}">View Receipt</button>`
             : (statusBadge === 'invoiced')
               ? `<button type="button" class="jca-primary jca-invoice" data-id="${doc.id}">Send Invoice</button>`
-              : `<button type="button" class="jca-primary jca-send" data-id="${doc.id}">Send ${statusLabel}</button>`
+              : `<button type="button" class="jca-primary jca-send" data-id="${doc.id}">Send</button>`
         }
+        <button type="button" class="type-badge ${statusBadge} jca-badge" data-badge-id="${doc.id}" data-badge-status="${statusBadge}">${statusLabel}</button>
       </div>
       <div class="saved-doc-payment-tally">
         <span class="sdpt-payment-info">
@@ -4287,7 +4442,7 @@ function exportDocsCSV(filter) {
     return;
   }
 
-  // CSV helper — wraps a value in quotes and escapes internal quotes
+  // CSV helper -wraps a value in quotes and escapes internal quotes
   const csv = v => {
     const s = String(v == null ? '' : v).replace(/"/g, '""');
     return `"${s}"`;
@@ -4488,7 +4643,7 @@ function setupModals() {
   });
   document.getElementById('custEditReceiptBtn')?.addEventListener('click', () => {
     document.getElementById('customerEditChoiceModal').style.display = 'none';
-    // Keep customer dashboard open — warning modal overlays on top; X returns to dashboard
+    // Keep customer dashboard open -warning modal overlays on top; X returns to dashboard
     const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
     if (docId) handleReceiptRequest(docId);
   });
@@ -4596,7 +4751,7 @@ function setupModals() {
     if (type === 'quote' && docId) {
       openEditChoice(docId);
     } else if (type === 'quote' && !docId) {
-      // New quote in progress — already on page3, nothing needed
+      // New quote in progress -already on page3, nothing needed
     }
   });
 
@@ -4678,7 +4833,7 @@ function setupModals() {
     openPreview(buildDocHtml(applyDocEdits(doc, quoteData), 'quote', quoteData), 'quote', doc.id || null);
   });
   document.getElementById('quoteSendBtn').addEventListener('click', () => {
-    // Always show preview first — user can Share or Edit from there
+    // Always show preview first -user can Share or Edit from there
     document.getElementById('quotePreviewBtn').click();
   });
 
@@ -4697,17 +4852,55 @@ function setupModals() {
       }
     }
     document.getElementById('quoteModal').style.display = 'none';
-    // Generate acceptance token and inject link into share message
-    if (activeDocId) {
-      const savedDoc = state.saved.find(d => d.id === activeDocId);
-      if (savedDoc) {
-        const baseMsg = quoteData.quoteNotes || '';
-        const shareMessage = buildAcceptanceMessage(savedDoc, baseMsg);
-        const custEmail = savedDoc.quote?.custEmail || savedDoc.custEmail || '';
-        sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), shareMessage, custEmail);
-      } else {
-        sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), quoteData.quoteNotes || '');
+
+    // Ensure the doc is saved so we can generate an acceptance token and use customer data
+    let sendDocRef = activeDocId;
+    if (!sendDocRef) {
+      // Draft send (from form) -auto-save first so we have an ID and can token-sign it
+      const newId = uid();
+      const q = editedDoc.quote || {};
+      const newDoc = {
+        id: newId,
+        quote: q,
+        company: { ...state.company },
+        custName: buildCustName(q),
+        total: editedDoc.total || calcTotal(q),
+        type: editedDoc.type || q.type || 'Estimate',
+        date: editedDoc.date || q.date || todayStr(),
+        ref: editedDoc.ref || q.ref || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        invoiceSent: false,
+        paid: false,
+        paidAmount: 0,
+        paidDate: '',
+        payments: []
+      };
+      state.saved.unshift(newDoc);
+      save();  // writes to localStorage (now slim -should always succeed)
+      upsertLocalCustomer(q);
+      sendDocRef = newId;
+      updateSavedBadge();
+      refreshSavedDocs();
+      // Sync immediately to Supabase -do NOT rely on the debounced queue
+      // so a quick refresh cannot lose the new document before it reaches the cloud
+      if (savedDocsSyncReady && lexiSupabase && lexiAuthSession?.user?.id) {
+        saveSavedDocsToSupabase().catch(err => {
+          console.warn('Auto-save sync failed:', err);
+          localStorage.setItem('lexi_last_documents_sync_error', err?.message || String(err));
+          toast(`Estimate saved here, but cloud sync failed: ${err?.message || 'check connection'}`, 'error', 8000);
+        });
       }
+    }
+
+    const savedDoc = state.saved.find(d => d.id === sendDocRef);
+    if (savedDoc) {
+      const baseMsg = quoteData.quoteNotes || '';
+      const shareMessage = buildAcceptanceMessage(savedDoc, baseMsg);
+      const custEmail = savedDoc.quote?.custEmail || savedDoc.custEmail || '';
+      const custPhone = savedDoc.quote?.custPhone || '';
+      const docTypeStr = savedDoc.quote?.type || savedDoc.type || 'Estimate';
+      sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || savedDoc.ref || 'quote'), shareMessage, custEmail, custPhone, docTypeStr);
     } else {
       sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), quoteData.quoteNotes || '');
     }
@@ -4782,7 +4975,7 @@ function setupModals() {
     toast('Receipt sent!', 'success');
   }
 
-  // Quote modal — Edit opens full edit menu if in dashboard context, otherwise page3 builder
+  // Quote modal -Edit opens full edit menu if in dashboard context, otherwise page3 builder
   document.getElementById('quoteEditBtn')?.addEventListener('click', () => {
     document.getElementById('quoteModal').style.display = 'none';
     if (activeCustomerGroup && activeDocId) {
@@ -4809,7 +5002,7 @@ function setupModals() {
     showSavedPopup("Done. I've got it.");
   });
 
-  // Invoice modal — Edit opens full edit menu if in dashboard context, otherwise quote modal
+  // Invoice modal -Edit opens full edit menu if in dashboard context, otherwise quote modal
   document.getElementById('invEditBtn')?.addEventListener('click', () => {
     document.getElementById('invoiceModal').style.display = 'none';
     if (activeCustomerGroup && activeDocId) {
@@ -4836,7 +5029,7 @@ function setupModals() {
     showSavedPopup("Invoice saved. Nice one.");
   });
 
-  // Receipt modal — Edit (open quoteModal for same doc) and Save (save without sending)
+  // Receipt modal -Edit (open quoteModal for same doc) and Save (save without sending)
   document.getElementById('recEditBtn')?.addEventListener('click', () => {
     document.getElementById('receiptModal').style.display = 'none';
     if (activeDocId) openReceiptModal(activeDocId);
@@ -4879,7 +5072,7 @@ function setupModals() {
     toast('Payment added.', 'success');
   });
 
-  // Money In — push new payment to payments array
+  // Money In -push new payment to payments array
   document.getElementById('confirmMarkPaidBtn').addEventListener('click', () => {
     const doc = state.saved.find(d => d.id === activeDocId);
     if (!doc) return;
@@ -4991,7 +5184,7 @@ function openClientPicker(mode) {
         document.getElementById('clientPickerModal').style.display = 'none';
         openInvoiceModal(docId);
       } else {
-        // Receipt mode — warn if not fully paid
+        // Receipt mode -warn if not fully paid
         const payments  = getDocPayments(doc);
         const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
         if (totalPaid === 0) {
@@ -5055,7 +5248,7 @@ function handleReceiptRequest(docId) {
     previewReceipt(docId);
     return;
   }
-  // Not fully paid — warn with personalised message
+  // Not fully paid -warn with personalised message
   pendingReceiptDocId = docId;
   const first = (doc.quote?.custFirstName || '').trim();
   const msg = document.getElementById('outstandingMsg');
@@ -5101,12 +5294,15 @@ function openQuoteModal(docId) {
     activeQuoteDraftDoc = null;
     const doc = state.saved.find(d => d.id === id);
     if (!doc) return;
+    // Silently prime the send form with this doc's data so collectQuoteSendForm()
+    // never returns stale values from a different customer (modal stays hidden)
+    populateQuoteSendModal(doc, { show: false });
     const html = buildDocHtml(doc, 'quote');
     openPreview(html, 'quote', id);
   });
 }
 
-function populateQuoteSendModal(doc) {
+function populateQuoteSendModal(doc, { show = true } = {}) {
   quotePreviewed = false;
   const q = doc.quote || {};
   const label = q.type || doc.type || 'Quote';
@@ -5122,7 +5318,7 @@ function populateQuoteSendModal(doc) {
   const introMsg = `Thank you for allowing me to give you this free, no obligation ${docTypeLower} today. Please find below a full breakdown of the proposed work and costs. There is no pressure and no obligation to proceed. Please read through at your leisure, discuss it with anyone you need to, and let me know if you have any questions.`;
   setVal('quoteSendNotes', introMsg);
   document.getElementById('quoteIncludePhotos').checked = false;
-  document.getElementById('quoteModal').style.display = 'flex';
+  if (show) document.getElementById('quoteModal').style.display = 'flex';
 }
 
 function getActiveQuoteDoc() {
@@ -5212,7 +5408,7 @@ function refreshActiveDashboard() {
   } catch(e) { console.error('Dashboard refresh error:', e); }
 }
 
-// Called when the Money In modal is closed without logging — re-shows the customer
+// Called when the Money In modal is closed without logging -re-shows the customer
 // dashboard (which was hidden by executeCustomerEdit before opening Money In).
 function reopenDashboardAfterMoneyIn() {
   if (!activeCustomerGroup) return;
@@ -5225,7 +5421,7 @@ function reopenDashboardAfterMoneyIn() {
   } catch(e) { console.error('Dashboard reopen error:', e); }
 }
 
-// Updates only the totals rows inside mpPrevInfo — does NOT replace the whole innerHTML,
+// Updates only the totals rows inside mpPrevInfo -does NOT replace the whole innerHTML,
 // so edit inputs and delete buttons remain intact and clickable.
 function refreshMpTotalsOnly(doc) {
   const payments  = doc.payments || [];
@@ -5282,7 +5478,7 @@ function renderMpPrevInfo() {
        <span>Still outstanding:</span><span><strong style="color:var(--walnut)">${fmtPrice(remaining)}</strong></span>
      </div>`;
 
-  // Wire amount edits — update totals in-place (no innerHTML replace) so that
+  // Wire amount edits -update totals in-place (no innerHTML replace) so that
   // a pending click on the delete button is never interrupted by a DOM rebuild.
   prevInfo.querySelectorAll('.mp-edit-val').forEach(inp => {
     inp.addEventListener('change', () => {
@@ -5294,11 +5490,11 @@ function renderMpPrevInfo() {
       recalcDocPayments(freshDoc);
       save();
       refreshSavedDocs();
-      refreshMpTotalsOnly(freshDoc);   // in-place totals update — keeps delete buttons alive
+      refreshMpTotalsOnly(freshDoc);   // in-place totals update -keeps delete buttons alive
     });
   });
 
-  // Wire date edits — same: in-place update only
+  // Wire date edits -same: in-place update only
   prevInfo.querySelectorAll('.mp-edit-date').forEach(inp => {
     inp.addEventListener('change', () => {
       const freshDoc = state.saved.find(d => d.id === activeDocId);
@@ -5309,11 +5505,11 @@ function renderMpPrevInfo() {
       recalcDocPayments(freshDoc);
       save();
       refreshSavedDocs();
-      refreshMpTotalsOnly(freshDoc);   // in-place totals update — keeps delete buttons alive
+      refreshMpTotalsOnly(freshDoc);   // in-place totals update -keeps delete buttons alive
     });
   });
 
-  // Wire delete buttons — full re-render is fine here since delete is the action
+  // Wire delete buttons -full re-render is fine here since delete is the action
   prevInfo.querySelectorAll('.mp-delete-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const freshDoc = state.saved.find(d => d.id === activeDocId);
@@ -5324,7 +5520,7 @@ function renderMpPrevInfo() {
       save();
       refreshSavedDocs();
       renderMpPrevInfo();
-      // Clear the "Add payment" form — the deletion is already saved.
+      // Clear the "Add payment" form -the deletion is already saved.
       // Leaving it pre-filled risks the user accidentally logging a duplicate payment.
       setVal('mpAmount', '');
       showSavedPopup('Removed. All updated.');
@@ -5475,8 +5671,9 @@ function applyDocEdits(doc, data = {}) {
     }
   };
   const q = edited.quote;
-  if ('custFirstName' in data) q.custFirstName = data.custFirstName || '';
-  if ('custLastName' in data) q.custLastName = data.custLastName || '';
+  // Only overwrite name if the new value is non-empty -empty form fields must never erase a saved name
+  if ('custFirstName' in data) q.custFirstName = data.custFirstName || q.custFirstName || '';
+  if ('custLastName'  in data) q.custLastName  = data.custLastName  || q.custLastName  || '';
   if ('ref' in data) {
     q.ref = data.ref || q.ref || doc.ref || doc.document_number || '';
     edited.ref = q.ref;
@@ -6003,7 +6200,7 @@ function openBizInfoModal(filter) {
   const footerEl    = document.querySelector('#bizInfoModal .modal-footer');
   if (!container) return;
 
-  // Qualifications-only view — no text preview needed
+  // Qualifications-only view -no text preview needed
   if (filter === 'qualifications') {
     const quals = state.company.qualifications || [];
     if (titleEl) titleEl.textContent = 'My Qualifications';
@@ -6025,7 +6222,7 @@ function openBizInfoModal(filter) {
     return;
   }
 
-  // Text-based view — filter sections
+  // Text-based view -filter sections
   if (previewWrap) previewWrap.style.display = '';
   if (footerEl)    footerEl.style.display    = '';
 
@@ -6204,7 +6401,7 @@ function openCustomerDashboard() {
 function getCustomerDisplayName(doc) {
   const q = doc.quote || {};
   const built = buildCustName(q).trim();
-  // NOTE: do NOT fall back to doc.acceptedBy — that is the signer, not the customer
+  // NOTE: do NOT fall back to doc.acceptedBy -that is the signer, not the customer
   return built || (doc.custName || '').trim() || 'Customer details missing';
 }
 
@@ -6488,13 +6685,12 @@ function renderSingleCustomerDashboard(group, groups) {
         ${dashPhone ? `onclick="openCalEmailComposer('${esc(dashDocId)}','dashboard','whatsapp')"` : ''}
         title="${dashPhone ? 'WhatsApp ' + esc(group.name) : 'No phone number saved'}">${DSVG_WA}<span>WhatsApp</span></button>
       ${dashPhone
-        ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Phone</span></a>`
-        : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Phone</span></button>`}
-      <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share My Details</span></button>
-      <button type="button" class="cdv-header-edit-btn cdv-contact-update-btn" id="custDashEditBtn" title="Update this customer">${DSVG_EDIT} Update</button>
+        ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Call</span></a>`
+        : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Call</span></button>`}
+      <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share</span></button>
     </div>`;
 
-  // contentHtml = pure dashboard content (used for download — no buttons)
+  // contentHtml = pure dashboard content (used for download -no buttons)
   const contentHtml = `
     <div class="customer-dashboard-card printable-customer-dashboard">
       <div class="cdv-header">
@@ -6536,14 +6732,14 @@ function renderSingleCustomerDashboard(group, groups) {
   if (dashEditBtn) dashEditBtn.onclick = () =>
     openCustomerEditChoice(group.docs.length === 1 ? firstDocId : null);
 
-  // Job status progression — event delegation
+  // Job status progression -event delegation
   body.addEventListener('click', e => {
     const btn = e.target.closest('[data-prog-doc-id]');
     if (!btn) return;
     const docId  = btn.dataset.progDocId;
     const action = btn.dataset.progAction;
     if (action === 'receipt') {
-      // Keep dashboard open — warning modal overlays on top; X returns to dashboard
+      // Keep dashboard open -warning modal overlays on top; X returns to dashboard
       handleReceiptRequest(docId);
     } else {
       document.getElementById('customerDashboardModal').style.display = 'none';
@@ -6552,7 +6748,7 @@ function renderSingleCustomerDashboard(group, groups) {
     }
   });
 
-  // Job Accepted checkbox — show/hide date, auto-fill today, save
+  // Job Accepted checkbox -show/hide date, auto-fill today, save
   body.addEventListener('change', e => {
     const cb = e.target.closest('.cdv-accepted-cb');
     if (!cb) return;
@@ -6571,7 +6767,7 @@ function renderSingleCustomerDashboard(group, groups) {
     queueSavedDocsSync(true);
   });
 
-  // Helper: date confirmed — hide prompt, show compact date wrap
+  // Helper: date confirmed -hide prompt, show compact date wrap
   function applyCompletedDate(docId, dateStr) {
     const doc = state.saved.find(d => d.id === docId);
     if (!doc) return;
@@ -6602,16 +6798,16 @@ function renderSingleCustomerDashboard(group, groups) {
     const dateWrap = cb.closest('.cdv-schedule-row')?.querySelector('.cdv-start-date-wrap');
     if (cb.checked) {
       if (doc.jobCompletedDate) {
-        // Date already stored — just show the compact wrap
+        // Date already stored -just show the compact wrap
         if (dateWrap) dateWrap.style.display = '';
         if (prompt)   prompt.style.display   = 'none';
       } else {
-        // No date yet — show the prompt
+        // No date yet -show the prompt
         if (dateWrap) dateWrap.style.display = 'none';
         if (prompt)   prompt.style.display   = '';
       }
     } else {
-      // Unchecked — hide everything
+      // Unchecked -hide everything
       if (dateWrap) dateWrap.style.display = 'none';
       if (prompt)   prompt.style.display   = 'none';
       doc.jobCompletedDate = '';
@@ -6634,7 +6830,7 @@ function renderSingleCustomerDashboard(group, groups) {
     applyCompletedDate(inp.dataset.docId, inp.value);
   });
 
-  // Start Date input — save on change
+  // Start Date input -save on change
   body.addEventListener('change', e => {
     const inp = e.target.closest('.cdv-start-date-input');
     if (!inp) return;
@@ -6645,7 +6841,7 @@ function renderSingleCustomerDashboard(group, groups) {
     queueSavedDocsSync(true);
   });
 
-  // Completed Date input (compact view) — save on change
+  // Completed Date input (compact view) -save on change
   body.addEventListener('change', e => {
     const inp = e.target.closest('.cdv-completed-date-input');
     if (!inp) return;
@@ -6746,7 +6942,7 @@ function openCustomerDetailsEdit(docId) {
   document.getElementById('customerDetailsEditModal').style.display = 'flex';
 }
 
-// Persist whatever is currently in the Customer Details form — no UI side-effects.
+// Persist whatever is currently in the Customer Details form -no UI side-effects.
 // Called by both the Save button and any Next button that moves past this screen.
 function persistCustomerDetailsForm() {
   const group = activeCustomerGroup;
@@ -6901,7 +7097,7 @@ function jteUpdateTotals() {
   document.getElementById('jteVatRow').style.display      = vatAmt > 0 ? '' : 'none';
 }
 
-// Pure data-save for the Job Terms form — no UI side-effects.
+// Pure data-save for the Job Terms form -no UI side-effects.
 function persistJobTermsForm() {
   const docId = activeJobTermsDocId;
   const doc   = state.saved.find(d => d.id === docId);
@@ -7063,7 +7259,7 @@ function applyBizChoice(docId, useNew, forAll, callback) {
     }
     save();
   } else {
-    // Use old — no data change needed
+    // Use old -no data change needed
     if (forAll) {
       state.company.bizChoiceMade = 'old';
       save();
@@ -7310,7 +7506,7 @@ function jdeItemRowHtml(item) {
 
 function renderJobDetailsForm(doc) {
   const q = doc.quote || {};
-  // Match same fallback logic as buildCustomerJobSection — quote.items first, then legacy doc.items
+  // Match same fallback logic as buildCustomerJobSection -quote.items first, then legacy doc.items
   const items = (q.items && q.items.length) ? q.items : ((doc.items && doc.items.length) ? doc.items : []);
   // Calculate total from items; fall back to doc.total for total-override docs
   const calcedTotal = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 1), 0);
@@ -7492,7 +7688,7 @@ function jdeAddItem() {
   row.querySelector('.jde-item-name').focus();
 }
 
-// Pure data-save for the Job Details form — no UI side-effects.
+// Pure data-save for the Job Details form -no UI side-effects.
 function persistJobDetailsForm() {
   const docId = activeJobDetailsDocId;
   const doc = state.saved.find(d => d.id === docId);
@@ -7556,15 +7752,15 @@ const DOC_CSS = `
   /* ── PAGE (full border, like the Word template) ── */
   .doc-wrap{max-width:760px;margin:0 auto;background:#fff;border:1px solid #b8b8b8}
 
-  /* ── HEADER BAND (brand primary — set via inline style) ── */
+  /* ── HEADER BAND (brand primary -set via inline style) ── */
   .doc-header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:12px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   /* Logo cell stretches to full header height */
   .doc-logo-cell{display:flex;align-items:center;align-self:stretch;min-width:48px;max-width:140px}
   .doc-logo{display:block;height:100%;width:auto;max-width:140px;min-height:40px;object-fit:contain}
   .doc-logo-placeholder{width:64px;height:100%;min-height:48px;border:1.5px dashed rgba(255,255,255,0.45);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:rgba(255,255,255,0.65)}
-  /* Business name — always one line, font scales down to fit */
+  /* Business name -always one line, font scales down to fit */
   .doc-biz-name{font-weight:700;text-align:center;line-height:1.2;white-space:normal;word-break:break-word;font-size:2rem}
-  /* Doc type badge — background set inline with accent colour */
+  /* Doc type badge -background set inline with accent colour */
   .doc-type-label{font-size:1.05rem;font-weight:800;text-align:center;text-transform:uppercase;letter-spacing:0.07em;line-height:1.2;padding:8px 14px;border-radius:7px;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
   /* ── PREPARED BY / FOR (two cols, no dividers) ── */
@@ -7573,7 +7769,7 @@ const DOC_CSS = `
   .doc-info-col h3{font-size:0.83rem;font-weight:700;margin-bottom:5px;text-transform:none;letter-spacing:0}
   .doc-info-col p{font-size:0.83rem;line-height:1.6;white-space:pre-wrap;color:#333}
 
-  /* ── REFERENCE ROW — no internal borders; border-bottom = line above Itemised Breakdown ── */
+  /* ── REFERENCE ROW -no internal borders; border-bottom = line above Itemised Breakdown ── */
   .doc-ref-row{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #c4c4c4}
   .doc-ref-cell{padding:6px 18px;font-size:0.83rem;display:flex;flex-direction:column;gap:2px}
   .ref-label{font-weight:700;white-space:nowrap}
@@ -7588,11 +7784,11 @@ const DOC_CSS = `
   /* ── SECTION HEADINGS (sentence-case bold + thin rule, matching Word) ── */
   .doc-section-heading{font-size:0.88rem;font-weight:700;margin-top:16px;margin-bottom:0;padding-bottom:3px;border-bottom:1px solid #888;text-transform:none;letter-spacing:0}
 
-  /* ── DESCRIPTION BOX (brand bg — set via inline style) ── */
+  /* ── DESCRIPTION BOX (brand bg -set via inline style) ── */
   .doc-desc-box{border:1px solid #ccc;border-top:none;padding:10px 12px;min-height:70px;font-size:0.83rem;line-height:1.7;color:#aaa;font-style:italic;white-space:pre-wrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc-desc-box.filled{color:#333;font-style:normal}
 
-  /* ── ITEMS TABLE (accent header — set via inline style) ── */
+  /* ── ITEMS TABLE (accent header -set via inline style) ── */
   .doc-items-table{width:100%;border-collapse:collapse;border:1px solid #ccc;border-top:none}
   .doc-items-table thead tr{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc-items-table thead th{padding:8px 10px;font-size:0.77rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left;color:#fff;border-right:1px solid rgba(255,255,255,0.2)}
@@ -7632,7 +7828,7 @@ const DOC_CSS = `
   /* ── PAGE FOOTER ── */
   .doc-footer{padding:8px 18px;text-align:center;font-size:0.7rem;color:#aaa;border-top:1px solid #e0e0e0}
 
-  /* ── ACCEPTANCE PAGE (quotes/estimates — same bordered box) ── */
+  /* ── ACCEPTANCE PAGE (quotes/estimates -same bordered box) ── */
   .doc-accept{max-width:760px;margin:20px auto 0;background:#fff;border:1px solid #b8b8b8;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:13px;color:#1a1a1a;page-break-before:always}
   .doc-accept-body{padding:22px 18px 20px}
   .doc-accept-heading{font-size:0.88rem;font-weight:700;padding-bottom:4px;margin-bottom:16px;text-transform:none;letter-spacing:0}
@@ -7706,7 +7902,7 @@ const DOC_CSS = `
 
 function buildQuoteDoc() {
   const q = collectQuoteState();
-  // Always pull the live items from state — collectQuoteState may be called
+  // Always pull the live items from state -collectQuoteState may be called
   // before the DOM is fully settled in some edge cases
   q.items = [...state.quote.items];
   const tempDoc = {
@@ -7723,7 +7919,7 @@ function buildDocHtml(doc, docType, extra = {}) {
   const q  = doc.quote;
   const co = doc.company || state.company;
 
-  // ── Brand colours — read live picker values so the document always
+  // ── Brand colours -read live picker values so the document always
   //    reflects the currently selected colours, even before Save ──
   const primary = document.getElementById('colourHeader')?.value || state.company.brandPrimary || DEFAULT_COLOURS.primary;
   const accent  = document.getElementById('colourAccent')?.value || state.company.brandAccent  || DEFAULT_COLOURS.accent;
@@ -7746,7 +7942,7 @@ function buildDocHtml(doc, docType, extra = {}) {
 
   const isQuote = (docType !== 'invoice' && docType !== 'receipt');
 
-  // ── Names — prefer live state so name changes always show immediately ──
+  // ── Names -prefer live state so name changes always show immediately ──
   const liveFullName = [(state.company.firstName||''), (state.company.lastName||'')].filter(Boolean).join(' ');
   const snapFullName = [(co.firstName||''), (co.lastName||'')].filter(Boolean).join(' ');
   const authFullName = liveFullName || snapFullName;
@@ -7758,9 +7954,9 @@ function buildDocHtml(doc, docType, extra = {}) {
   const bizLines  = [authFullName, co.address, co.postcode, co.phone, co.email, co.website, vatNum ? `VAT Reg No: ${vatNum}` : ''].filter(Boolean).join('\n');
   const custLines = [custName, q.custAddr, q.custPostcode, q.custEmail, q.custPhone].filter(Boolean).join('\n');
 
-  // ── Logo — prefer doc snapshot, fall back to live state so it always shows ──
+  // ── Logo -prefer doc snapshot, fall back to live state so it always shows ──
   const logoSrc = co.logo || state.company.logo || '';
-  // ── Header text colours — auto dark/light based on header and accent backgrounds ──
+  // ── Header text colours -auto dark/light based on header and accent backgrounds ──
   const headerTextCol  = isColorLight(primary) ? '#1a1a1a' : '#ffffff';
   const accentTextCol  = isColorLight(accent)  ? '#1a1a1a' : '#ffffff';
   const logoPlaceholderStyle = isColorLight(primary)
@@ -7790,7 +7986,7 @@ function buildDocHtml(doc, docType, extra = {}) {
     </tr>`).join('') ||
     `<tr><td colspan="4" style="text-align:center;color:#aaa;padding:14px;font-style:italic">No items added. Go back and add jobs in Step 2.</td></tr>`;
 
-  // ── Totals — label in col 3 (right-aligned), amount in col 4 (right-aligned) ──
+  // ── Totals -label in col 3 (right-aligned), amount in col 4 (right-aligned) ──
   const tCell = (label, value, bold = false) =>
     `<tr class="totals-row">
       <td colspan="2" style="border:none;padding:0"></td>
@@ -7825,13 +8021,13 @@ function buildDocHtml(doc, docType, extra = {}) {
     ${paymentRows}
     ${balanceRow}`;
 
-  // ── Description of work — only shown when a description was entered ──
+  // ── Description of work -only shown when a description was entered ──
   const descHtml = q.notes
     ? `<div class="doc-section-heading">Description of Work</div>
        <div class="doc-desc-box filled" style="background:${bgCol};-webkit-print-color-adjust:exact;print-color-adjust:exact">${esc(q.notes)}</div>`
     : '';
 
-  // ── Terms table — not shown on receipts ─────────────────────────
+  // ── Terms table -not shown on receipts ─────────────────────────
   const termsHtml = docType !== 'receipt' ? buildNewTermsHtml(q) : '';
 
   // ── Invoice / receipt extras ────────────────────────────────────
@@ -8010,7 +8206,7 @@ function buildPhotosSection(doc) {
 }
 
 function buildTermsSection(q) {
-  // Legacy — kept for compatibility; new output uses buildNewTermsHtml
+  // Legacy -kept for compatibility; new output uses buildNewTermsHtml
   const presets = {
     payment30:       'Payment due within 30 days of invoice date.',
     depositRequired: 'A 50% deposit is required before work commences.',
@@ -8052,7 +8248,7 @@ function buildSigSection(q, co, docType) {
   const snapFullName = [(co.firstName||''), (co.lastName||'')].filter(Boolean).join(' ');
   const authFullName = liveFullName || snapFullName;
 
-  // Receipts: just show the authorised name in cursive — no stored sig text, no customer box
+  // Receipts: just show the authorised name in cursive -no stored sig text, no customer box
   if (docType === 'receipt') {
     if (!authFullName) return '';
     return `
@@ -8170,77 +8366,114 @@ function printRaw(inner) {
 
 /* ── Upload a document to Supabase Storage and return its public URL ── */
 async function uploadDocToStorage(htmlStr, filename) {
-  if (!lexiSupabase || !lexiAuthSession?.user?.id) return null;
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) {
+    console.warn('Document storage skipped: not logged in or Supabase not ready');
+    toast('Document link skipped: not signed in to Lexi', 'error', 8000);
+    return null;
+  }
   try {
     const blob = new Blob([htmlStr], { type: 'text/html' });
-    const path = `${lexiAuthSession.user.id}/${filename}`;
+    const safeFilename = (filename || 'document.html').replace(/[^a-zA-Z0-9._-]/g, '-');
+    const path = `${lexiAuthSession.user.id}/${safeFilename}`;
+    console.log('Uploading doc to storage:', path);
     const { error } = await lexiSupabase.storage
       .from('Documents')
       .upload(path, blob, { contentType: 'text/html', upsert: true });
     if (error) throw error;
     const { data } = lexiSupabase.storage.from('Documents').getPublicUrl(path);
-    return data?.publicUrl || null;
+    const storageUrl = data?.publicUrl || null;
+    console.log('Doc storage URL:', storageUrl);
+    if (!storageUrl) {
+      toast('Document uploaded but no public URL returned -check the Documents bucket is set to Public in Supabase Storage.', 'error', 10000);
+      return null;
+    }
+    // Use a short view URL — just pass the storage path so the link stays short
+    // enough for email clients (Outlook etc.) to auto-hyperlink it
+    const appBase = window.location.origin;
+    const viewUrl = `${appBase}/view.html?path=${encodeURIComponent(path)}`;
+    console.log('View URL:', viewUrl);
+    toast('Document link generated successfully.', 'success', 3000);
+    return viewUrl;
   } catch (e) {
     console.warn('Document storage upload failed:', e);
+    toast(`Document link failed: ${e?.message || 'storage error'}`, 'error', 8000);
     return null;
   }
 }
 
-async function sendDoc(html, filename, message = '', custEmail = '') {
+async function sendDoc(html, filename, message = '', custEmail = '', custPhone = '', passedDocType = '') {
   const htmlStr = wrapDoc(html);
 
   // Upload to Supabase Storage for a permanent shareable link
   const docUrl = await uploadDocToStorage(htmlStr, filename);
 
-  sendDocRaw(htmlStr, filename, message, custEmail, docUrl);
+  sendDocRaw(htmlStr, filename, message, custEmail, docUrl, custPhone, passedDocType);
 }
 
-async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUrl = null) {
-  const docType = filename.match(/^(estimate|quote|invoice|receipt)/i)?.[0] || 'Document';
+function showSendMethodPicker(onEmail, onWhatsApp, onCopy) {
+  const W = '#7D5730';
+  const SVG_EMAIL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:7px;flex-shrink:0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
+  const SVG_WA    = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:7px;flex-shrink:0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  const SVG_COPY  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:7px;flex-shrink:0"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+  const fillBtn   = `display:flex;align-items:center;justify-content:center;width:100%;padding:14px;margin-bottom:10px;border-radius:10px;border:none;background:${W};color:#fff;font-size:1rem;font-weight:600;cursor:pointer`;
+  const outBtn    = `display:flex;align-items:center;justify-content:center;width:100%;padding:12px;margin-bottom:10px;border-radius:10px;border:1.5px solid ${W};background:#fff;color:${W};font-size:0.95rem;font-weight:600;cursor:pointer`;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+      <div style="font-size:1.3rem;font-weight:700;margin-bottom:6px;color:#333">How would you like to send?</div>
+      <div style="color:#777;font-size:0.9rem;margin-bottom:22px">Choose how to share this document with your customer</div>
+      ${onEmail    ? `<button id="_smpEmail" style="${fillBtn}">${SVG_EMAIL}Send via Email</button>` : ''}
+      ${onWhatsApp ? `<button id="_smpWA"    style="${fillBtn}">${SVG_WA}Send via WhatsApp</button>` : ''}
+      <button id="_smpCopy"   style="${outBtn}">${SVG_COPY}Copy Message</button>
+      <button id="_smpCancel" style="display:block;width:100%;padding:10px;border-radius:10px;border:1.5px solid #ddd;background:#fff;color:#888;font-size:0.9rem;cursor:pointer">Cancel</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+  overlay.querySelector('#_smpEmail')?.addEventListener('click',  () => { close(); onEmail(); });
+  overlay.querySelector('#_smpWA')?.addEventListener('click',     () => { close(); onWhatsApp(); });
+  overlay.querySelector('#_smpCopy').addEventListener('click',    () => { close(); onCopy(); });
+  overlay.querySelector('#_smpCancel').addEventListener('click',  close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+
+async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUrl = null, custPhone = '', passedDocType = '') {
+  const rawType = passedDocType || filename.match(/^(estimate|quote|invoice|receipt)/i)?.[0] || 'document';
+  const docType = rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase();
   const bizName = state.company?.businessName || [state.company?.firstName, state.company?.lastName].filter(Boolean).join(' ') || 'Lexi Handles It';
   const subject = `Your ${docType} from ${bizName}`;
 
-  // Append the document link to the message if we have one
-  const fullMsg = docUrl
-    ? message + `\n\n📄 View your ${docType.toLowerCase()} here:\n${docUrl}\n\n(Open on any device to view, save or print.)`
-    : message;
-
-  if (custEmail) {
-    // Always use the compose panel — no native share dialog, works on all devices
-    openEmailCompose(custEmail, subject, fullMsg, !docUrl);
-    if (!docUrl) {
-      // No storage URL — download locally so they can attach manually
-      const blob = new Blob([htmlStr], { type: 'text/html' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast('Document downloaded. Attach it to your email before sending.', '', 6000);
+  // Replace the {VIEW_LINK} placeholder with the real storage URL (or remove the line if unavailable)
+  let fullMsg = message;
+  if (fullMsg.includes('{VIEW_LINK}')) {
+    if (docUrl) {
+      fullMsg = fullMsg.replace('{VIEW_LINK}', docUrl);
     } else {
-      toast('Email ready — the document link is in the message. No attachment needed.', 'success', 5000);
+      // Remove the whole "You can view..." paragraph if no link
+      fullMsg = fullMsg.replace(/You can view your .+? by clicking the link below:\n\{VIEW_LINK\}\n\n/s, '');
+      fullMsg = fullMsg.replace('\n{VIEW_LINK}\n', '\n');
     }
-    return;
   }
 
-  // No email address — download locally and copy to clipboard
-  const blob = new Blob([htmlStr], { type: 'text/html' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const waPhone = custPhone ? formatWhatsAppNumber(custPhone) : '';
 
-  if (fullMsg && navigator.clipboard) {
-    try {
-      await navigator.clipboard.writeText(fullMsg);
-      toast('Document downloaded. Message with link copied — paste it into WhatsApp or email.', '', 6000);
-    } catch(e) {
-      toast('Document downloaded.', '', 4000);
+  // showPicker is defined first so doEmail can reference it for the Back button
+  const showPicker = () => showSendMethodPicker(
+    custEmail ? doEmail : null,
+    waPhone   ? doWhatsApp : null,
+    doCopy
+  );
+  const doEmail    = () => openEmailCompose(custEmail, subject, fullMsg, false, showPicker);
+  const doWhatsApp = () => window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(fullMsg)}`, '_blank');
+  const doCopy = async () => {
+    if (fullMsg && navigator.clipboard) {
+      try { await navigator.clipboard.writeText(fullMsg); toast('Message copied -paste it into WhatsApp or email.', '', 6000); }
+      catch(e) { toast('Could not copy to clipboard.', 'error', 4000); }
     }
-  } else {
-    toast('Document downloaded.', '', 4000);
-  }
+  };
+
+  // Always show the picker so the user can choose how to send
+  showPicker();
 }
 
 /* ===== BACKUP & RESTORE ===== */
@@ -8348,12 +8581,12 @@ function formatWhatsAppNumber(phone) {
    =================================================== */
 
 const CAL_COLORS = {
-  startDate:  '#7D5730',  // walnut  — accepted job start date
-  completed:  '#6B7C5C',  // sage    — job completed
-  estimate:   '#E8B84B',  // gold    — estimate/quote awaiting response
-  invoiceDue: '#E67E22',  // orange  — invoice due soon
-  overdue:    '#C0392B',  // red     — invoice overdue
-  paid:       '#2E7D32',  // green   — payment received
+  startDate:  '#7D5730',  // walnut  -accepted job start date
+  completed:  '#6B7C5C',  // sage    -job completed
+  estimate:   '#E8B84B',  // gold    -estimate/quote awaiting response
+  invoiceDue: '#E67E22',  // orange  -invoice due soon
+  overdue:    '#C0392B',  // red     -invoice overdue
+  paid:       '#2E7D32',  // green   -payment received
 };
 
 let calCurrentYear  = new Date().getFullYear();
@@ -8396,7 +8629,7 @@ function getCalendarEvents() {
       }
     }
 
-    // 2. Estimate / Quote — gold dot on doc creation date if not yet invoiced
+    // 2. Estimate / Quote -gold dot on doc creation date if not yet invoiced
     if (!d.invoiceSent && !d.paid) {
       const qType = (q.type || 'Estimate').toLowerCase();
       if (qType === 'estimate' || qType === 'quote') {
@@ -8418,7 +8651,7 @@ function getCalendarEvents() {
       });
     }
 
-    // 4. Payment received dates — green dot
+    // 4. Payment received dates -green dot
     getDocPayments(d).forEach(p => {
       if (p.amount > 0 && p.date) {
         const lbl = p.type && p.type !== 'Full Payment' ? p.type + ' Received' : 'Payment Received';
@@ -8451,7 +8684,7 @@ function renderCalendar() {
       const days = Math.floor((new Date(today) - new Date(d.invoiceDueDate)) / 86400000);
       attentionItems.push({ docId: d.id, custName, ref, color: CAL_COLORS.overdue, desc: `Invoice ${days} day${days === 1 ? '' : 's'} overdue`, doc: d, type: 'overdue' });
     } else if (!d.invoiceSent && !d.paid && d.jobCompletedDate) {
-      // Job finished but no invoice sent — check if expected due date has passed
+      // Job finished but no invoice sent -check if expected due date has passed
       const terms    = (q.selectedTerms || []);
       const termDays = terms.includes('payment30') ? 30 : terms.includes('payment14') ? 14 : terms.includes('payment7') ? 7 : 30;
       const expDue   = addDays(d.jobCompletedDate, termDays);
@@ -8461,9 +8694,10 @@ function renderCalendar() {
       }
     } else if (!d.invoiceSent && !d.paid) {
       const qType = (q.type || '').toLowerCase();
-      const docDate = q.date || d.date;
-      if ((qType === 'estimate' || qType === 'quote') && docDate) {
-        const age = Math.floor((new Date(today) - new Date(docDate)) / 86400000);
+      // Only nudge if actually sent (acceptToken created on send) and we have a sent date
+      const sentDate = d.sentAt || d.sharedAt || null;
+      if ((qType === 'estimate' || qType === 'quote') && sentDate && d.acceptToken) {
+        const age = Math.floor((new Date(today) - new Date(sentDate)) / 86400000);
         if (age >= 7) {
           attentionItems.push({ docId: d.id, custName, ref, color: CAL_COLORS.estimate, desc: `${qType === 'quote' ? 'Quote' : 'Estimate'} sent ${age} day${age === 1 ? '' : 's'} ago with no response yet`, doc: d, type: 'estimate' });
         }
@@ -8696,7 +8930,7 @@ function openCalEmailComposer(docId, eventType, channel) {
       id: 'follow_up',
       title: 'Quote Follow-up',
       desc: 'Check if they\'ve had a chance to look it over',
-      subject: `Following up on your ${qTypeName} — ${ref}`,
+      subject: `Following up on your ${qTypeName} -${ref}`,
       body:
 `Hi ${custFirst},
 
@@ -8716,7 +8950,7 @@ ${traderName}`,
       id: 'invoice_reminder',
       title: 'Invoice Reminder',
       desc: 'A friendly nudge that payment is due or overdue',
-      subject: `Invoice reminder — ${ref}`,
+      subject: `Invoice reminder -${ref}`,
       body:
 `Hi ${custFirst},
 
@@ -8731,11 +8965,11 @@ ${traderName}`,
       id: 'job_confirmed',
       title: 'Job Confirmation',
       desc: 'Let them know the job is confirmed and you\'re ready',
-      subject: `Your job is confirmed — ${ref}`,
+      subject: `Your job is confirmed -${ref}`,
       body:
 `Hi ${custFirst},
 
-Great news — I'm confirmed to carry out the work for ${jobDesc}.
+Great news -I'm confirmed to carry out the work for ${jobDesc}.
 
 Reference: ${ref}
 Total: ${total}
@@ -8976,7 +9210,7 @@ function downloadIcsFile() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showSavedPopup('Calendar exported — open the file in Google, Outlook or Apple Calendar.', null, 4000);
+  showSavedPopup('Calendar exported -open the file in Google, Outlook or Apple Calendar.', null, 4000);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -9046,17 +9280,17 @@ function buildChaseMessage(item, channel) {
   if (item.urgency === 'invoice-needed') {
     return channel === 'whatsapp'
       ? `Hi ${custFirst}, hope all's good! Just wanted to let you know I'll be sending over your invoice for ${item.ref} shortly. Give me a shout if you have any questions. Cheers, ${traderName}`
-      : { subject: `Invoice coming — ${item.ref}`, body: `Hi ${custFirst},\n\nHope you're well. I'll be sending your invoice for job ${item.ref} (£${fmtPrice(item.amount)}) over shortly.\n\nGive me a shout if you have any questions.\n\nThanks,\n${traderName}` };
+      : { subject: `Invoice coming -${item.ref}`, body: `Hi ${custFirst},\n\nHope you're well. I'll be sending your invoice for job ${item.ref} (£${fmtPrice(item.amount)}) over shortly.\n\nGive me a shout if you have any questions.\n\nThanks,\n${traderName}` };
   }
   if (item.urgency === 'gentle') {
     return channel === 'whatsapp'
-      ? `Hi ${custFirst}, hope you're well! Just a friendly nudge — invoice ${item.ref} for ${fmtPrice(item.amount)} is now due. No rush, just wanted to make sure you got it. Cheers, ${traderName}`
-      : { subject: `Payment reminder — ${item.ref}`, body: `Hi ${custFirst},\n\nHope all is good with you. Just a gentle reminder that invoice ${item.ref} for ${fmtPrice(item.amount)} is now due.\n\nLet me know if you have any questions.\n\nThanks,\n${traderName}` };
+      ? `Hi ${custFirst}, hope you're well! Just a friendly nudge -invoice ${item.ref} for ${fmtPrice(item.amount)} is now due. No rush, just wanted to make sure you got it. Cheers, ${traderName}`
+      : { subject: `Payment reminder -${item.ref}`, body: `Hi ${custFirst},\n\nHope all is good with you. Just a gentle reminder that invoice ${item.ref} for ${fmtPrice(item.amount)} is now due.\n\nLet me know if you have any questions.\n\nThanks,\n${traderName}` };
   }
   if (item.urgency === 'warning') {
     return channel === 'whatsapp'
       ? `Hi ${custFirst}, just chasing invoice ${item.ref} for ${fmtPrice(item.amount)} which is now ${item.days} days overdue. Could you let me know when to expect payment? Thanks, ${traderName}`
-      : { subject: `Overdue invoice — ${item.ref}`, body: `Hi ${custFirst},\n\nI'm just following up on invoice ${item.ref} for ${fmtPrice(item.amount)}, which is now ${item.days} days overdue.\n\nCould you please let me know when I can expect payment?\n\nThanks,\n${traderName}` };
+      : { subject: `Overdue invoice -${item.ref}`, body: `Hi ${custFirst},\n\nI'm just following up on invoice ${item.ref} for ${fmtPrice(item.amount)}, which is now ${item.days} days overdue.\n\nCould you please let me know when I can expect payment?\n\nThanks,\n${traderName}` };
   }
   // critical (30+ days)
   return channel === 'whatsapp'
@@ -9072,7 +9306,7 @@ function urgencyLabel(item) {
 }
 
 function openChaseForDoc(docId) {
-  // Open chase modal pre-filtered — the relevant customer will be at the top (sorted by overdue days)
+  // Open chase modal pre-filtered -the relevant customer will be at the top (sorted by overdue days)
   openChasePaymentsModal();
   // Scroll to this customer's row after the modal renders
   setTimeout(() => {
@@ -9091,7 +9325,7 @@ function openChasePaymentsModal() {
 
   if (sub) {
     sub.textContent = overdue.length
-      ? `${overdue.length} outstanding — ${fmtPrice(totalOwed)} owed`
+      ? `${overdue.length} outstanding -${fmtPrice(totalOwed)} owed`
       : 'All payments up to date';
   }
 
@@ -9154,7 +9388,7 @@ function sendChase(docId, channel) {
    ═══════════════════════════════════════════════════════════ */
 
 const KEY_PAUSE      = 'lexi_paused';
-const KEY_QS_HISTORY = 'lexi_qs_history'; // { monthsUsed: N } — persists across sessions
+const KEY_QS_HISTORY = 'lexi_qs_history'; // { monthsUsed: N } -persists across sessions
 
 function getQsMonthsUsed()      { try { return JSON.parse(localStorage.getItem(KEY_QS_HISTORY))?.monthsUsed || 0; } catch { return 0; } }
 function getQsMonthsRemaining() { return Math.max(0, 6 - getQsMonthsUsed()); }
@@ -9195,7 +9429,7 @@ function quietSeasonGuard() {
 
 /* ── Stub backend integrations ── */
 /* ═══════════════════════════════════════════════════════════
-   QUOTE ACCEPTANCE — DIGITAL SIGN-OFF
+   QUOTE ACCEPTANCE -DIGITAL SIGN-OFF
    ═══════════════════════════════════════════════════════════ */
 
 const KEY_ACCEPT_BASE = 'lexi_accept_'; // key prefix: lexi_accept_<token>
@@ -9216,6 +9450,11 @@ function generateAcceptToken(docId) {
 function prepareAcceptTokenForSend(docId) {
   const doc = state.saved.find(d => d.id === docId);
   if (!doc) return null;
+  // Stamp the actual sent date — used for "X days ago" nudges
+  if (!doc.sentAt) {
+    doc.sentAt = new Date().toISOString();
+    save();
+  }
   if (doc.acceptToken && doc.acceptStatus === 'pending') {
     saveQuoteAcceptancePending(doc).catch(error => {
       console.warn('Could not refresh quote acceptance row in Supabase:', error);
@@ -9240,23 +9479,27 @@ function getAcceptUrl(token) {
 function buildAcceptanceMessage(doc, baseMessage) {
   const q = doc.quote || {};
   const token = prepareAcceptTokenForSend(doc.id);
-  const url = getAcceptUrl(token);
+  const acceptUrl = getAcceptUrl(token);
   const customerName = getCustomerFirstName(doc) || 'there';
-  const docType = String(q.type || doc.type || 'quote').toLowerCase() === 'estimate' ? 'estimate' : 'quote';
+  const rawDocType = String(q.type || doc.type || 'quote').toLowerCase();
+  const docType = ['estimate','invoice','receipt'].includes(rawDocType) ? rawDocType : 'quote';
+  // "an estimate / an invoice" vs "a quote / a receipt"
+  const article = ['estimate','invoice'].includes(docType) ? 'an' : 'a';
   const traderName = [state.company.firstName, state.company.lastName].filter(Boolean).join(' ').trim();
   const companyName = (state.company.businessName || '').trim();
   const signoff = [traderName, companyName].filter(Boolean).join('\n') || 'Lexi Handles It';
 
   return `Hello ${customerName},
 
-Thank you for allowing me to provide you with a ${docType} to carry out the work attached.
+Thank you for allowing me to provide you with ${article} ${docType} to carry out the work.
 
 Please feel free to consider it and talk it over with whoever you need to. I am happy to answer any queries, so feel free to message me back.
 
-When you are ready, if you would like to accept the ${docType}, please click the secure acceptance link below.
+You can view your ${docType} by clicking the link below:
+{VIEW_LINK}
 
-Secure acceptance link:
-${url}
+When you are ready, if you would like to accept the ${docType}, please click the secure acceptance link below:
+${acceptUrl}
 
 Kind regards
 ${signoff}`;
@@ -9313,11 +9556,11 @@ function applyAcceptanceToDoc(doc, data = {}) {
   if (!doc || !data?.status) return false;
   if (data.status === 'accepted') {
     doc.acceptStatus = 'accepted';
-    // acceptedBy = who physically signed — may differ from the customer on the job
+    // acceptedBy = who physically signed -may differ from the customer on the job
     doc.acceptedBy   = data.accepted_by || data.name || '';
     doc.acceptedAt   = data.accepted_at || data.timestamp || '';
     doc.jobAccepted  = true;
-    // Restore customer name fields if they were lost — use the acceptance row's customer_name
+    // Restore customer name fields if they were lost -use the acceptance row's customer_name
     const q = doc.quote || {};
     if (!q.custFirstName && !q.custLastName && !doc.custName) {
       const restoredName = data.customer_name || '';
@@ -9391,7 +9634,7 @@ async function checkQuoteAcceptances() {
 
   save();
   refreshSavedDocs();
-  // Show popup for the first newly accepted doc — reset acceptNotified so it always shows
+  // Show popup for the first newly accepted doc -reset acceptNotified so it always shows
   const doc = newlyAccepted[0];
   doc.acceptNotified = false;
   showQuoteAcceptedNotification();
@@ -9458,10 +9701,10 @@ function subscribeToQuoteAcceptances() {
 
 // ── Supabase / Mailchimp stubs ──
 function notifySupabaseQuoteAccepted(doc, data) {
-  console.log('[Quote Acceptance] Supabase notify — doc:', doc.id, 'accepted by:', data.name, 'at:', data.timestamp);
+  console.log('[Quote Acceptance] Supabase notify -doc:', doc.id, 'accepted by:', data.name, 'at:', data.timestamp);
 }
 function sendAcceptanceConfirmationEmail(custEmail, ref) {
-  console.log('[Quote Acceptance] Confirmation email stub — to:', custEmail, 'ref:', ref);
+  console.log('[Quote Acceptance] Confirmation email stub -to:', custEmail, 'ref:', ref);
   // TODO: Trigger Mailchimp transactional email to customer confirming acceptance
 }
 
@@ -9534,7 +9777,7 @@ function openQuietSeasonModal() {
     }
   }
 
-  // Reset duration picker — only show months within remaining allowance
+  // Reset duration picker -only show months within remaining allowance
   const noteEl = document.getElementById('qsMonthsRemainingNote');
   if (noteEl) {
     noteEl.textContent = remaining < 6
@@ -9657,11 +9900,11 @@ function checkSeasonalPrompt() {
   const month = new Date().getMonth(); // 0=Jan … 11=Dec
   const isSeason = isSeasonalTrade();
 
-  // Quiet Season menu item — always visible, but update active badge
+  // Quiet Season menu item -always visible, but update active badge
   const badge = document.getElementById('qsActiveBadge');
   if (badge) badge.style.display = isPaused() ? '' : 'none';
 
-  // Seasonal banner in My Jobs page — August (7), September (8), October (9)
+  // Seasonal banner in My Jobs page -August (7), September (8), October (9)
   const banner = document.getElementById('seasonalBanner');
   if (banner) {
     const showBanner = isSeason && [7, 8, 9].includes(month) && !isPaused()
@@ -9832,7 +10075,7 @@ function maybeAskForReview(doc) {
   document.getElementById('reviewRequestModal').style.display = 'flex';
   document.getElementById('reviewWhatsappBtn').onclick = () => {
     const text = reviewLink
-      ? `Hi ${q.custFirstName || custName}, glad you're happy with the work! If you have two minutes, a Google review would really help my business: ${reviewLink} — thanks so much! ${traderName}`
+      ? `Hi ${q.custFirstName || custName}, glad you're happy with the work! If you have two minutes, a Google review would really help my business: ${reviewLink} -thanks so much! ${traderName}`
       : `Hi ${q.custFirstName || custName}, really glad you're happy with the work! If you get a chance, a Google review would mean the world to me. Thanks! ${traderName}`;
     window.location.href = 'https://wa.me/' + (q.custPhone || '').replace(/\D/g,'') + '?text=' + encodeURIComponent(text);
     document.getElementById('reviewRequestModal').style.display = 'none';
@@ -9843,7 +10086,7 @@ function maybeAskForReview(doc) {
 }
 
 /* ── Email compose panel ── */
-function openEmailCompose(toAddr, subject, body, hasAttachment = false) {
+function openEmailCompose(toAddr, subject, body, hasAttachment = false, onBack = null) {
   const modal      = document.getElementById('emailComposeModal');
   const toEl       = document.getElementById('ecTo');
   const subEl      = document.getElementById('ecSubject');
@@ -9858,6 +10101,18 @@ function openEmailCompose(toAddr, subject, body, hasAttachment = false) {
   if (openBtn) openBtn.onclick = () => {
     window.open(`mailto:?to=${encodeURIComponent(toAddr)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
+
+  // Back button -returns to the send method picker
+  const backBtn = document.getElementById('ecBackBtn');
+  if (backBtn) {
+    if (onBack) {
+      backBtn.style.display = '';
+      backBtn.onclick = () => { modal.style.display = 'none'; onBack(); };
+    } else {
+      backBtn.style.display = 'none';
+    }
+  }
+
   modal.style.display = 'flex';
 }
 
@@ -9879,7 +10134,7 @@ function copyEmailField(elId) {
 function getCustomerFirstName(doc) {
   const q = doc?.quote || {};
   if (q.custFirstName?.trim()) return q.custFirstName.trim();
-  // Try custLastName then the combined custName field (never acceptedBy — that is the signer)
+  // Try custLastName then the combined custName field (never acceptedBy -that is the signer)
   const raw = (q.custLastName || doc.custName || '').trim();
   if (!raw) return '';
   // Handle "Last, First" format from buildCustName
@@ -9909,13 +10164,38 @@ function showBookingContactModal(doc) {
   const emailBtn = document.getElementById('bookingEmailBtn');
   const callBtn  = document.getElementById('bookingCallBtn');
 
+  const holdingMsg  = (via) => `Hi ${custFirst || 'there'},\n\nThank you for accepting the ${docType}. I am really looking forward to getting the work done for you!\n\nI will be in touch shortly to confirm the booking details.\n\nKind regards\n${signoff}`.trim();
+  const bookingMsg  = (via) => `Hi ${custFirst || 'there'},\n\nThank you for accepting the ${docType}. I am delighted to get started!\n\nI would like to book you in for:\n\nDate: \nTime: \n\nPlease let me know if this works for you.\n\nKind regards\n${signoff}`.trim();
+
+  const showMessagePicker = (onHolding, onBooking) => {
+    const W = '#7D5730';
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+        <div style="font-size:1.2rem;font-weight:700;margin-bottom:6px;color:#333">What would you like to send?</div>
+        <div style="color:#777;font-size:0.88rem;margin-bottom:22px">Choose the type of message to send</div>
+        <button id="_bmpHolding" style="display:flex;align-items:center;justify-content:center;width:100%;padding:14px;margin-bottom:10px;border-radius:10px;border:none;background:${W};color:#fff;font-size:1rem;font-weight:600;cursor:pointer">Holding message</button>
+        <button id="_bmpBooking" style="display:flex;align-items:center;justify-content:center;width:100%;padding:14px;margin-bottom:10px;border-radius:10px;border:none;background:${W};color:#fff;font-size:1rem;font-weight:600;cursor:pointer">Send booking details</button>
+        <button id="_bmpCancel" style="display:block;width:100%;padding:10px;border-radius:10px;border:1.5px solid #ddd;background:#fff;color:#888;font-size:0.9rem;cursor:pointer">Cancel</button>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    ov.querySelector('#_bmpHolding').addEventListener('click', () => { close(); onHolding(); });
+    ov.querySelector('#_bmpBooking').addEventListener('click', () => { close(); onBooking(); });
+    ov.querySelector('#_bmpCancel').addEventListener('click',  close);
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  };
+
   if (waBtn) {
     waBtn.disabled = !phone;
     waBtn.style.opacity = phone ? '' : '0.4';
     waBtn.onclick = () => {
       document.getElementById('bookingContactModal').style.display = 'none';
-      const msg = `Hi ${custFirst || 'there'}, great news — I have received your acceptance and I am looking forward to getting started!\n\nI will be in touch shortly to confirm the booking details.\n\n${signoff}`.trim();
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      showMessagePicker(
+        () => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(holdingMsg())}`, '_blank'),
+        () => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(bookingMsg())}`, '_blank')
+      );
     };
   }
   if (emailBtn) {
@@ -9923,9 +10203,10 @@ function showBookingContactModal(doc) {
     emailBtn.style.opacity = email ? '' : '0.4';
     emailBtn.onclick = () => {
       document.getElementById('bookingContactModal').style.display = 'none';
-      const subject = `Booking confirmation — your ${docType}`;
-      const body    = `Hi ${custFirst || 'there'},\n\nThank you for accepting the ${docType}. I am really looking forward to getting the work done for you!\n\nI will be in touch shortly to confirm the booking details.\n\nKind regards\n${signoff}`.trim();
-      openEmailCompose(email, subject, body);
+      showMessagePicker(
+        () => openEmailCompose(email, `Booking confirmation for your ${docType}`, holdingMsg()),
+        () => openEmailCompose(email, `Booking details for your ${docType}`, bookingMsg())
+      );
     };
   }
   if (callBtn) {
@@ -9995,7 +10276,7 @@ function buildCustomerExtras(groupName) {
 }
 
 function wireCustomerExtras(body, groupName) {
-  // Sticky note — auto-save on change
+  // Sticky note -auto-save on change
   let noteTimer;
   body.querySelector('.cdv-sticky-note')?.addEventListener('input', e => {
     clearTimeout(noteTimer);
@@ -10003,7 +10284,7 @@ function wireCustomerExtras(body, groupName) {
       saveCustData(groupName, { note: e.target.value });
     }, 600);
   });
-  // Recurring — save immediately on change
+  // Recurring -save immediately on change
   body.querySelector('.cdv-recurring-select')?.addEventListener('change', e => {
     saveCustData(groupName, { recurringDays: parseInt(e.target.value) || 0 });
     updateChasePaymentsBadge(); // refresh badge in case recurring state changed
@@ -10102,7 +10383,7 @@ function openEarningsModal() {
   // Wire export button
   document.getElementById('exportEarningsBtn')?.addEventListener('click', () => {
     const lines = [
-      `Lexi Handles It — Earnings Summary`,
+      `Lexi Handles It -Earnings Summary`,
       `Tax year ${taxYearLabel}`,
       ``,
       `Total invoiced:   ${fmtPrice(totalInvoiced)}`,
