@@ -229,6 +229,71 @@ function personaliseText() {
   if (savedTitle) savedTitle.textContent = `${first}'s Jobs`;
 }
 
+/* ===== BACK BUTTON INTERCEPT ===== */
+// On mobile, pressing the phone's back button closes the topmost modal
+// instead of leaving the app entirely.
+(function setupBackButtonIntercept() {
+  // Push a sentinel state so we always have something to pop back to
+  history.replaceState({ lexiBase: true }, '');
+
+  // When any modal/overlay becomes visible, push a history entry
+  const _modalSelectors = [
+    '#quoteModal', '#previewModal', '#customerModal', '#bookingContactModal',
+    '#emailComposeModal', '#priceListModal', '#settingsModal', '#authModal',
+    '#calendarModal', '#photoModal'
+  ];
+
+  // MutationObserver watches every element that could be a modal/overlay
+  const observer = new MutationObserver(mutations => {
+    for (const m of mutations) {
+      if (m.type !== 'attributes' || m.attributeName !== 'style') continue;
+      const el = m.target;
+      const isModal =
+        el.id && _modalSelectors.includes('#' + el.id) ||
+        el.classList.contains('modal') ||
+        (el.style.position === 'fixed' && el.style.zIndex >= 1000);
+      if (!isModal) continue;
+      const nowVisible = el.style.display !== 'none' && el.style.display !== '';
+      if (nowVisible && !el._lexiHistoryPushed) {
+        el._lexiHistoryPushed = true;
+        history.pushState({ lexiModal: el.id || 'overlay' }, '');
+      } else if (!nowVisible) {
+        el._lexiHistoryPushed = false;
+      }
+    }
+  });
+  observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['style'] });
+
+  // On back button press: close the topmost visible modal/overlay instead of leaving
+  window.addEventListener('popstate', e => {
+    // Find all visible modals / fixed overlays, close the topmost one
+    const allModals = [
+      ...document.querySelectorAll('.modal'),
+      ...document.querySelectorAll('[style*="position:fixed"], [style*="position: fixed"]')
+    ].filter(el => {
+      const d = el.style.display;
+      return d && d !== 'none';
+    });
+
+    if (allModals.length === 0) {
+      // Nothing to close — push the base state back so the app doesn't exit
+      history.pushState({ lexiBase: true }, '');
+      return;
+    }
+
+    // Close the last (topmost z-order) visible modal
+    const top = allModals[allModals.length - 1];
+    top.style.display = 'none';
+    top._lexiHistoryPushed = false;
+
+    // Also fire any close button inside it so cleanup logic runs
+    const closeBtn = top.querySelector(
+      '[id$="CloseBtn"], [id$="closeBtn"], [id$="Close"], .modal-close, [aria-label="Close"]'
+    );
+    if (closeBtn) closeBtn.click();
+  });
+})();
+
 /* ===== INIT ===== */
 document.addEventListener('DOMContentLoaded', async () => {
   // About You -show more toggle
@@ -8569,10 +8634,15 @@ function uid() {
 }
 
 function formatWhatsAppNumber(phone) {
-  // Strip spaces, dashes, brackets, plus signs
-  let n = (phone || '').replace(/[\s\-().+]/g, '');
-  // UK number: leading 0 -> replace with country code 44
-  if (n.startsWith('0')) n = '44' + n.slice(1);
+  // Strip all non-digit characters (spaces, dashes, brackets, plus, etc.)
+  let n = (phone || '').replace(/\D/g, '');
+  // Already has country code 44 (e.g. 447911123456 or was +447911123456)
+  if (n.startsWith('44') && n.length >= 11) return n;
+  // Leading 0 -> replace with 44 (e.g. 07911123456 -> 447911123456)
+  if (n.startsWith('0')) return '44' + n.slice(1);
+  // Bare 10-digit UK mobile starting with 7 (e.g. 7911123456)
+  if (n.startsWith('7') && n.length === 10) return '44' + n;
+  // Fallback - return as-is and hope for the best
   return n;
 }
 
