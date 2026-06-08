@@ -10149,7 +10149,7 @@ function showBookingContactModal(doc) {
   const q = doc.quote || {};
   const traderName = (state.company?.preferredName || state.company?.firstName || '').trim();
   const custFirst  = getCustomerFirstName(doc);
-  const phone      = (q.custPhone || '').replace(/\D/g, '');
+  const phone      = formatWhatsAppNumber(q.custPhone || '');
   const email      = (q.custEmail || '').trim();
   const docType    = (q.type || 'quote').toLowerCase();
   const bizName    = (state.company?.businessName || traderName || '').trim();
