@@ -2424,6 +2424,10 @@ function populatePage1Fields() {
   setColour('accent', c.brandAccent  || DEFAULT_COLOURS.accent);
   setColour('bg',     c.brandBg      || DEFAULT_COLOURS.bg);
   updateColourPreview();
+
+  // Preferences
+  const autoHoldingEl = document.getElementById('prefAutoHolding');
+  if (autoHoldingEl) autoHoldingEl.checked = !!(c.autoHoldingMessage);
 }
 
 function saveBusinessDetails(showToast = true) {
@@ -2505,7 +2509,8 @@ function saveBusinessDetails(showToast = true) {
     brandAccent:  document.getElementById('colourAccent').value,
     brandBg:      document.getElementById('colourBg').value,
     qrCode:       state.company.qrCode || '',
-    qualifications: state.company.qualifications || []
+    qualifications: state.company.qualifications || [],
+    autoHoldingMessage: document.getElementById('prefAutoHolding')?.checked || false
   };
   save();
   saveBusinessToSupabase().catch(error => {
@@ -6753,6 +6758,7 @@ function renderSingleCustomerDashboard(group, groups) {
         ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Call</span></a>`
         : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Call</span></button>`}
       <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share</span></button>
+      <button type="button" class="cal-icon-btn cal-icon-edit cdv-labeled" id="custDashEditBtn" title="Update this customer">${DSVG_EDIT}<span>Update</span></button>
     </div>`;
 
   // contentHtml = pure dashboard content (used for download -no buttons)
@@ -10200,6 +10206,30 @@ function copyEmailField(elId) {
   }
 }
 
+/* ── Auto holding message: skip straight to sending when preference is ON ── */
+function sendHoldingMessageForDoc(doc) {
+  if (!doc) return;
+  const q          = doc.quote || {};
+  const traderName = (state.company?.preferredName || state.company?.firstName || '').trim();
+  const custFirst  = getCustomerFirstName(doc);
+  const phone      = formatWhatsAppNumber(q.custPhone || '');
+  const email      = (q.custEmail || '').trim();
+  const docType    = (q.type || q.type || 'quote').toLowerCase();
+  const bizName    = (state.company?.businessName || traderName || '').trim();
+  const signoff    = [traderName, bizName].filter((v, i, a) => v && a.indexOf(v) === i).join('\n');
+  const msg        = `Hi ${custFirst || 'there'},\n\nThank you for accepting the ${docType}. I am really looking forward to getting the work done for you!\n\nI will be in touch shortly to confirm the booking details.\n\nKind regards\n${signoff}`.trim();
+
+  // Prefer WhatsApp, fall back to email, fall back to copy
+  if (phone) {
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  } else if (email) {
+    openEmailCompose(email, `Regarding your ${docType}`, msg);
+  } else {
+    // No contact details — show the full booking modal instead
+    showBookingContactModal(doc);
+  }
+}
+
 /* ── Get the best first name available from a doc ── */
 function getCustomerFirstName(doc) {
   const q = doc?.quote || {};
@@ -10295,7 +10325,13 @@ function setupReviewModal() {
   // Quote accepted modal
   document.getElementById('quoteAcceptedOkBtn')?.addEventListener('click', () => {
     document.getElementById('quoteAcceptedModal').style.display = 'none';
-    if (_quoteAcceptedDoc) showBookingContactModal(_quoteAcceptedDoc);
+    if (!_quoteAcceptedDoc) return;
+    // If auto holding message is ON, skip straight to sending the holding message
+    if (state.company?.autoHoldingMessage) {
+      sendHoldingMessageForDoc(_quoteAcceptedDoc);
+    } else {
+      showBookingContactModal(_quoteAcceptedDoc);
+    }
   });
   document.getElementById('quoteAcceptedModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';

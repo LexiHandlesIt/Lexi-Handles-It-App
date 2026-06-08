@@ -720,6 +720,21 @@
         </div>
       </div>
 
+      <!-- Preferences -->
+      <div class="card">
+        <h2 class="card-title">Preferences</h2>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Auto-send holding message</div>
+            <div class="toggle-desc">When a quote is accepted, skip straight to the holding message so you can send it in one tap.</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="prefAutoHolding">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
       <!-- Page Footer -->
       <div class="page-footer">
         <button type="button" class="btn btn-primary btn-lg" id="saveBusinessBtn">Save My Business</button>
@@ -1284,10 +1299,10 @@
       </div>
       <div id="previewContent" class="preview-content"></div>
       <div class="modal-footer preview-footer">
-        <button type="button" class="btn btn-outline" id="previewEditBtn" title="Edit"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span class="btn-label"> Edit</span></button>
-        <button type="button" class="btn btn-outline" id="previewPrintBtn" title="Print"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span class="btn-label"> Print</span></button>
-        <button type="button" class="btn btn-success" id="previewSaveBtn">✓ Save</button>
-        <button type="button" class="btn btn-primary" id="previewSendBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Send</button>
+        <button type="button" class="btn btn-outline pf-icon-btn" id="previewEditBtn" title="Edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button type="button" class="btn btn-outline pf-icon-btn" id="previewPrintBtn" title="Print"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
+        <button type="button" class="btn btn-outline pf-grow-btn" id="previewSaveBtn">✓ Save</button>
+        <button type="button" class="btn btn-outline pf-grow-btn" id="previewSendBtn">Send</button>
       </div>
     </div>
   </div>
@@ -1339,10 +1354,10 @@
         </div>
       </div>
       <div class="modal-footer preview-footer">
-        <button type="button" class="btn btn-outline" id="quoteEditBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>
-        <button type="button" class="btn btn-outline" id="quotePreviewBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview</button>
-        <button type="button" class="btn btn-success" id="quoteSaveBtn">✓ Save</button>
-        <button type="button" class="btn btn-primary" id="quoteSendBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Send</button>
+        <button type="button" class="btn btn-outline pf-icon-btn" id="quoteEditBtn" title="Edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button type="button" class="btn btn-outline pf-icon-btn" id="quotePreviewBtn" title="Preview"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button type="button" class="btn btn-outline pf-grow-btn" id="quoteSaveBtn">✓ Save</button>
+        <button type="button" class="btn btn-outline pf-grow-btn" id="quoteSendBtn">Send</button>
       </div>
     </div>
   </div>
@@ -1398,10 +1413,10 @@
         </div>
       </div>
       <div class="modal-footer preview-footer">
-        <button type="button" class="btn btn-outline" id="invEditBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>
-        <button type="button" class="btn btn-outline" id="invPreviewBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview</button>
-        <button type="button" class="btn btn-success" id="invSaveBtn">✓ Save</button>
-        <button type="button" class="btn btn-primary" id="invSendBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send</button>
+        <button type="button" class="btn btn-outline pf-icon-btn" id="invEditBtn" title="Edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button type="button" class="btn btn-outline pf-icon-btn" id="invPreviewBtn" title="Preview"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button type="button" class="btn btn-outline pf-grow-btn" id="invSaveBtn">✓ Save</button>
+        <button type="button" class="btn btn-outline pf-grow-btn" id="invSendBtn">Send</button>
       </div>
     </div>
   </div>
@@ -1474,10 +1489,10 @@
         </div>
       </div>
       <div class="modal-footer preview-footer">
-        <button type="button" class="btn btn-outline" id="recEditBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>
-        <button type="button" class="btn btn-outline" id="recPreviewBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview</button>
-        <button type="button" class="btn btn-success" id="recSaveBtn">✓ Save</button>
-        <button type="button" class="btn btn-primary" id="recSendBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send</button>
+        <button type="button" class="btn btn-outline pf-icon-btn" id="recEditBtn" title="Edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button type="button" class="btn btn-outline pf-icon-btn" id="recPreviewBtn" title="Preview"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button type="button" class="btn btn-outline pf-grow-btn" id="recSaveBtn">✓ Save</button>
+        <button type="button" class="btn btn-outline pf-grow-btn" id="recSendBtn">Send</button>
       </div>
     </div>
   </div>
@@ -1863,10 +1878,7 @@
     <div class="modal-card">
       <div class="modal-header">
         <h2 class="modal-title" id="customerDashboardTitle">Customer</h2>
-        <div style="display:flex;align-items:center;gap:8px">
-          <button type="button" class="cdv-header-edit-btn cdv-contact-update-btn" id="custDashEditBtn" title="Update this customer">✎ Update</button>
           <button type="button" class="modal-close" id="closeCustomerDashboardBtn" aria-label="Close">✕</button>
-        </div>
       </div>
       <div class="modal-body" id="customerDashboardBody"></div>
     </div>

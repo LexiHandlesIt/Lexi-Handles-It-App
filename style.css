@@ -410,6 +410,58 @@ h3 { font-size: 1rem; font-weight: 600; }
   border: 1px solid var(--border);
 }
 
+/* ── Preference toggle row ── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.toggle-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #333;
+  margin-bottom: 3px;
+}
+.toggle-desc {
+  font-size: 0.82rem;
+  color: #777;
+  line-height: 1.4;
+}
+.toggle-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 26px;
+  cursor: pointer;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: #ccc;
+  border-radius: 26px;
+  transition: background 0.2s;
+}
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.toggle-switch input:checked + .toggle-track { background: var(--walnut); }
+.toggle-switch input:checked + .toggle-track .toggle-thumb { transform: translateX(22px); }
+
 .card-title {
   color: var(--walnut);
   font-weight: 700;
@@ -4075,11 +4127,35 @@ input[type="text"].sig-text-input:focus {
 }
 
 .modal-footer .btn { flex: 1; }
+.preview-footer .btn { flex: 0 0 auto; } /* reset — pf-icon-btn / pf-grow-btn take over */
+/* All preview footer buttons use brand walnut, not sage */
+.preview-footer .btn-outline {
+  color: var(--walnut);
+  border-color: var(--walnut);
+}
+.preview-footer .btn-outline:hover { background: var(--walnut-tint); }
 
 .preview-footer {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px 16px;
+}
+/* Icon-only compact buttons (Edit / Print / Preview) */
+.pf-icon-btn {
+  flex: 0 0 auto !important;
+  width: 44px !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+/* Save and Send grow to fill remaining space equally */
+.pf-grow-btn {
+  flex: 1 !important;
+  min-width: 0 !important;
 }
 
 .preview-modal-card {
@@ -5066,15 +5142,17 @@ input[type="text"].sig-text-input:focus {
   text-decoration: none;
   flex-shrink: 0;
 }
-.cal-icon-btn:hover { background: var(--cream); border-color: var(--walnut); color: var(--walnut); }
-.cal-icon-btn.cal-icon-email { border-color: var(--sage); color: var(--sage); }
-.cal-icon-btn.cal-icon-email:hover { background: #eef4ea; border-color: #4a6338; color: #4a6338; }
-.cal-icon-btn.cal-icon-whatsapp { border-color: var(--sage); color: var(--sage); }
-.cal-icon-btn.cal-icon-whatsapp:hover { background: #eef4ea; border-color: #4a6338; color: #4a6338; }
-.cal-icon-btn.cal-icon-phone { border-color: var(--sage); color: var(--sage); }
-.cal-icon-btn.cal-icon-phone:hover { background: #eef4ea; border-color: #4a6338; color: #4a6338; }
-.cal-icon-btn.cal-icon-share { border-color: var(--sage); color: var(--sage); }
-.cal-icon-btn.cal-icon-share:hover { background: #eef4ea; border-color: #4a6338; color: #4a6338; }
+.cal-icon-btn:hover { background: var(--walnut-tint); border-color: var(--walnut); color: var(--walnut); }
+.cal-icon-btn.cal-icon-email,
+.cal-icon-btn.cal-icon-whatsapp,
+.cal-icon-btn.cal-icon-phone,
+.cal-icon-btn.cal-icon-share,
+.cal-icon-btn.cal-icon-edit { border-color: var(--walnut); color: var(--walnut); }
+.cal-icon-btn.cal-icon-email:hover,
+.cal-icon-btn.cal-icon-whatsapp:hover,
+.cal-icon-btn.cal-icon-phone:hover,
+.cal-icon-btn.cal-icon-share:hover,
+.cal-icon-btn.cal-icon-edit:hover { background: var(--walnut-tint); border-color: var(--walnut-d); color: var(--walnut-d); }
 
 /* Labeled variant — used in customer dashboard only */
 .cal-icon-btn.cdv-labeled {
