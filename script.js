@@ -1918,7 +1918,6 @@ function setupNavigation() {
   };
 
   document.getElementById('menuDeleteAccount')?.addEventListener('click', () => {
-    closeMenu();
     daShowStep('daStep1');
     document.getElementById('deleteAccountModal').style.display = 'flex';
   });
