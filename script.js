@@ -14,6 +14,49 @@ const lexiSupabase = (
 let authMode = 'login';
 let lexiAuthSession = null;
 let priceListSyncTimer = null;
+
+// ── PWA INSTALL PROMPT ────────────────────────────────────────
+let _pwaInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _pwaInstallPrompt = e;
+  // Show the button in the nav menu
+  const btn = document.getElementById('menuAddToHome');
+  if (btn) btn.style.display = '';
+});
+
+window.addEventListener('appinstalled', () => {
+  _pwaInstallPrompt = null;
+  const btn = document.getElementById('menuAddToHome');
+  if (btn) btn.style.display = 'none';
+  toast('Lexi has been added to your home screen!', 'success', 3000);
+});
+
+function handleAddToHomeScreen() {
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isInStandaloneMode = window.navigator.standalone === true;
+
+  if (isInStandaloneMode) {
+    toast('Lexi is already installed on your home screen.', 'success');
+    return;
+  }
+
+  if (_pwaInstallPrompt) {
+    // Android / Chrome - native prompt
+    _pwaInstallPrompt.prompt();
+    _pwaInstallPrompt.userChoice.then(choice => {
+      if (choice.outcome === 'accepted') {
+        _pwaInstallPrompt = null;
+      }
+    });
+  } else if (isIos) {
+    // iOS - show step-by-step instructions
+    document.getElementById('iosInstallModal').style.display = 'flex';
+  } else {
+    toast('Open Lexi in Chrome on your phone to add it to your home screen.', 'info', 5000);
+  }
+}
 let customerSyncTimer = null;
 let savedDocsSyncTimer = null;
 let savedDocsSyncReady = false;
@@ -1873,6 +1916,17 @@ function setupNavigation() {
 
   // Qualifications are now shared from within Send My Business Info -no separate menu item needed
 
+  document.getElementById('menuAddToHome')?.addEventListener('click', () => {
+    closeMenu();
+    handleAddToHomeScreen();
+  });
+
+  // Also show the button if already on iOS (can't detect beforeinstallprompt on iOS)
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone) {
+    const btn = document.getElementById('menuAddToHome');
+    if (btn) btn.style.display = '';
+  }
+
   document.getElementById('menuShareLexi')?.addEventListener('click', () => {
     if (!canUseMainApp()) { requireSetupGuard(); return; }
     closeMenu();
@@ -3038,9 +3092,18 @@ function setupPage2() {
   document.getElementById('jobNameMat').addEventListener('keydown', e => { if (e.key==='Enter') addIndividualJob(); });
   document.getElementById('jobPriceMat').addEventListener('keydown', e => { if (e.key==='Enter') addIndividualJob(); });
 
-  // Search -skip rebuild if an inline edit is active
+  // Search - skip rebuild if an inline edit is active
   document.getElementById('priceListSearch').addEventListener('input', () => {
     if (!editingJobId) refreshPriceList();
+  });
+
+  // Category filter tabs
+  document.querySelectorAll('.pl-filter-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.pl-filter-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      refreshPriceList();
+    });
   });
 
   // Select all
@@ -3062,9 +3125,6 @@ function setupPage2() {
     updateJobPicker();
     toast(`Deleted ${checked.length} job${checked.length===1?'':'s'}.`);
   });
-
-  // Sort
-  document.getElementById('sortJobs').addEventListener('change', () => refreshPriceList());
 
   // My Rates — format to 2dp on blur and auto-save to state
   ['rateHourly','rateHalfDay','rateDay','rateCallout'].forEach(id => {
@@ -3213,10 +3273,14 @@ function addJob(name, price, unit, category = '', costPrice = null) {
 
 function refreshPriceList() {
   const q    = getVal('priceListSearch').toLowerCase();
-  const sort = (document.getElementById('sortJobs')?.value) || 'added';
-  let filtered = state.priceList.filter(j => j.name.toLowerCase().includes(q));
-  if (sort === 'name')  filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
-  if (sort === 'price') filtered = [...filtered].sort((a, b) => a.price - b.price);
+  const activeTab = document.querySelector('.pl-filter-tab.active')?.dataset?.cat || 'all';
+  let filtered = state.priceList.filter(j => {
+    const matchesSearch = j.name.toLowerCase().includes(q);
+    if (!matchesSearch) return false;
+    if (activeTab === 'materials') return j.category === 'materials';
+    if (activeTab === 'service')   return j.category !== 'materials';
+    return true;
+  });
   const container = document.getElementById('priceListContainer');
   const empty     = document.getElementById('priceListEmpty');
   const badge     = document.getElementById('priceListBadge');
@@ -4476,19 +4540,29 @@ function renderAttentionWidget() {
     const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
     const outstanding = Math.max(0, (d.total || 0) - totalPaid);
 
-    if (outstanding <= 0 || d.paid) return;
+    if (d.paid) return;
 
+    // Overdue invoice
     if (d.invoiceSent && d.invoiceDueDate && today > d.invoiceDueDate) {
       const days = Math.floor((new Date(today) - new Date(d.invoiceDueDate)) / 86400000);
-      items.push({ docId: d.id, custName, ref, msg: `Invoice ${days}d overdue`, action: 'chase', color: '#c0392b' });
-    } else if (!d.invoiceSent && !d.paid) {
+      items.push({ docId: d.id, custName, ref, msg: `Invoice ${days}d overdue - payment not received`, action: 'chase', color: '#c0392b' });
+
+    // Job complete but invoice not raised
+    } else if (d.jobCompleted && !d.invoiceSent) {
+      items.push({ docId: d.id, custName, ref, msg: 'Job complete - invoice not raised yet', action: 'invoice', color: '#e67e22' });
+
+    // Quote/estimate accepted but no start date booked
+    } else if ((d.jobAccepted || d.acceptStatus === 'accepted') && !d.jobStartDate && !d.jobCompleted) {
+      items.push({ docId: d.id, custName, ref, msg: 'Quote accepted - job not yet booked in', action: 'book', color: '#2980b9' });
+
+    // Quote/estimate sent but no reply after 14 days
+    } else if (!d.invoiceSent && !d.paid && !d.jobAccepted && d.acceptStatus !== 'accepted') {
       const docDate = d.sentAt || d.sharedAt || null;
       const qType = (q.type || '').toLowerCase();
-      // Only nudge if the estimate was actually sent (acceptToken is created on send)
       if ((qType === 'estimate' || qType === 'quote') && docDate && d.acceptToken) {
         const age = Math.floor((new Date(today) - new Date(docDate)) / 86400000);
         if (age >= 14) {
-          items.push({ docId: d.id, custName, ref, msg: `${qType === 'quote' ? 'Quote' : 'Estimate'} sent ${age} days ago - no reply`, action: 'send', color: '#e67e22' });
+          items.push({ docId: d.id, custName, ref, msg: `${qType === 'quote' ? 'Quote' : 'Estimate'} sent ${age} days ago - no reply`, action: 'send', color: '#f39c12' });
         }
       }
     }
@@ -4535,9 +4609,13 @@ function renderAttentionWidget() {
             </div>
             ${item.action === 'chase'
               ? `<button type="button" class="attn-action-btn attn-chase" onclick="openChaseForDoc('${esc(item.docId)}')">Chase</button>`
-              : item.action === 'recurring'
-                ? `<button type="button" class="attn-action-btn attn-recurring" onclick="openCustomerDashboardForDoc('${esc(item.docId)}')">Book In</button>`
-                : `<button type="button" class="attn-action-btn attn-send" onclick="openQuoteModal('${esc(item.docId)}')">Follow Up</button>`
+              : item.action === 'invoice'
+                ? `<button type="button" class="attn-action-btn attn-invoice" onclick="previewInvoice('${esc(item.docId)}')">Invoice</button>`
+                : item.action === 'book'
+                  ? `<button type="button" class="attn-action-btn attn-book" onclick="showBookingContactModal(state.saved.find(d=>d.id==='${esc(item.docId)}'))">Book In</button>`
+                  : item.action === 'recurring'
+                    ? `<button type="button" class="attn-action-btn attn-recurring" onclick="openCustomerDashboardForDoc('${esc(item.docId)}')">Book In</button>`
+                    : `<button type="button" class="attn-action-btn attn-send" onclick="openQuoteModal('${esc(item.docId)}')">Follow Up</button>`
             }
           </div>`).join('')}
       </div>
@@ -4553,7 +4631,118 @@ function renderAttentionWidget() {
   });
 }
 
-function refreshSavedDocs() {
+// ── SPREADSHEET VIEW ───────────────────────────────────────────
+function openSpreadsheetView() {
+  const modal = document.getElementById('spreadsheetModal');
+  if (!modal) return;
+
+  // Build table
+  const head = document.getElementById('ssHead');
+  const body = document.getElementById('ssBody');
+
+  const cols = [
+    { label: 'Ref',           key: 'ref' },
+    { label: 'Date',          key: 'date' },
+    { label: 'Last Name',     key: 'lastName' },
+    { label: 'First Name',    key: 'firstName' },
+    { label: 'Address',       key: 'address' },
+    { label: 'Postcode',      key: 'postcode' },
+    { label: 'Phone',         key: 'phone' },
+    { label: 'Jobs',          key: 'jobs' },
+    { label: 'Stage',         key: 'stage' },
+    { label: 'Total',         key: 'total' },
+    { label: 'Paid',          key: 'paid' },
+    { label: 'Outstanding',   key: 'outstanding' },
+    { label: 'Repeat?',       key: 'repeat' },
+  ];
+
+  head.innerHTML = `<tr>${cols.map(c => `<th class="ss-th">${esc(c.label)}</th>`).join('')}</tr>`;
+
+  // Sort newest first
+  const docs = [...(state.saved || [])].sort((a, b) => {
+    const da = a.createdAt || a.date || '';
+    const db = b.createdAt || b.date || '';
+    return da < db ? 1 : -1;
+  });
+
+  // Build customer repeat map
+  const custCounts = {};
+  docs.forEach(d => {
+    const q = d.quote || {};
+    const name = `${(q.custLastName||'').trim().toLowerCase()}|${(q.custFirstName||'').trim().toLowerCase()}|${(q.custPhone||'').trim()}`;
+    custCounts[name] = (custCounts[name] || 0) + 1;
+  });
+
+  // Stage label
+  function stageLabel(d) {
+    if (d.paid) return 'Paid';
+    if (d.receiptRef || (d.quote?.type||'').toLowerCase() === 'receipt') return 'Receipt';
+    if (d.invoiceSent || (d.quote?.type||'').toLowerCase() === 'invoice') {
+      if (d.invoiceDueDate && d.invoiceDueDate < todayStr()) return 'Overdue';
+      return 'Invoiced';
+    }
+    if (d.jobCompleted) return 'Complete';
+    if (d.jobStartDate) return 'Job Booked';
+    if (d.jobAccepted || d.acceptStatus === 'accepted') return 'Accepted';
+    const t = (d.quote?.type || d.type || '').toLowerCase();
+    if (t === 'quote') return 'Quote';
+    if (t === 'estimate') return 'Estimate';
+    return 'Draft';
+  }
+
+  const stageCls = { 'Paid':'ss-paid', 'Overdue':'ss-overdue', 'Invoiced':'ss-invoiced',
+    'Accepted':'ss-accepted', 'Job Booked':'ss-booked', 'Complete':'ss-complete',
+    'Quote':'ss-quote', 'Estimate':'ss-estimate', 'Receipt':'ss-paid', 'Draft':'ss-draft' };
+
+  body.innerHTML = docs.map(d => {
+    const q = d.quote || {};
+    const payments = getDocPayments(d);
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const total = Number(d.total || q.total || 0);
+    const outstanding = d.paid ? 0 : Math.max(0, total - totalPaid);
+    const jobs = (q.items || []).map(i => i.name).filter(Boolean).join(', ') || '-';
+    const stage = stageLabel(d);
+    const cls = stageCls[stage] || '';
+    const custKey = `${(q.custLastName||'').trim().toLowerCase()}|${(q.custFirstName||'').trim().toLowerCase()}|${(q.custPhone||'').trim()}`;
+    const isRepeat = (custCounts[custKey] || 0) > 1;
+
+    const cells = [
+      d.ref || d.invoiceRef || q.ref || '-',
+      formatDate(d.date || q.date || ''),
+      esc(q.custLastName || '-'),
+      esc(q.custFirstName || '-'),
+      esc(q.custAddr || '-'),
+      esc(q.custPostcode || '-'),
+      esc(q.custPhone || '-'),
+      esc(jobs),
+      `<span class="ss-stage ${cls}">${stage}</span>`,
+      fmtPrice(total),
+      totalPaid > 0 ? fmtPrice(totalPaid) : '-',
+      outstanding > 0 ? fmtPrice(outstanding) : '-',
+      isRepeat ? '<span class="ss-repeat">Yes</span>' : '-',
+    ];
+
+    return `<tr class="ss-row">${cells.map((c, i) => `<td class="ss-td${i===7?' ss-td-jobs':''}">${c}</td>`).join('')}</tr>`;
+  }).join('');
+
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  // Show rotate hint only in portrait
+  const hint = document.getElementById('ssRotateHint');
+  if (hint) hint.style.display = window.innerHeight > window.innerWidth ? 'flex' : 'none';
+
+  document.getElementById('closeSpreadsheetBtn').onclick = closeSpreadsheetView;
+  modal.addEventListener('click', e => { if (e.target === modal) closeSpreadsheetView(); }, { once: true });
+}
+
+function closeSpreadsheetView() {
+  const modal = document.getElementById('spreadsheetModal');
+  if (modal) modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function refreshPriceList() {
   updateChasePaymentsBadge();
   renderAttentionWidget();
   const sel    = document.getElementById('savedFilterSelect');
@@ -10157,6 +10346,120 @@ function showQuoteAcceptedNotification() {
   // Mark as notified so we don't show again
   accepted.forEach(d => { d.acceptNotified = true; });
   save();
+
+  // Fire a phone notification if permission already granted
+  const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'A customer';
+  sendLexiNotification(
+    'Quote accepted!',
+    `${custName} has accepted your ${(q.type||'quote').toLowerCase()}. Time to book them in.`,
+    'accepted'
+  );
+
+  // If permission not yet decided, show the enable-notifications prompt inside the modal
+  if (Notification.permission === 'default') {
+    const notifPrompt = document.getElementById('acceptedNotifPrompt');
+    if (notifPrompt) notifPrompt.style.display = 'flex';
+  }
+}
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────
+
+const NOTIF_KEY = 'lexi_notif_asked';
+
+function sendLexiNotification(title, body, tag = 'lexi') {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, {
+      body,
+      tag,
+      icon: '1 Lexi Handles It Transparent.png',
+      badge: '1 Lexi Handles It Transparent.png',
+    });
+    setTimeout(() => n.close(), 8000);
+  } catch(e) { console.warn('Notification failed:', e); }
+}
+
+async function requestLexiNotifications(onGranted) {
+  if (!('Notification' in window)) {
+    toast('Your browser does not support notifications.', 'error');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    if (onGranted) onGranted();
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    toast('Notifications are blocked. Enable them in your phone settings for this site.', 'info', 5000);
+    return;
+  }
+  const result = await Notification.requestPermission();
+  localStorage.setItem(NOTIF_KEY, 'asked');
+  if (result === 'granted') {
+    toast('Notifications enabled!', 'success');
+    sendLexiNotification('Lexi notifications on', 'You\'ll get alerts for new acceptances, overdue invoices and upcoming jobs.', 'welcome');
+    if (onGranted) onGranted();
+  } else {
+    toast('No problem - you can enable notifications from your phone settings any time.', 'info', 4000);
+  }
+}
+
+// Daily check: fire notifications for overdue invoices and tomorrow's jobs
+function checkScheduledNotifications() {
+  if (Notification.permission !== 'granted') return;
+  const today = todayStr();
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })();
+
+  (state.saved || []).forEach(d => {
+    const q = d.quote || {};
+    const name = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'A customer';
+
+    // Overdue invoice - notify once per day per doc
+    if (d.invoiceSent && !d.paid && d.invoiceDueDate && d.invoiceDueDate < today) {
+      const key = `lexi_notif_overdue_${d.id}_${today}`;
+      if (!localStorage.getItem(key)) {
+        const days = Math.floor((new Date(today) - new Date(d.invoiceDueDate)) / 86400000);
+        sendLexiNotification(
+          'Invoice overdue',
+          `${name} - invoice ${days} day${days===1?'':'s'} overdue. Open Lexi to chase payment.`,
+          `overdue_${d.id}`
+        );
+        localStorage.setItem(key, '1');
+      }
+    }
+
+    // Job tomorrow - remind the night before
+    if (d.jobStartDate === tomorrow && !d.jobCompleted) {
+      const key = `lexi_notif_job_${d.id}_${today}`;
+      if (!localStorage.getItem(key)) {
+        sendLexiNotification(
+          'Job tomorrow',
+          `Reminder: ${name} is booked in tomorrow.`,
+          `job_${d.id}`
+        );
+        localStorage.setItem(key, '1');
+      }
+    }
+
+    // Job complete - invoice not raised after 48h
+    if (d.jobCompleted && !d.invoiceSent) {
+      const completedDate = d.jobCompletedDate || '';
+      if (completedDate) {
+        const daysSince = Math.floor((new Date(today) - new Date(completedDate)) / 86400000);
+        if (daysSince >= 2) {
+          const key = `lexi_notif_invoice_${d.id}_${today}`;
+          if (!localStorage.getItem(key)) {
+            sendLexiNotification(
+              'Invoice not raised',
+              `${name}'s job is complete but you haven't raised an invoice yet.`,
+              `invoice_${d.id}`
+            );
+            localStorage.setItem(key, '1');
+          }
+        }
+      }
+    }
+  });
 }
 
 /* ── Real-time subscription: instant acceptance notification ── */
@@ -10522,9 +10825,16 @@ function setupChaseAndPause() {
   // Poll for quote acceptances every 8 seconds
   setInterval(() => checkQuoteAcceptances(), 8000);
 
+  // Check scheduled notifications on load and every hour
+  checkScheduledNotifications();
+  setInterval(() => checkScheduledNotifications(), 60 * 60 * 1000);
+
   // Also check immediately when the tradesperson tabs back to the app
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') checkQuoteAcceptances();
+    if (document.visibilityState === 'visible') {
+      checkQuoteAcceptances();
+      checkScheduledNotifications();
+    }
   });
 
   // Supabase real-time: instant notification when a customer accepts

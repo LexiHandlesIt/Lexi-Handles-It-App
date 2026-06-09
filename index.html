@@ -6,6 +6,9 @@
   <meta name="theme-color" content="#7D5730">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Lexi">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <title>Lexi Handles It</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -293,6 +296,10 @@
         <svg class="nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="nav-submenu" id="navManageBusinessSubmenu">
+        <button class="nav-menu-item nav-submenu-item" data-target="page1" id="menuBusinessDetails">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          My Business Details
+        </button>
         <button class="nav-menu-item nav-submenu-item" data-target="page2" id="menuPriceList">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           My Rates &amp; Services
@@ -332,6 +339,12 @@
         </button>
       </div>
     </div>
+
+    <!-- Add to Home Screen -->
+    <button class="nav-menu-item nav-menu-section-break" id="menuAddToHome" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Add to Home Screen
+    </button>
 
     <!-- Share -->
     <button class="nav-menu-item nav-menu-section-break" id="menuShareLexi">
@@ -912,21 +925,18 @@
           <span class="bulk-counter"><span id="priceListBadge">0</span> Added</span>
         </div>
         <div class="price-list-toolbar">
-          <input type="text" id="priceListSearch" placeholder="Search jobs..." class="search-input">
+          <input type="text" id="priceListSearch" placeholder="Search..." class="search-input">
           <button type="button" class="btn btn-sm btn-danger-outline" id="deleteSelectedBtn" style="display:none">Delete selected</button>
+        </div>
+        <div class="pl-filter-tabs">
+          <button type="button" class="pl-filter-tab active" data-cat="all">All</button>
+          <button type="button" class="pl-filter-tab" data-cat="service">Services</button>
+          <button type="button" class="pl-filter-tab" data-cat="materials">Materials</button>
         </div>
         <div class="price-list-header">
           <label class="checkbox-label compact">
             <input type="checkbox" id="selectAllJobs"> Select all
           </label>
-          <div class="sort-row">
-            <label for="sortJobs" class="sort-label">Sort:</label>
-            <select id="sortJobs" class="sort-select">
-              <option value="added">Date added</option>
-              <option value="name">Job</option>
-              <option value="price">Price</option>
-            </select>
-          </div>
         </div>
         <div id="priceListContainer" class="price-list-container">
           <div class="empty-state" id="priceListEmpty">
@@ -1276,6 +1286,10 @@
           <button type="button" class="jobs-refresh-btn" id="jobsRefreshBtn" title="Refresh — check for new acceptances and scroll to top" onclick="jobsRefresh()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             Refresh
+          </button>
+          <button type="button" class="jobs-spreadsheet-btn" id="jobsSpreadsheetBtn" title="View all jobs as a spreadsheet" onclick="openSpreadsheetView()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+            Spreadsheet
           </button>
         </div>
 
@@ -2417,7 +2431,15 @@
     <div class="modal-card" style="max-width:380px;text-align:center">
       <div style="font-size:2.4rem;margin:16px 0 6px">🎉</div>
       <h2 class="modal-title" style="margin-bottom:6px;color:#2e7d32">Quote Accepted!</h2>
-      <p id="quoteAcceptedMsg" style="color:#555;font-size:0.9rem;margin:0 0 20px;line-height:1.6"></p>
+      <p id="quoteAcceptedMsg" style="color:#555;font-size:0.9rem;margin:0 0 16px;line-height:1.6"></p>
+      <div id="acceptedNotifPrompt" style="display:none;align-items:center;gap:10px;background:#f5f0eb;border-radius:10px;padding:12px 14px;margin-bottom:16px;text-align:left">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7D5730" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <div style="flex:1">
+          <div style="font-size:0.82rem;font-weight:700;color:#333;margin-bottom:2px">Get notified next time</div>
+          <div style="font-size:0.76rem;color:#666;line-height:1.4">Enable notifications so Lexi can alert you the moment a job is accepted, even when the app is closed.</div>
+        </div>
+        <button type="button" onclick="requestLexiNotifications()" style="background:var(--walnut);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit">Enable</button>
+      </div>
       <button type="button" class="btn btn-success w-100" id="quoteAcceptedOkBtn">Brilliant. Let's get the job booked in.</button>
     </div>
   </div>
@@ -2506,6 +2528,56 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" id="closeCalEmailModalBtn">Cancel</button>
         <button type="button" class="btn btn-primary" id="sendCalEmailBtn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add to Home Screen - iOS instructions modal -->
+  <div class="modal-overlay" id="iosInstallModal" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width:360px;text-align:center">
+      <img src="1 Lexi Handles It Transparent.png" alt="Lexi" style="height:56px;margin:12px auto 8px;display:block" onerror="this.style.display='none'">
+      <h2 class="modal-title" style="margin-bottom:8px">Add Lexi to your Home Screen</h2>
+      <p style="color:#555;font-size:0.88rem;line-height:1.6;margin-bottom:16px">
+        Tap the <strong>Share button</strong> at the bottom of your browser
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7D5730" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        then choose <strong>Add to Home Screen</strong>. Lexi will appear on your home screen with its own icon, just like an app.
+      </p>
+      <div class="ios-install-steps">
+        <div class="ios-install-step">
+          <span class="ios-step-num">1</span>
+          <span>Tap <strong>Share</strong> at the bottom of Safari</span>
+        </div>
+        <div class="ios-install-step">
+          <span class="ios-step-num">2</span>
+          <span>Scroll down and tap <strong>Add to Home Screen</strong></span>
+        </div>
+        <div class="ios-install-step">
+          <span class="ios-step-num">3</span>
+          <span>Tap <strong>Add</strong> - Lexi appears on your home screen</span>
+        </div>
+      </div>
+      <button type="button" class="btn btn-walnut w-100" style="margin-top:16px" onclick="document.getElementById('iosInstallModal').style.display='none'">Got it</button>
+    </div>
+  </div>
+
+  <!-- Spreadsheet View Overlay -->
+  <div class="modal-overlay" id="spreadsheetModal" style="display:none" role="dialog" aria-modal="true" aria-label="Jobs spreadsheet view">
+    <div class="spreadsheet-shell">
+      <div class="spreadsheet-topbar">
+        <span class="spreadsheet-title">All Jobs</span>
+        <div class="spreadsheet-topbar-right">
+          <span class="spreadsheet-rotate-hint" id="ssRotateHint">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+            Rotate for best view
+          </span>
+          <button type="button" class="spreadsheet-close" id="closeSpreadsheetBtn" aria-label="Close">&times;</button>
+        </div>
+      </div>
+      <div class="spreadsheet-scroll">
+        <table class="ss-table" id="ssTable">
+          <thead id="ssHead"></thead>
+          <tbody id="ssBody"></tbody>
+        </table>
       </div>
     </div>
   </div>
