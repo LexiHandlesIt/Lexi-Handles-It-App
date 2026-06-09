@@ -26,8 +26,8 @@
       <p class="auth-trial"><strong>Start with 3 months free. No card needed.</strong></p>
 
       <div class="auth-tabs" role="tablist" aria-label="Choose sign up or log in">
-        <button type="button" class="auth-tab active" id="authSignupTab">Create account</button>
-        <button type="button" class="auth-tab" id="authLoginTab">Log in</button>
+        <button type="button" class="auth-tab active" id="authLoginTab">Log in</button>
+        <button type="button" class="auth-tab" id="authSignupTab">Create account</button>
       </div>
 
       <div class="auth-form">
@@ -279,30 +279,38 @@
       </div>
     </div>
 
-    <!-- Settings -->
+    <!-- My Business -->
     <div class="nav-submenu-group">
       <button class="nav-menu-item nav-submenu-trigger" id="menuManageBusiness">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        Settings
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+        My Business
         <svg class="nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="nav-submenu" id="navManageBusinessSubmenu">
-        <button class="nav-menu-item nav-submenu-item" data-target="page1" id="menuEditBusiness">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-          My Business
-        </button>
-        <button class="nav-menu-item nav-submenu-item" id="menuQuickQr">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4"/><path d="M21 14v7"/></svg>
-          Show QR Code
-        </button>
         <button class="nav-menu-item nav-submenu-item" data-target="page2" id="menuPriceList">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          My Price List
+          My Rates &amp; Services
         </button>
         <button class="nav-menu-item nav-submenu-item" id="menuEarnings">
           <span class="nav-menu-pound" aria-hidden="true">£</span>
           My Earnings
         </button>
+        <button class="nav-menu-item nav-submenu-item" id="menuQuickQr">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M17 17h4"/><path d="M21 14v7"/></svg>
+          <span id="menuQrLabel">My QR Code</span>
+          <button type="button" class="field-info-btn nav-qr-info-btn" data-title="My QR Code" data-body="Let your customer scan this now, or send it on." aria-label="About QR Code" onclick="event.stopPropagation()">?</button>
+        </button>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="nav-submenu-group">
+      <button class="nav-menu-item nav-submenu-trigger" id="menuSettings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+        <svg class="nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="nav-submenu" id="navSettingsSubmenu">
         <button class="nav-menu-item nav-submenu-item" id="menuTrialPlans">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M7 15h4"/></svg>
           Trial &amp; Plans
@@ -311,6 +319,10 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/></svg>
           <span id="menuQuietSeasonLabel">Quiet Season</span>
           <span class="qs-active-badge" id="qsActiveBadge" style="display:none">Active</span>
+        </button>
+        <button class="nav-menu-item nav-submenu-item nav-menu-delete-account" id="menuDeleteAccount">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          Delete Account
         </button>
       </div>
     </div>
@@ -725,7 +737,7 @@
         <h2 class="card-title">Preferences</h2>
         <div class="toggle-row">
           <div>
-            <div class="toggle-label">Auto-send holding message</div>
+            <div class="toggle-label">Auto-send holding message <button type="button" class="field-info-btn" data-title="What is a holding message?" data-body="A holding message is a short friendly message sent to your customer as soon as they accept your quote. It lets them know you have received their acceptance and that you will be in touch to confirm the booking.&#10;&#10;Example: &quot;Hi Sarah, thank you for accepting the quote. I am really looking forward to getting the work done for you! I will be in touch shortly to confirm the booking details. Kind regards, James&quot;&#10;&#10;When this is turned on, Lexi sends the holding message using the same method you used to send the original quote. If you sent via WhatsApp, it goes via WhatsApp. If you sent via email, it goes via email.">?</button></div>
             <div class="toggle-desc">When a quote is accepted, skip straight to the holding message so you can send it in one tap.</div>
           </div>
           <label class="toggle-switch">
@@ -733,96 +745,165 @@
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </label>
         </div>
-        <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px">
-          <div class="toggle-label" style="margin-bottom:4px">Delete Account</div>
-          <div class="toggle-desc" style="margin-bottom:12px">Permanently delete your account and all your data. This cannot be undone.</div>
-          <button type="button" class="btn btn-outline" id="menuDeleteAccount" style="color:#c0392b;border-color:#c0392b;font-size:0.85rem;padding:8px 16px">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-            Delete Account
-          </button>
-        </div>
       </div>
 
       <!-- Page Footer -->
       <div class="page-footer">
-        <button type="button" class="btn btn-primary btn-lg" id="saveBusinessBtn">Save My Business</button>
-        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToPriceListBtn">Add Price List</button>
+        <button type="button" class="btn btn-sage btn-lg" id="saveBusinessBtn">Save My Business</button>
+        <button type="button" class="btn btn-sage btn-lg btn-next" id="goToPriceListBtn">My Rates &amp; Services</button>
       </div>
     </section>
 
     <!-- PAGE 2: PRICE LIST -->
     <section id="page2" class="page" data-page="2">
       <div class="page-header">
-        <h1 class="page-title" id="page2Title"><span class="page-num">2.</span> Build Your Price List</h1>
-        <p class="page-sub" id="page2Sub">Add the jobs you do most. You can always edit these later.</p>
+        <h1 class="page-title" id="page2Title">My Rates, Services &amp; Materials</h1>
+        <p class="page-sub" id="page2Sub">Your jobs, your prices - make sure you're charging what you're worth.</p>
       </div>
 
-      <!-- Add Jobs -->
-      <div class="card sage-focus" style="border:2px solid var(--walnut)">
-        <div class="bulk-header-row">
-          <h2 class="card-title" style="margin-bottom:0">Either Build in Bulk</h2>
-          <span class="bulk-counter"><span id="bulkJobCount">0</span> Jobs Added</span>
-        </div>
-
-        <div class="add-jobs-columns">
-          <!-- CSV Upload -->
-          <div class="add-jobs-col">
-            <div class="upload-zone" id="csvUploadZone" tabindex="0" role="button" aria-label="Upload CSV or text file">
-              <span>Drag &amp; drop or tap to upload</span>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <small>Format: Job name, price, one per line</small>
-            </div>
-            <input type="file" id="csvFile" accept=".csv,.txt" style="display:none" aria-hidden="true">
+      <!-- My Rates -->
+      <div class="card" id="myRatesCard" style="border:2px solid var(--walnut)">
+        <h2 class="card-title">My Rates <button type="button" class="field-info-btn" data-title="My Rates" data-body="Set your standard labour rates here. These appear as quick-pick buttons when you build a quote, saving you time. You can always adjust the quantity on any individual quote.">?</button></h2>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="rateHourly">Hourly Rate</label>
+            <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateHourly" min="0" step="0.01" placeholder="0.00"></div>
           </div>
-
-          <!-- Bulk Paste -->
-          <div class="add-jobs-col">
-            <div class="paste-zone">
-              <span class="paste-zone-label">Paste jobs here</span>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
-              <small>(one per line: Job name, price)</small>
-              <textarea id="bulkPaste" placeholder="" class="paste-zone-textarea"></textarea>
-            </div>
+          <div class="form-group">
+            <label for="rateHalfDay">Half Day Rate</label>
+            <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateHalfDay" min="0" step="0.01" placeholder="0.00"></div>
+          </div>
+          <div class="form-group">
+            <label for="rateDay">Day Rate</label>
+            <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateDay" min="0" step="0.01" placeholder="0.00"></div>
+          </div>
+          <div class="form-group">
+            <label for="rateCallout">Call-out Charge</label>
+            <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateCallout" min="0" step="0.01" placeholder="0.00"></div>
           </div>
         </div>
+      </div>
 
-        <!-- Buttons row -->
-        <div class="add-jobs-btns">
-          <button type="button" class="btn btn-sm btn-outline" id="downloadTemplateBtn">Download Template</button>
-          <button type="button" class="btn btn-sage btn-sm" id="parseBulkBtn">Add</button>
+      <!-- Add Services & Materials -->
+      <div class="card" style="border:2px solid var(--walnut)">
+
+        <!-- ONE BY ONE -->
+        <h2 class="card-title">My Services &amp; Materials</h2>
+        <div class="cat-selector" id="jobCatSelector" style="margin-bottom:14px">
+          <button type="button" class="cat-btn active" data-cat="service">Service</button>
+          <button type="button" class="cat-btn" data-cat="materials">Material</button>
+        </div>
+        <!-- Service mode: Service | Charge | Per Unit -->
+        <div class="obo-grid" id="oboServiceGrid">
+          <div class="form-group obo-name">
+            <label for="jobName">Service</label>
+            <input type="text" id="jobName" placeholder="">
+          </div>
+          <div class="form-group obo-price">
+            <label for="jobPrice">Charge</label>
+            <div class="input-pfx">
+              <span class="pfx-symbol">£</span>
+              <input type="number" id="jobPrice" placeholder="0" min="0" step="any">
+            </div>
+          </div>
+          <div class="form-group obo-unit">
+            <label for="jobUnit">Per Unit</label>
+            <input type="text" id="jobUnit" placeholder="">
+          </div>
+          <div class="obo-add">
+            <button type="button" class="btn btn-sage btn-sm" id="addJobBtn">Add</button>
+          </div>
         </div>
 
-        <!-- Individual Add -->
-        <div class="individual-add">
-          <h3 class="card-title">Or Build One by One</h3>
-          <div class="obo-grid">
-            <div class="form-group obo-name">
-              <label for="jobName">Job Name</label>
-              <input type="text" id="jobName" placeholder="">
+        <!-- Material mode: Description | Per Unit / Cost Price | Your Price -->
+        <div class="obo-grid obo-grid-material" id="oboMaterialGrid" style="display:none">
+          <div class="form-group obo-name">
+            <label for="jobNameMat">Description</label>
+            <input type="text" id="jobNameMat" placeholder="">
+          </div>
+          <div class="form-group obo-unit">
+            <label for="jobUnitMat">Per Unit</label>
+            <input type="text" id="jobUnitMat" placeholder="">
+          </div>
+          <div class="form-group obo-cost">
+            <label for="jobCost">Cost Price <button type="button" class="field-info-btn" data-title="Cost Price" data-body="What you paid for this material. Never shown to the customer. Lexi uses this to track your profit margin.">?</button></label>
+            <div class="input-pfx">
+              <span class="pfx-symbol">£</span>
+              <input type="number" id="jobCost" placeholder="0" min="0" step="any">
             </div>
-            <div class="form-group obo-price">
-              <label for="jobPrice">Price</label>
-              <div class="input-pfx">
-                <span class="pfx-symbol">£</span>
-                <input type="number" id="jobPrice" placeholder="0" min="0" step="any">
+          </div>
+          <div class="form-group obo-price">
+            <label for="jobPriceMat">Your Price <button type="button" class="field-info-btn" data-title="Your Price" data-body="What you charge the customer for this material.">?</button></label>
+            <div class="input-pfx">
+              <span class="pfx-symbol">£</span>
+              <input type="number" id="jobPriceMat" placeholder="0" min="0" step="any">
+            </div>
+          </div>
+          <div class="obo-add">
+            <button type="button" class="btn btn-sage btn-sm" id="addJobBtnMat">Add</button>
+          </div>
+        </div>
+
+        <div class="bulk-divider"></div>
+
+        <!-- BUILD IN BULK -->
+        <h2 class="card-title">Build in Bulk</h2>
+
+        <!-- Step 1: choose category -->
+        <div id="bulkStep1">
+          <p class="pj-section-hint">What would you like to add?</p>
+          <div class="bulk-choice-row">
+            <button type="button" class="bulk-choice-btn" id="bulkChooseService">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              My Services
+            </button>
+            <button type="button" class="bulk-choice-btn" id="bulkChooseMaterials">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>
+              My Materials
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: import method (hidden until category chosen) -->
+        <div id="bulkStep2" style="display:none">
+          <div class="bulk-step2-header">
+            <p class="pj-section-hint">Adding: <strong id="bulkCategoryLabel">Services</strong></p>
+            <button type="button" class="bulk-back-btn" id="bulkBackBtn">Back</button>
+          </div>
+          <p class="pj-section-hint">How would you like to add them?</p>
+          <div class="add-jobs-columns">
+            <!-- CSV Upload -->
+            <div class="add-jobs-col">
+              <div class="upload-zone" id="csvUploadZone" tabindex="0" role="button" aria-label="Upload CSV or text file">
+                <span>Drag &amp; drop or tap to upload</span>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <small>Format: Name, price — one per line</small>
+              </div>
+              <input type="file" id="csvFile" accept=".csv,.txt" style="display:none" aria-hidden="true">
+            </div>
+            <!-- Bulk Paste -->
+            <div class="add-jobs-col">
+              <div class="paste-zone">
+                <span class="paste-zone-label">Paste here</span>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+                <small>One per line: Name, price</small>
+                <textarea id="bulkPaste" placeholder="" class="paste-zone-textarea"></textarea>
               </div>
             </div>
-            <div class="form-group obo-unit">
-              <label for="jobUnit">Per Unit</label>
-              <input type="text" id="jobUnit" placeholder="">
-            </div>
-            <div class="obo-add">
-              <button type="button" class="btn btn-sage btn-sm" id="addJobBtn">Add</button>
-            </div>
+          </div>
+          <div class="add-jobs-btns">
+            <button type="button" class="btn btn-sm btn-outline" id="downloadTemplateBtn">Download Template</button>
+            <button type="button" class="btn btn-sage btn-sm" id="parseBulkBtn">Add</button>
           </div>
         </div>
+
       </div>
 
       <!-- Price List -->
       <div class="card jobs-added-card">
         <div class="card-header-row">
-          <h2 class="card-title">Your Price List</h2>
-          <span class="bulk-counter"><span id="priceListBadge">0</span> Jobs Added</span>
+          <h2 class="card-title">Your Services &amp; Materials</h2>
+          <span class="bulk-counter"><span id="priceListBadge">0</span> Added</span>
         </div>
         <div class="price-list-toolbar">
           <input type="text" id="priceListSearch" placeholder="Search jobs..." class="search-input">
@@ -942,57 +1023,76 @@
     <!-- PAGE 3b: ADD JOBS -->
     <section id="page-jobs" class="page">
       <div class="page-header">
-        <h1 class="page-title">Add Jobs</h1>
+        <h1 class="page-title">Build Your Quote</h1>
         <p class="page-sub" id="pageJobsSub">What work are you quoting for?</p>
       </div>
 
-      <div class="card">
-        <h2 class="card-title">Select from Your Price List</h2>
+      <!-- SECTION 1: MY RATES -->
+      <div class="card pj-section" id="myRatesSection" style="display:none">
+        <h2 class="card-title pj-section-title">My Rates</h2>
+        <p class="pj-section-hint">Tap a rate to add it. Use + and - to adjust quantity.</p>
+        <div id="myRatesBtns" class="rates-grid"></div>
+      </div>
+
+      <!-- SECTION 2: MY SERVICES -->
+      <div class="card pj-section">
+        <h2 class="card-title pj-section-title">My Services</h2>
         <div class="picker-search-row">
-          <input type="text" id="jobPickerSearch" placeholder="Search your price list..." class="search-input">
+          <input type="text" id="jobPickerSearch" placeholder="Search your services..." class="search-input">
           <button type="button" class="btn-mic" id="voiceBtn" title="Speak a job">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0 0 20 11h-2a6 6 0 0 1-12 0H4a8.001 8.001 0 0 0 7 7.93z"/></svg>
           </button>
         </div>
         <div id="voiceBox" class="voice-box hidden"></div>
         <div id="jobPickerList" class="picker-list"></div>
+      </div>
 
-        <div class="custom-item-add">
-          <h3 class="section-sub">Add a one-off item</h3>
-          <div class="form-grid-3">
-            <div class="form-group fg-grow" style="position:relative">
-              <label for="customItemName" style="display:flex;align-items:center;gap:5px">
-                Description
-                <button type="button" class="help-btn" id="descHelpBtn" aria-label="Description help">?</button>
-              </label>
-              <input type="text" id="customItemName" placeholder="">
-              <!-- Description help popup -->
-              <div id="descHelpPopup" class="help-popup" style="display:none" role="tooltip">
-                Describe clearly exactly what work you will carry out. Be as specific as possible to protect both you and your customer.
-                <button type="button" class="help-popup-close" id="descHelpClose" aria-label="Close">✕</button>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="customItemPrice">Price</label>
-              <div class="input-pfx">
-                <span class="pfx-symbol">£</span>
-                <input type="number" id="customItemPrice" placeholder="0" min="0" step="any">
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="customItemUnit">Unit</label>
-              <input type="text" id="customItemUnit" placeholder="each">
+      <!-- SECTION 3: MATERIALS -->
+      <div class="card pj-section">
+        <h2 class="card-title pj-section-title">Materials</h2>
+
+        <!-- Materials from price list (only shown if any exist) -->
+        <div id="materialsPickerWrap" style="display:none">
+          <input type="text" id="materialsPickerSearch" placeholder="Search your materials..." class="search-input" style="margin-bottom:10px">
+          <div id="materialsPickerList" class="picker-list"></div>
+          <div class="picker-section-divider"></div>
+        </div>
+
+        <!-- One-off material -->
+        <p class="pj-section-hint" style="margin-bottom:10px">Add a one-off material to this quote.</p>
+        <div class="form-grid-3">
+          <div class="form-group fg-grow" style="position:relative">
+            <label for="customItemName" style="display:flex;align-items:center;gap:5px">
+              Description
+              <button type="button" class="help-btn" id="descHelpBtn" aria-label="Description help">?</button>
+            </label>
+            <input type="text" id="customItemName" placeholder="">
+            <div id="descHelpPopup" class="help-popup" style="display:none" role="tooltip">
+              Name the material clearly so your customer understands what it is.
+              <button type="button" class="help-popup-close" id="descHelpClose" aria-label="Close">✕</button>
             </div>
           </div>
-          <button type="button" class="btn btn-sage btn-sm" id="addCustomItemBtn">Add</button>
+          <div class="form-group">
+            <label for="customItemPrice">Price</label>
+            <div class="input-pfx">
+              <span class="pfx-symbol">£</span>
+              <input type="number" id="customItemPrice" placeholder="0" min="0" step="any">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="customItemUnit">Unit</label>
+            <input type="text" id="customItemUnit" placeholder="each">
+          </div>
         </div>
+        <button type="button" class="btn btn-outline btn-sm" id="addCustomItemBtn">Add Material</button>
+      </div>
 
-        <div class="pj-selected-header">
-          <h3 class="section-sub" style="margin:0">Added Jobs</h3>
-        </div>
+      <!-- SECTION 4: ADDED ITEMS -->
+      <div class="card pj-section pj-added-card">
+        <h2 class="card-title pj-section-title">Added Items</h2>
         <div id="quoteItemsContainer" class="quote-items-container">
           <div class="empty-state" id="quoteItemsEmpty">
-            <p>Nothing picked yet.</p>
+            <p>Nothing added yet.</p>
           </div>
         </div>
 
@@ -1006,6 +1106,7 @@
           <button type="button" class="btn btn-primary btn-lg" id="saveJobsGoToCompletionBtn">Save</button>
         </div>
       </div>
+
     </section>
 
     <!-- PAGE 3c: COMPLETION & SIGNATURE -->
@@ -1300,18 +1401,17 @@
   <!-- PREVIEW MODAL -->
   <div id="previewModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Document Preview">
     <div class="modal-card preview-modal-card">
-      <div class="modal-header">
-        <h2 class="modal-title">Preview</h2>
-        <button type="button" class="modal-back-btn share-back-btn" id="backPreviewBtn" aria-label="Back" style="display:none">Back</button>
+      <div class="modal-header preview-modal-header">
         <button type="button" class="modal-close" id="closePreviewBtn" aria-label="Close preview">✕</button>
+        <div class="preview-header-actions">
+          <button type="button" class="btn btn-outline pf-icon-btn" id="previewEditBtn" title="Edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button type="button" class="btn btn-outline pf-icon-btn" id="previewPrintBtn" title="Print"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
+          <button type="button" class="btn btn-outline pf-grow-btn" id="previewSaveBtn">&#10003; Save</button>
+          <button type="button" class="btn btn-sage pf-grow-btn" id="previewSendBtn">Send</button>
+        </div>
+        <button type="button" class="modal-back-btn share-back-btn" id="backPreviewBtn" aria-label="Back" style="display:none">Back</button>
       </div>
       <div id="previewContent" class="preview-content"></div>
-      <div class="modal-footer preview-footer">
-        <button type="button" class="btn btn-outline pf-icon-btn" id="previewEditBtn" title="Edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-        <button type="button" class="btn btn-outline pf-icon-btn" id="previewPrintBtn" title="Print"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
-        <button type="button" class="btn btn-outline pf-grow-btn" id="previewSaveBtn">✓ Save</button>
-        <button type="button" class="btn btn-outline pf-grow-btn" id="previewSendBtn">Send</button>
-      </div>
     </div>
   </div>
 
@@ -1842,10 +1942,10 @@
   </div>
 
   <!-- QUICK QR MODAL -->
-  <div id="quickQrModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="My QR Code">
+  <div id="quickQrModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="QR Code">
     <div class="modal-card modal-card-sm quick-qr-card">
       <div class="modal-header">
-        <h2 class="modal-title">My QR Code</h2>
+        <h2 class="modal-title" id="quickQrTitle">My QR Code</h2>
         <button type="button" class="modal-back-btn" id="backQuickQrBtn" aria-label="Back">Back</button>
         <button type="button" class="modal-close" id="closeQuickQrBtn" aria-label="Close">✕</button>
       </div>
@@ -1923,18 +2023,6 @@
         <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditReceiptBtn">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
           Convert to Receipt
-        </button>
-        <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditAddPhotoBtn">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          Add Photo
-        </button>
-        <button type="button" class="btn btn-sage btn-full cec-btn" id="custEditDownloadBtn">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download
-        </button>
-        <button type="button" class="btn btn-full cec-btn cec-btn-delete" id="custEditDeleteBtn" style="grid-column:2">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          Delete
         </button>
       </div>
       <div id="custEditJobPicker" style="display:none" class="modal-body"></div>
@@ -2343,33 +2431,34 @@
 
   <!-- DELETE ACCOUNT MODAL — multi-step offboarding -->
   <div id="deleteAccountModal" class="modal-overlay" style="display:none;z-index:9999" role="dialog" aria-modal="true">
-    <div class="modal-card" style="max-width:400px;text-align:center">
+    <div class="modal-card" style="max-width:400px;text-align:center;padding:28px 28px 24px">
 
       <!-- STEP 1: Reason -->
       <div id="daStep1">
-        <div style="font-size:2.2rem;margin:16px 0 8px">🥺</div>
+        <div style="margin:16px 0 8px"><img src="Why.png" alt="Lexi" style="width:110px;height:auto;border-radius:12px;display:block;margin:0 auto"></div>
         <h2 class="modal-title" style="margin-bottom:6px">Where are you going?</h2>
         <p style="color:#555;font-size:0.9rem;line-height:1.6;margin:0 0 18px">Can I ask why you want to leave?</p>
         <select id="daReason" class="form-control" style="margin-bottom:20px;text-align:left">
           <option value="">Select a reason...</option>
-          <option value="expensive">It's too expensive</option>
-          <option value="notneeded">I don't need this anymore</option>
-          <option value="notusing">I'm not using it enough</option>
-          <option value="switching">I'm switching to something else</option>
-          <option value="other">Other</option>
+          <option value="notneeded">I don't need you any more</option>
+          <option value="expensive">You're too expensive</option>
+          <option value="notusing">I'm not using you enough</option>
+          <option value="switching">I've met someone else</option>
+          <option value="other">Another reason</option>
         </select>
-        <button type="button" class="btn btn-primary w-100" id="daStep1NextBtn" style="margin-bottom:10px">Continue</button>
-        <button type="button" class="btn btn-outline w-100" id="daStep1CancelBtn">Actually, keep my account</button>
+        <button type="button" class="btn btn-primary w-100" id="daStep1NextBtn" style="margin-bottom:10px;margin-left:0;margin-right:0">Continue</button>
+        <button type="button" class="btn btn-outline w-100" id="daStep1CancelBtn" style="margin-left:0;margin-right:0">Actually, keep my account</button>
       </div>
 
       <!-- STEP 2: Quiet Season offer -->
       <div id="daStep2" style="display:none">
         <div style="font-size:2.2rem;margin:16px 0 8px">🌿</div>
         <h2 class="modal-title" style="margin-bottom:6px">Before you go...</h2>
-        <p style="color:#555;font-size:0.9rem;line-height:1.6;margin:0 0 10px">Did you know Lexi has a <strong>Quiet Season</strong> mode?</p>
-        <p style="color:#555;font-size:0.85rem;line-height:1.6;margin:0 0 18px;background:var(--cream);padding:12px;border-radius:10px">If work is slow or you need a break, Quiet Season pauses your account for up to <strong>6 months — free</strong>. Your data stays safe and you can pick up right where you left off when you're ready.</p>
+        <p style="color:#555;font-size:0.9rem;line-height:1.6;margin:0 0 10px">Did you know I have a <strong>Quiet Season</strong> mode?</p>
+        <div style="margin:0 0 14px"><img src="Idea.png" alt="Lexi's idea" style="width:110px;height:auto;border-radius:12px;display:block;margin:0 auto"></div>
+        <p style="color:#555;font-size:0.85rem;line-height:1.6;margin:0 0 18px;background:var(--cream);padding:12px;border-radius:10px">If work is slow or you need a break, Quiet Season pauses your account for up to <strong>6 months - free</strong>. Your data stays safe and you can pick up right where you left off when you're ready.</p>
         <p style="font-weight:600;font-size:0.9rem;margin:0 0 18px;color:#333">Would you like to activate Quiet Season instead?</p>
-        <button type="button" class="btn btn-primary w-100" id="daQuietSeasonYesBtn" style="margin-bottom:10px">Yes — activate Quiet Season</button>
+        <button type="button" class="btn btn-primary w-100" id="daQuietSeasonYesBtn" style="margin-bottom:10px">Yes - activate Quiet Season</button>
         <button type="button" class="btn btn-outline w-100" id="daQuietSeasonNoBtn">No thanks, I still want to leave</button>
       </div>
 

@@ -11,7 +11,7 @@ const lexiSupabase = (
 )
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
   : null;
-let authMode = 'signup';
+let authMode = 'login';
 let lexiAuthSession = null;
 let priceListSyncTimer = null;
 let customerSyncTimer = null;
@@ -268,8 +268,8 @@ function personaliseText() {
   window.addEventListener('popstate', e => {
     // Find all visible modals / fixed overlays, close the topmost one
     const allModals = [
-      ...document.querySelectorAll('.modal'),
-      ...document.querySelectorAll('[style*="position:fixed"], [style*="position: fixed"]')
+      ...document.querySelectorAll('.modal-overlay'),
+      ...document.querySelectorAll('.modal')
     ].filter(el => {
       const d = el.style.display;
       return d && d !== 'none';
@@ -343,6 +343,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEarnings();
   updateSavedBadge();
   populatePage1Fields();
+  updateQrMenuLabel();
   refreshPriceList();
   refreshSavedDocs();
   setTodayDate();
@@ -413,7 +414,7 @@ function setupAuthScreen() {
     toggle.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
   });
   document.getElementById('authGoogleBtn')?.addEventListener('click', handleGoogleAuth);
-  setAuthMode('signup');
+  setAuthMode('login');
 }
 
 async function initialiseAuth() {
@@ -582,7 +583,11 @@ function businessRowToCompany(row) {
     payOther: payment.payOther || '',
     brandPrimary: row.brand_primary || DEFAULT_COLOURS.primary,
     brandAccent: row.brand_accent || DEFAULT_COLOURS.accent,
-    brandBg: row.brand_background || DEFAULT_COLOURS.bg
+    brandBg: row.brand_background || DEFAULT_COLOURS.bg,
+    rateHourly:  row.hourly_rate   != null ? Number(row.hourly_rate)   : null,
+    rateHalfDay: row.half_day_rate != null ? Number(row.half_day_rate) : null,
+    rateDay:     row.day_rate      != null ? Number(row.day_rate)      : null,
+    rateCallout: row.callout_charge != null ? Number(row.callout_charge) : null
   };
 }
 
@@ -618,7 +623,11 @@ function companyToBusinessRow(company) {
       bankAcc: company.bankAcc || '',
       paypalRef: company.paypalRef || '',
       payOther: company.payOther || ''
-    }
+    },
+    hourly_rate:    company.rateHourly   != null ? Number(company.rateHourly)  : null,
+    half_day_rate:  company.rateHalfDay  != null ? Number(company.rateHalfDay) : null,
+    day_rate:       company.rateDay      != null ? Number(company.rateDay)      : null,
+    callout_charge: company.rateCallout  != null ? Number(company.rateCallout)  : null
   };
 }
 
@@ -682,19 +691,23 @@ async function saveBusinessToSupabase() {
 
 function priceItemRowToJob(row) {
   return {
-    id: row.local_id || row.id || uid(),
-    name: row.name || '',
-    price: Number(row.price || 0),
-    unit: row.unit || ''
+    id:        row.local_id || row.id || uid(),
+    name:      row.name || '',
+    price:     Number(row.price || 0),
+    unit:      row.unit || '',
+    category:  row.category || '',
+    costPrice: row.cost_price != null ? Number(row.cost_price) : null
   };
 }
 
 function jobToPriceItemRow(job) {
   return {
-    local_id: job.id || uid(),
-    name: job.name || '',
-    price: Number(job.price || 0),
-    unit: job.unit || ''
+    local_id:   job.id || uid(),
+    name:       job.name || '',
+    price:      Number(job.price || 0),
+    unit:       job.unit || '',
+    category:   job.category || '',
+    cost_price: job.costPrice != null ? Number(job.costPrice) : null
   };
 }
 
@@ -1710,27 +1723,19 @@ function updatePriceListBtn() {
   const btn = document.getElementById('goToPriceListBtn');
   if (!btn) return;
   if (state.priceList.length > 0) {
-    btn.innerHTML = 'Edit My Price List';
+    btn.innerHTML = 'My Rates &amp; Services';
   } else {
-    btn.innerHTML = 'Add Price List';
+    btn.innerHTML = 'My Rates &amp; Services';
   }
 }
 
 function updatePage2Header() {
   const title = document.getElementById('page2Title');
   const sub   = document.getElementById('page2Sub');
-  if (state.priceList.length > 0) {
-    if (title) title.textContent = 'Edit My Price List';
-    if (sub) {
-      sub.innerHTML = `${esc(traderFirstName())}, your jobs, your prices. Make sure you're charging what you're worth.<br><span style="display:inline-flex;align-items:center;gap:6px;margin-top:6px">Not sure what to charge? Check out Lexi's Pricing Guide <a href="Lexi's Pricing Guide.xlsx" download class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v13M5 16l7 7 7-7"/><path d="M3 21h18"/></svg> Download</a></span>`;
-      sub.style.display = '';
-    }
-  } else {
-    if (title) title.innerHTML = '<span class="page-num">2.</span> Build Your Price List';
-    if (sub) {
-      sub.innerHTML = `${esc(traderFirstName())}, what do you do most? Add those jobs here. Picking them later takes seconds.<br><span style="display:inline-flex;align-items:center;gap:6px;margin-top:6px">Not sure what to charge? Check out Lexi's Pricing Guide <a href="Lexi's Pricing Guide.xlsx" download class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v13M5 16l7 7 7-7"/><path d="M3 21h18"/></svg> Download</a></span>`;
-      sub.style.display = '';
-    }
+  if (title) title.textContent = 'My Rates, Services & Materials';
+  if (sub) {
+    sub.innerHTML = `Your jobs, your prices - make sure you're charging what you're worth.<br><span style="display:inline-flex;align-items:center;gap:6px;margin-top:6px">Not sure what to charge? <a href="Lexi's Pricing Guide.xlsx" download class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v13M5 16l7 7 7-7"/><path d="M3 21h18"/></svg> Download Lexi's Pricing Guide</a></span>`;
+    sub.style.display = '';
   }
 }
 
@@ -1804,6 +1809,7 @@ function setupNavigation() {
   setupSubmenu('menuNewDoc',        'navNewDocSubmenu');
   setupSubmenu('menuManageJobs',    'navManageJobsSubmenu');
   setupSubmenu('menuManageBusiness','navManageBusinessSubmenu');
+  setupSubmenu('menuSettings',      'navSettingsSubmenu');
 
   document.getElementById('menuQuickQr')?.addEventListener('click', () => {
     closeMenu();
@@ -1918,6 +1924,7 @@ function setupNavigation() {
   };
 
   document.getElementById('menuDeleteAccount')?.addEventListener('click', () => {
+    closeMenu();
     daShowStep('daStep1');
     document.getElementById('deleteAccountModal').style.display = 'flex';
   });
@@ -2487,6 +2494,13 @@ function populatePage1Fields() {
   // Preferences
   const autoHoldingEl = document.getElementById('prefAutoHolding');
   if (autoHoldingEl) autoHoldingEl.checked = !!(c.autoHoldingMessage);
+
+  // My Rates — display as 2dp (e.g. 11 -> 11.00, 2.5 -> 2.50)
+  const fmtRate = v => (v != null && v !== '') ? Number(v).toFixed(2) : '';
+  setVal('rateHourly',  fmtRate(c.rateHourly));
+  setVal('rateHalfDay', fmtRate(c.rateHalfDay));
+  setVal('rateDay',     fmtRate(c.rateDay));
+  setVal('rateCallout', fmtRate(c.rateCallout));
 }
 
 function saveBusinessDetails(showToast = true) {
@@ -2569,7 +2583,11 @@ function saveBusinessDetails(showToast = true) {
     brandBg:      document.getElementById('colourBg').value,
     qrCode:       state.company.qrCode || '',
     qualifications: state.company.qualifications || [],
-    autoHoldingMessage: document.getElementById('prefAutoHolding')?.checked || false
+    autoHoldingMessage: document.getElementById('prefAutoHolding')?.checked || false,
+    rateHourly:   parseFloat(getVal('rateHourly'))   || null,
+    rateHalfDay:  parseFloat(getVal('rateHalfDay'))  || null,
+    rateDay:      parseFloat(getVal('rateDay'))       || null,
+    rateCallout:  parseFloat(getVal('rateCallout'))   || null
   };
   save();
   saveBusinessToSupabase().catch(error => {
@@ -2578,6 +2596,7 @@ function saveBusinessDetails(showToast = true) {
   });
   updateColourPreview();
   personaliseText();
+  updateQrMenuLabel();
   if (showToast) showSavedPopup(
     businessNameCompliment(getVal('p1BusinessName') || (firstName + ' ' + lastName)),
     null,
@@ -2891,7 +2910,32 @@ function extractLogoColours() {
 
 /* ===== PAGE 2 -PRICE LIST ===== */
 function setupPage2() {
-  // CSV upload
+  // ---- BULK: two-step category flow ----
+  let bulkCategory = 'service'; // tracks chosen category for bulk import
+
+  const showBulkStep = (step) => {
+    document.getElementById('bulkStep1').style.display = step === 1 ? '' : 'none';
+    document.getElementById('bulkStep2').style.display = step === 2 ? '' : 'none';
+  };
+
+  document.getElementById('bulkChooseService').addEventListener('click', () => {
+    bulkCategory = 'service';
+    document.getElementById('bulkCategoryLabel').textContent = 'Services';
+    showBulkStep(2);
+  });
+
+  document.getElementById('bulkChooseMaterials').addEventListener('click', () => {
+    bulkCategory = 'materials';
+    document.getElementById('bulkCategoryLabel').textContent = 'Materials';
+    showBulkStep(2);
+  });
+
+  document.getElementById('bulkBackBtn').addEventListener('click', () => {
+    setVal('bulkPaste', '');
+    showBulkStep(1);
+  });
+
+  // ---- CSV upload ----
   const csvZone = document.getElementById('csvUploadZone');
   const csvFile = document.getElementById('csvFile');
 
@@ -2901,7 +2945,7 @@ function setupPage2() {
   csvZone.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') csvFile.click(); });
   csvFile.addEventListener('change', e => {
     const file = e.target.files[0];
-    if (file) readCSV(file);
+    if (file) readCSV(file, bulkCategory);
   });
 
   // Drag & drop
@@ -2911,7 +2955,7 @@ function setupPage2() {
     e.preventDefault();
     csvZone.classList.remove('dragover');
     const file = e.dataTransfer.files[0];
-    if (file) readCSV(file);
+    if (file) readCSV(file, bulkCategory);
   });
 
   document.getElementById('downloadTemplateBtn').addEventListener('click', e => {
@@ -2931,10 +2975,8 @@ function setupPage2() {
         const reader = new FileReader();
         reader.onload = ev => {
           const zone = document.querySelector('.paste-zone');
-          // Remove any existing preview
           const old = zone.querySelector('.paste-img-preview');
           if (old) old.remove();
-          // Create preview
           const wrap = document.createElement('div');
           wrap.className = 'paste-img-preview';
           wrap.innerHTML = `<img src="${ev.target.result}" alt="Pasted price list">
@@ -2943,32 +2985,57 @@ function setupPage2() {
           wrap.querySelector('.paste-img-clear').addEventListener('click', () => wrap.remove());
         };
         reader.readAsDataURL(file);
-        return; // image handled -stop checking items
+        return;
       }
     }
   });
 
-  // Bulk paste
+  // Bulk paste add button
   document.getElementById('parseBulkBtn').addEventListener('click', () => {
     const text = getVal('bulkPaste');
-    if (!text.trim()) { toast('Paste some jobs first.', 'error'); return; }
-    const { added, skipped } = parseJobLines(text);
+    if (!text.trim()) { toast('Paste some items first.', 'error'); return; }
+    const { added, skipped } = parseJobLines(text, bulkCategory);
     setVal('bulkPaste', '');
     if (added) {
-      let msg = `${added} job${added===1?'':'s'} added.`;
+      const noun = bulkCategory === 'materials' ? 'material' : 'service';
+      let msg = `${added} ${noun}${added===1?'':'s'} added.`;
       if (skipped) msg += ` ${skipped} skipped (already in your list).`;
       toast(msg, 'success');
+      showBulkStep(1); // reset back to step 1 after success
     } else if (skipped) {
-      toast(`All jobs already in your list.`, 'error');
+      toast('All items already in your list.', 'error');
     } else {
-      toast("Can't read your input - remember format: job, price", 'error');
+      toast("Can't read your input - remember format: name, price", 'error');
     }
   });
 
-  // Individual add
+  // Category selector — Service / Material toggle
+  const oboServiceGrid  = document.getElementById('oboServiceGrid');
+  const oboMaterialGrid = document.getElementById('oboMaterialGrid');
+  const switchOboGrid = (cat) => {
+    const isMat = cat === 'materials';
+    if (oboServiceGrid)  oboServiceGrid.style.display  = isMat ? 'none' : '';
+    if (oboMaterialGrid) oboMaterialGrid.style.display = isMat ? '' : 'none';
+  };
+  document.querySelectorAll('#jobCatSelector .cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#jobCatSelector .cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      switchOboGrid(btn.dataset.cat);
+    });
+  });
+  // Start on Service grid
+  switchOboGrid('service');
+
+  // Individual add — service grid
   document.getElementById('addJobBtn').addEventListener('click', addIndividualJob);
   document.getElementById('jobName').addEventListener('keydown', e => { if (e.key==='Enter') addIndividualJob(); });
   document.getElementById('jobPrice').addEventListener('keydown', e => { if (e.key==='Enter') addIndividualJob(); });
+
+  // Individual add — material grid
+  document.getElementById('addJobBtnMat').addEventListener('click', addIndividualJob);
+  document.getElementById('jobNameMat').addEventListener('keydown', e => { if (e.key==='Enter') addIndividualJob(); });
+  document.getElementById('jobPriceMat').addEventListener('keydown', e => { if (e.key==='Enter') addIndividualJob(); });
 
   // Search -skip rebuild if an inline edit is active
   document.getElementById('priceListSearch').addEventListener('input', () => {
@@ -2997,37 +3064,54 @@ function setupPage2() {
 
   // Sort
   document.getElementById('sortJobs').addEventListener('change', () => refreshPriceList());
+
+  // My Rates — format to 2dp on blur and auto-save to state
+  ['rateHourly','rateHalfDay','rateDay','rateCallout'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('blur', () => {
+      const v = parseFloat(el.value);
+      if (!isNaN(v)) el.value = v.toFixed(2);
+      // Auto-save rates into state so quote builder picks them up immediately
+      state.company.rateHourly   = parseFloat(getVal('rateHourly'))   || null;
+      state.company.rateHalfDay  = parseFloat(getVal('rateHalfDay'))  || null;
+      state.company.rateDay      = parseFloat(getVal('rateDay'))       || null;
+      state.company.rateCallout  = parseFloat(getVal('rateCallout'))   || null;
+      save();
+      saveBusinessToSupabase().catch(() => {});
+      updateQrMenuLabel();
+    });
+  });
 }
 
-function readCSV(file) {
+function readCSV(file, category = 'service') {
   const reader = new FileReader();
   reader.onload = e => {
-    const { added, skipped } = parseJobLines(e.target.result);
+    const { added, skipped } = parseJobLines(e.target.result, category);
+    const noun = category === 'materials' ? 'material' : 'service';
     if (added) {
-      let msg = `${added} job${added===1?'':'s'} added from file.`;
+      let msg = `${added} ${noun}${added===1?'':'s'} added from file.`;
       if (skipped) msg += ` ${skipped} skipped (already in your list).`;
       toast(msg, 'success');
     } else if (skipped) {
-      toast('All jobs already in your list.', 'error');
+      toast('All items already in your list.', 'error');
     } else {
-      toast("Can't read your input - remember format: job, price", 'error');
+      toast("Can't read your input - remember format: name, price", 'error');
     }
   };
   reader.readAsText(file);
 }
 
-function parseJobLines(text) {
+function parseJobLines(text, category = 'service') {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   let added = 0, skipped = 0;
   lines.forEach(line => {
     let name, rest;
     const commaIdx = line.indexOf(',');
     if (commaIdx !== -1) {
-      // Comma present: split on first comma
       name = line.slice(0, commaIdx).trim();
       rest = line.slice(commaIdx + 1).trim();
     } else {
-      // No comma: find the last number (with optional currency symbol) at the end of the line
       const noCommaMatch = line.match(/^(.*)\s+[£$€]?([\d]+(?:\.\d{1,2})?)\s*$/);
       if (!noCommaMatch) { skipped++; return; }
       name = noCommaMatch[1].trim();
@@ -3041,7 +3125,7 @@ function parseJobLines(text) {
     if (!name || isNaN(price)) { skipped++; return; }
     const duplicate = state.priceList.find(j => j.name.toLowerCase() === name.toLowerCase());
     if (duplicate) { skipped++; return; }
-    addJob(name, price, unit);
+    addJob(name, price, unit, category);
     added++;
   });
   if (added) { save(); queuePriceListSync(true); refreshPriceList(); updateJobPicker(); }
@@ -3059,34 +3143,47 @@ function downloadTemplate() {
 }
 
 function addIndividualJob() {
-  const name  = getVal('jobName').trim();
-  const price = parseFloat(getVal('jobPrice'));
-  const unit  = getVal('jobUnit').trim();
-  if (!name)   { document.getElementById('jobName').classList.add('error');  return; }
-  if (isNaN(price)) { document.getElementById('jobPrice').classList.add('error'); return; }
-  document.getElementById('jobName').classList.remove('error');
-  document.getElementById('jobPrice').classList.remove('error');
+  const activeBtn = document.querySelector('#jobCatSelector .cat-btn.active');
+  const category  = activeBtn ? activeBtn.dataset.cat : 'service';
+  const isMat     = category === 'materials';
+
+  // Read from the correct grid
+  const nameId  = isMat ? 'jobNameMat'  : 'jobName';
+  const priceId = isMat ? 'jobPriceMat' : 'jobPrice';
+  const unitId  = isMat ? 'jobUnitMat'  : 'jobUnit';
+
+  const name      = getVal(nameId).trim();
+  const price     = parseFloat(getVal(priceId));
+  const unit      = getVal(unitId).trim();
+  const costRaw   = isMat ? getVal('jobCost') : '';
+  const costPrice = costRaw !== '' ? parseFloat(costRaw) : null;
+
+  if (!name)        { document.getElementById(nameId).classList.add('error');  return; }
+  if (isNaN(price)) { document.getElementById(priceId).classList.add('error'); return; }
+  document.getElementById(nameId).classList.remove('error');
+  document.getElementById(priceId).classList.remove('error');
+
+  const reset = () => {
+    setVal('jobName',''); setVal('jobNameMat','');
+    setVal('jobPrice',''); setVal('jobPriceMat','');
+    setVal('jobCost','');
+    setVal('jobUnit',''); setVal('jobUnitMat','');
+  };
 
   const duplicate = state.priceList.find(j => j.name.toLowerCase() === name.toLowerCase());
   if (duplicate) {
     showDuplicatePrompt(name, () => {
-      addJob(name, price, unit);
-      save();
-      queuePriceListSync(true);
-      setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
-      refreshPriceList();
-      updateJobPicker();
+      addJob(name, price, unit, category, costPrice);
+      save(); queuePriceListSync(true); reset();
+      refreshPriceList(); updateJobPicker();
       showSavedPopup('On the list.', null, 3000);
     });
     return;
   }
 
-  addJob(name, price, unit);
-  save();
-  queuePriceListSync(true);
-  setVal('jobName',''); setVal('jobPrice',''); setVal('jobUnit','');
-  refreshPriceList();
-  updateJobPicker();
+  addJob(name, price, unit, category, costPrice);
+  save(); queuePriceListSync(true); reset();
+  refreshPriceList(); updateJobPicker();
   showSavedPopup('Added', null, 3000);
 }
 
@@ -3109,8 +3206,8 @@ function showDuplicatePrompt(name, onConfirm) {
   el.querySelector('#dupNo').addEventListener('click', () => el.remove());
 }
 
-function addJob(name, price, unit) {
-  state.priceList.push({ id: uid(), name, price, unit });
+function addJob(name, price, unit, category = '', costPrice = null) {
+  state.priceList.push({ id: uid(), name, price, unit, category, costPrice });
 }
 
 function refreshPriceList() {
@@ -3151,7 +3248,7 @@ function refreshPriceList() {
         <input type="checkbox" class="job-check" data-id="${job.id}" aria-label="Select ${esc(job.name)}">
       </div>
       <div class="price-item-info">
-        <div class="price-item-name">${esc(job.name)}</div>
+        <div class="price-item-name">${esc(job.name)}${job.category === 'materials' ? `<span class="cat-pill cat-pill-materials">Material</span>` : (job.category ? `<span class="cat-pill cat-pill-labour">Service</span>` : '')}</div>
         ${job.unit ? `<div class="price-item-meta">${esc(job.unit)}</div>` : ''}
       </div>
       <div class="price-item-price">${fmtPrice(job.price)}</div>
@@ -3180,26 +3277,41 @@ function editJobInline(row, job) {
   if (editingJobId === job.id) return;  // prevent re-entry on rapid taps
   editingJobId = job.id;
 
+  const catOpts = ['labour','materials'].map(c =>
+    `<button type="button" class="cat-btn${(job.category||'') === c ? ' active' : ''} edit-cat-btn" data-cat="${c}">${c === 'labour' ? 'Labour' : 'Materials'}</button>`
+  ).join('');
   row.innerHTML = `
     <div class="price-item-edit-row">
-      <input type="text" class="edit-name" value="${esc(job.name)}" placeholder="Job name" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
-      <input type="number" class="edit-price" value="${job.price}" placeholder="Price" min="0" step="0.01" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
+      <div class="cat-selector edit-cat-selector">${catOpts}</div>
+      <input type="text" class="edit-name" value="${esc(job.name)}" placeholder="Description" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
+      <input type="number" class="edit-price" value="${job.price}" placeholder="Sell price" min="0" step="0.01" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
+      <input type="number" class="edit-cost" value="${job.costPrice != null ? job.costPrice : ''}" placeholder="Cost price (optional)" min="0" step="0.01" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
       <input type="text" class="edit-unit" value="${esc(job.unit||'')}" placeholder="Unit" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
       <button class="btn btn-sm btn-primary save-edit">✓</button>
       <button class="btn btn-sm btn-outline cancel-edit">✕</button>
     </div>
   `;
+  row.querySelectorAll('.edit-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      row.querySelectorAll('.edit-cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
   row.querySelector('.edit-name').focus();
 
   const done = () => { editingJobId = null; };
 
   const saveEdit = () => {
-    const name  = row.querySelector('.edit-name').value.trim();
-    const price = parseFloat(row.querySelector('.edit-price').value);
-    const unit  = row.querySelector('.edit-unit').value.trim();
+    const name      = row.querySelector('.edit-name').value.trim();
+    const price     = parseFloat(row.querySelector('.edit-price').value);
+    const unit      = row.querySelector('.edit-unit').value.trim();
+    const costRaw   = row.querySelector('.edit-cost').value;
+    const costPrice = costRaw !== '' ? parseFloat(costRaw) : null;
+    const activeBtn = row.querySelector('.edit-cat-btn.active');
+    const category  = activeBtn ? activeBtn.dataset.cat : (job.category || '');
     if (!name || isNaN(price)) { toast('Name and price are required.', 'error'); return; }
     const idx = state.priceList.findIndex(j => j.id === job.id);
-    if (idx > -1) state.priceList[idx] = { ...job, name, price, unit };
+    if (idx > -1) state.priceList[idx] = { ...job, name, price, unit, category, costPrice };
     done();
     save();
     queuePriceListSync(true);
@@ -3260,12 +3372,13 @@ function syncCustMoreToggle() {
 
 /* ===== PAGE JOBS -ADD JOBS ===== */
 function setupPageJobs() {
-  // Job picker search
-  document.getElementById('jobPickerSearch').addEventListener('input', () => updateJobPicker());
+  // Services picker search
+  document.getElementById('jobPickerSearch').addEventListener('input', () => updateServicesPicker());
 
-  // Picker click listeners are attached directly in updateJobPicker()
+  // Materials picker search
+  document.getElementById('materialsPickerSearch')?.addEventListener('input', () => updateMaterialsPicker());
 
-  // Custom item
+  // One-off material add (always tagged as material)
   document.getElementById('addCustomItemBtn').addEventListener('click', addCustomItem);
 
   // Mic / voice button
@@ -3519,58 +3632,138 @@ function ensureDocumentRefAndDate(doc = {}) {
   return doc;
 }
 
+// Shared helper: build a single pick-item element
+function makePickItem(item, category) {
+  const quoteItem = (state.quote.items || []).find(qi => qi.id === item.id || qi.name === item.name);
+  const inQuote = !!quoteItem;
+  const qty = quoteItem ? quoteItem.qty : 0;
+  const el = document.createElement('div');
+  el.className = 'pick-item' + (inQuote ? ' added' : '');
+  el.setAttribute('role', 'button');
+  el.setAttribute('tabindex', '0');
+  el.setAttribute('aria-label', 'Add ' + (item.name || '') + ' to quote');
+  el.innerHTML = `
+    <div class="pick-name">${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}</div>
+    <span class="pick-price">${fmtPrice(item.price)}</span>
+    <span class="pick-add-btn">${inQuote ? qty : '+'}</span>
+  `;
+  const doAdd = () => addJobToQuote(item.id || item.name, category);
+  el.addEventListener('click', doAdd);
+  el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doAdd(); } });
+  return el;
+}
+
 function updateJobPicker() {
+  updateServicesPicker();
+  updateMaterialsPicker();
+  updateRatesSection();
+}
+
+function updateServicesPicker() {
   const q = getVal('jobPickerSearch').toLowerCase();
-  const filtered = state.priceList.filter(j => j.name.toLowerCase().includes(q));
+  // Services = items tagged 'service' OR 'labour' (legacy) OR no category at all
+  const services = state.priceList.filter(j =>
+    (!j.category || j.category === 'service' || j.category === 'labour') &&
+    j.name.toLowerCase().includes(q)
+  );
   const container = document.getElementById('jobPickerList');
   if (!container) return;
-
   container.innerHTML = '';
-
-  if (!filtered.length) {
+  if (!services.length) {
     const msg = document.createElement('p');
     msg.style.cssText = 'color:#888;font-size:0.85rem;padding:8px 0';
-    msg.textContent = q ? 'No jobs match your search.' : 'No jobs in your price list yet.';
+    msg.textContent = q ? 'No services match your search.' : 'No services added yet - go to My Services & Materials to build your list.';
     container.appendChild(msg);
     return;
   }
+  services.forEach(item => container.appendChild(makePickItem(item, 'service')));
+}
 
-  filtered.forEach(item => {
-    const quoteItem = (state.quote.items || []).find(qi => qi.id === item.id || qi.name === item.name);
-    const inQuote = !!quoteItem;
-    const qty = quoteItem ? quoteItem.qty : 0;
+function updateMaterialsPicker() {
+  const q = (document.getElementById('materialsPickerSearch')?.value || '').toLowerCase();
+  const materials = state.priceList.filter(j =>
+    j.category === 'materials' &&
+    j.name.toLowerCase().includes(q)
+  );
+  const wrap = document.getElementById('materialsPickerWrap');
+  const container = document.getElementById('materialsPickerList');
+  if (!wrap || !container) return;
 
-    const el = document.createElement('div');
-    el.className = 'pick-item' + (inQuote ? ' added' : '');
-    el.setAttribute('role', 'button');
-    el.setAttribute('tabindex', '0');
-    el.setAttribute('aria-label', 'Add ' + (item.name || '') + ' to quote');
-    el.innerHTML = `
-      <div class="pick-name">${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}</div>
-      <span class="pick-price">${fmtPrice(item.price)}</span>
-      <span class="pick-add-btn">${inQuote ? qty : '+'}</span>
+  if (!materials.length) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = '';
+  container.innerHTML = '';
+  materials.forEach(item => container.appendChild(makePickItem(item, 'materials')));
+}
+
+function updateRatesSection() {
+  const section = document.getElementById('myRatesSection');
+  const row = document.getElementById('myRatesBtns');
+  if (!section || !row) return;
+
+  const c = state.company;
+  const rates = [
+    { label: 'Hourly Rate',     value: c.rateHourly,  unit: 'hr'  },
+    { label: 'Half Day Rate',   value: c.rateHalfDay, unit: 'day' },
+    { label: 'Day Rate',        value: c.rateDay,     unit: 'day' },
+    { label: 'Call-out Charge', value: c.rateCallout, unit: ''    },
+  ].filter(r => r.value != null && r.value > 0);
+
+  if (!rates.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  row.innerHTML = '';
+
+  rates.forEach(r => {
+    const existing = state.quote.items.find(i => i.name === r.label && i.category === 'rate');
+    const qty = existing ? existing.qty : 0;
+    const card = document.createElement('div');
+    card.className = 'rate-card' + (qty > 0 ? ' rate-card-added' : '');
+    card.innerHTML = `
+      <div class="rate-card-label">${esc(r.label)}</div>
+      <div class="rate-card-price">${fmtPrice(r.value)}</div>
+      ${qty > 0 ? `
+      <div class="rate-card-stepper">
+        <button type="button" class="qty-btn qty-minus" aria-label="Remove one">-</button>
+        <span class="qty-value">${qty}</span>
+        <button type="button" class="qty-btn qty-plus" aria-label="Add one">+</button>
+      </div>` : `<div class="rate-card-add">Tap to add</div>`}
     `;
-
-    const doAdd = () => addJobToQuote(item.id || item.name);
-    el.addEventListener('click', doAdd);
-    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doAdd(); } });
-
-    container.appendChild(el);
+    if (qty === 0) {
+      card.addEventListener('click', () => {
+        state.quote.items.push({ id: uid(), name: r.label, unitPrice: r.value, unit: r.unit, qty: 1, category: 'rate' });
+        renderQuoteItems(); recalcTotals(); updateRatesSection();
+      });
+    } else {
+      card.querySelector('.qty-minus').addEventListener('click', e => {
+        e.stopPropagation();
+        if (existing.qty > 1) { existing.qty--; } else { state.quote.items.splice(state.quote.items.indexOf(existing), 1); }
+        renderQuoteItems(); recalcTotals(); updateRatesSection();
+      });
+      card.querySelector('.qty-plus').addEventListener('click', e => {
+        e.stopPropagation();
+        existing.qty++;
+        renderQuoteItems(); recalcTotals(); updateRatesSection();
+      });
+    }
+    row.appendChild(card);
   });
 }
 
 
-function addJobToQuote(jobId) {
+function addJobToQuote(jobId, category) {
   // Match by id first, fall back to name (handles legacy items without ids)
   const job = state.priceList.find(j => j.id === jobId) || state.priceList.find(j => j.name === jobId);
   if (!job) return;
   // Ensure the job has an id going forward
   if (!job.id) { job.id = uid(); ls(KEY_PL, state.priceList); }
   const existing = state.quote.items.find(i => i.id === job.id || i.name === job.name);
+  const resolvedCategory = category || job.category || 'service';
   if (existing) {
     existing.qty++;
   } else {
-    state.quote.items.push({ id: job.id, name: job.name, unitPrice: job.price, unit: job.unit, qty: 1 });
+    state.quote.items.push({ id: job.id, name: job.name, unitPrice: job.price, unit: job.unit, qty: 1, category: resolvedCategory });
   }
   renderQuoteItems();
   recalcTotals();
@@ -3586,7 +3779,8 @@ function addCustomItem() {
   document.getElementById('customItemName').classList.remove('error');
   document.getElementById('customItemPrice').classList.remove('error');
 
-  state.quote.items.push({ id: uid(), name, unitPrice: price, unit, qty: 1 });
+  // One-off items added from the Materials section are always materials
+  state.quote.items.push({ id: uid(), name, unitPrice: price, unit: unit || 'each', qty: 1, category: 'materials' });
   setVal('customItemName',''); setVal('customItemPrice',''); setVal('customItemUnit','');
   renderQuoteItems();
   recalcTotals();
@@ -3608,7 +3802,7 @@ function renderQuoteItems() {
   }
   if (empty) empty.style.display = 'none';
 
-  state.quote.items.forEach((item, idx) => {
+  const makeRow = (item, idx) => {
     const row = document.createElement('div');
     row.className = 'quote-item';
     const lineTotal = item.unitPrice * item.qty;
@@ -3618,17 +3812,15 @@ function renderQuoteItems() {
         <div class="quote-item-unit-price">${fmtPrice(item.unitPrice)}${item.unit ? ' / ' + esc(item.unit) : ''}</div>
       </div>
       <div class="qty-stepper">
-        <button type="button" class="qty-btn qty-minus" data-idx="${idx}" aria-label="Decrease quantity">−</button>
+        <button type="button" class="qty-btn qty-minus" aria-label="Decrease quantity">−</button>
         <span class="qty-value">${item.qty}</span>
-        <button type="button" class="qty-btn qty-plus"  data-idx="${idx}" aria-label="Increase quantity">+</button>
+        <button type="button" class="qty-btn qty-plus" aria-label="Increase quantity">+</button>
       </div>
       <div class="quote-item-total">${fmtPrice(lineTotal)}</div>
-      <button type="button" class="icon-btn delete" data-idx="${idx}" aria-label="Remove ${esc(item.name)}">
+      <button type="button" class="icon-btn delete" aria-label="Remove ${esc(item.name)}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     `;
-    container.appendChild(row);
-
     row.querySelector('.qty-minus').addEventListener('click', () => {
       if (item.qty > 1) { item.qty--; } else { state.quote.items.splice(idx, 1); }
       renderQuoteItems(); recalcTotals();
@@ -3639,7 +3831,31 @@ function renderQuoteItems() {
     row.querySelector('.delete').addEventListener('click', () => {
       state.quote.items.splice(idx, 1); renderQuoteItems(); recalcTotals();
     });
-  });
+    return row;
+  };
+
+  const indexed = state.quote.items.map((item, idx) => ({ item, idx }));
+  const rates    = indexed.filter(({ item }) => item.category === 'rate');
+  const services = indexed.filter(({ item }) => !item.category || item.category === 'service' || item.category === 'labour');
+  const materials = indexed.filter(({ item }) => item.category === 'materials');
+
+  const groupCount = [rates, services, materials].filter(g => g.length > 0).length;
+  const showLabels = groupCount > 1;
+
+  const appendGroup = (label, group) => {
+    if (!group.length) return;
+    if (showLabels) {
+      const lbl = document.createElement('div');
+      lbl.className = 'quote-group-label';
+      lbl.textContent = label;
+      container.appendChild(lbl);
+    }
+    group.forEach(({ item, idx }) => container.appendChild(makeRow(item, idx)));
+  };
+
+  appendGroup('Rates', rates);
+  appendGroup('Services', services);
+  appendGroup('Materials', materials);
 }
 
 function recalcTotals() {
@@ -4660,6 +4876,94 @@ function deleteDoc(id) {
   updateSavedBadge();
   refreshSavedDocs();
   toast('Document deleted.');
+}
+
+function openCustomerDeleteChoice(group) {
+  const hasMultipleDocs = group.docs.length > 1;
+  // Build a simple overlay with two choices
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'display:flex;z-index:10000';
+  overlay.innerHTML = `
+    <div class="modal-card modal-card-sm" style="padding:24px;text-align:center">
+      <h2 class="modal-title" style="margin-bottom:8px">What would you like to delete?</h2>
+      <p style="color:#555;font-size:0.88rem;margin:0 0 20px;line-height:1.5">Choose carefully - deleted data cannot be recovered.</p>
+      <button type="button" id="_delDocBtn" class="btn btn-outline btn-full" style="margin-bottom:10px;border-color:#c0392b;color:#c0392b">
+        Delete document only<br><small style="font-weight:400;font-size:0.78rem">${esc(group.name)} stays in your app</small>
+      </button>
+      <button type="button" id="_delCustBtn" class="btn btn-outline btn-full" style="margin-bottom:16px;border-color:#c0392b;color:#c0392b">
+        Delete entire customer<br><small style="font-weight:400;font-size:0.78rem">All ${group.docs.length} document${group.docs.length > 1 ? 's' : ''} and all records removed</small>
+      </button>
+      <button type="button" id="_delCancelBtn" class="btn btn-outline btn-full">Cancel</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+
+  overlay.querySelector('#_delCancelBtn').onclick = close;
+
+  overlay.querySelector('#_delDocBtn').onclick = () => {
+    // If multiple docs, pick which one first
+    if (hasMultipleDocs) {
+      close();
+      // Show a picker - use the existing job picker approach
+      const docNames = group.docs.map(d => `${d.ref || d.quote?.ref || 'Doc'} - ${fmtPrice(d.total || 0)}`).join('\n');
+      const picked = group.docs.find((d, i) => {
+        // Simple: just delete the most recent doc with another confirm
+        return false;
+      });
+      // For multiple docs, just confirm delete of first / show which one
+      const pickerOverlay = document.createElement('div');
+      pickerOverlay.className = 'modal-overlay';
+      pickerOverlay.style.cssText = 'display:flex;z-index:10001';
+      pickerOverlay.innerHTML = `
+        <div class="modal-card modal-card-sm" style="padding:20px">
+          <h2 class="modal-title" style="margin-bottom:12px">Which document?</h2>
+          ${group.docs.map(d => `
+            <button type="button" class="_pick-del-doc btn btn-outline btn-full" data-id="${esc(d.id)}" style="margin-bottom:8px;text-align:left">
+              <strong>${esc(d.ref || d.quote?.ref || 'No ref')}</strong> &nbsp; ${fmtPrice(d.total || 0)}
+            </button>`).join('')}
+          <button type="button" id="_pickDelCancel" class="btn btn-outline btn-full" style="margin-top:4px">Cancel</button>
+        </div>`;
+      document.body.appendChild(pickerOverlay);
+      pickerOverlay.querySelector('#_pickDelCancel').onclick = () => pickerOverlay.remove();
+      pickerOverlay.querySelectorAll('._pick-del-doc').forEach(btn => {
+        btn.onclick = () => {
+          const docId = btn.dataset.id;
+          pickerOverlay.remove();
+          if (!confirm('Are you sure you want to delete this document? This cannot be undone.')) return;
+          state.saved = state.saved.filter(d => d.id !== docId);
+          save(); updateSavedBadge(); refreshSavedDocs();
+          document.getElementById('customerDashboardModal').style.display = 'none';
+          toast('Document deleted.');
+        };
+      });
+    } else {
+      const docId = group.docs[0].id;
+      close();
+      if (!confirm(`Are you sure you want to delete this document for ${group.name}? This cannot be undone.`)) return;
+      state.saved = state.saved.filter(d => d.id !== docId);
+      save(); updateSavedBadge(); refreshSavedDocs();
+      document.getElementById('customerDashboardModal').style.display = 'none';
+      toast('Document deleted.');
+    }
+  };
+
+  overlay.querySelector('#_delCustBtn').onclick = () => {
+    close();
+    if (!confirm(`Are you sure you want to delete ${group.name} and ALL their documents? This cannot be undone.`)) return;
+    const docIds = group.docs.map(d => d.id);
+    state.saved = state.saved.filter(d => !docIds.includes(d.id));
+    save(); updateSavedBadge(); refreshSavedDocs();
+    document.getElementById('customerDashboardModal').style.display = 'none';
+    // Also remove from Supabase if connected
+    if (lexiSupabase && lexiAuthSession?.user?.id) {
+      docIds.forEach(id => {
+        lexiSupabase.from('saved_documents').delete().eq('local_document_id', id).eq('user_id', lexiAuthSession.user.id)
+          .then(() => {}).catch(() => {});
+      });
+    }
+    toast(`${group.name} and all their documents have been removed.`);
+  };
 }
 
 function updateSavedBadge() {
@@ -5811,7 +6115,7 @@ function applyDocEdits(doc, data = {}) {
     q.date = data.date || q.date || doc.date || toSupabaseDate(doc.createdAt) || todayStr();
     edited.date = q.date;
   }
-  if ('quoteNotes' in data) q.notes = data.quoteNotes || '';
+  // quoteNotes from the quote modal is the share message body only - do not overwrite document notes
   edited.custName = buildCustName(q);
 
   if (data.items != null && Array.isArray(data.items) && data.items.length) {
@@ -6415,6 +6719,10 @@ async function dataUrlToFile(dataUrl, filename) {
   return new File([blob], `${filename}.${ext}`, { type: blob.type || 'image/png' });
 }
 
+function updateQrMenuLabel() {
+  // Menu label always stays "My QR Code" — business name only appears as the modal title
+}
+
 function openQuickQrModal(fromShare = false) {
   const modal = document.getElementById('quickQrModal');
   const content = document.getElementById('quickQrContent');
@@ -6427,10 +6735,18 @@ function openQuickQrModal(fromShare = false) {
     openMissingQrPrompt(fromShare);
     return;
   }
+
+  // Modal title: business name first, owner name if no business name, fallback to My QR Code
+  const c = state.company;
+  const ownerName  = [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
+  const modalTitle = c.businessName || ownerName || 'My QR Code';
+
+  const titleEl = document.getElementById('quickQrTitle');
+  if (titleEl) titleEl.textContent = modalTitle;
+
   content.innerHTML = `
     <div class="quick-qr-preview">
       <img src="${qrSrc}" alt="QR code">
-      <p>Let your customer scan this now, or send it on.</p>
     </div>`;
   if (footer) footer.style.display = '';
   if (backBtn) backBtn.style.display = fromShare ? '' : 'none';
@@ -6496,7 +6812,7 @@ async function shareBizInfo() {
 }
 
 async function shareLexiApp() {
-  const text = 'Estimates, quotes, invoices and receipts - done in minutes, right there on site. Match your brand and look professional, straight from your phone. No faff. No spreadsheets. No sitting at a laptop at 10pm. Worth two minutes of your time - take a look!';
+  const text = 'Hi - I\'m Lexi. I create estimates, quotes, invoices and receipts for tradespeople - faster than you can make a brew, right there on site. I match your brand, make you look professional, and I live on your phone. No faff. No spreadsheets. No more sitting at a laptop at 10pm. Worth two minutes of your time.';
   const url = 'https://www.lexihandlesit.com';
   if (navigator.share) {
     try { await navigator.share({ title: 'Lexi Handles It', text, url }); return; } catch(e) {}
@@ -6679,38 +6995,56 @@ function buildCustomerJobSection(d, jobNum = 0) {
   // Cross-check the saved flags AND q.type so docs created directly as Invoice/Receipt
   // still show the correct step even if the invoiceSent flag wasn't set via the modal.
   const qTypeLower = (q.type || 'Estimate').toLowerCase();
-  const stageRank = d.paid                                   ? 3
-    : (d.receiptRef  || qTypeLower === 'receipt')            ? 3
-    : (d.invoiceSent || qTypeLower === 'invoice')            ? 2
-    : (qTypeLower === 'quote')                               ? 1
-    :                                                          0;
+  const stageRank = d.paid                                    ? 6
+    : (d.receiptRef  || qTypeLower === 'receipt')             ? 5
+    : (d.invoiceSent || qTypeLower === 'invoice')             ? 4
+    : (d.jobCompleted)                                        ? 3
+    : (d.jobAccepted)                                         ? 2
+    : (qTypeLower === 'quote')                                ? 1
+    :                                                           0;
+  // 7 stages split across two rows: 4 top (left→right), 3 bottom (left→right)
+  // Visually the line wraps: row 1 ends at Job Booked, drops down, row 2 is Job Completed→Invoiced→Paid
   const tubeStages = [
-    { letter: 'A', label: 'Estimate', action: 'quote',   cls: 'stage-estimate' },
-    { letter: 'B', label: 'Quote',    action: 'quote',   cls: 'stage-quote'    },
-    { letter: 'C', label: 'Invoice',  action: 'invoice', cls: 'stage-invoice'  },
-    { letter: 'D', label: 'Receipt',  action: 'receipt', cls: 'stage-receipt'  },
+    { label: 'Estimate',      action: 'quote',   cls: 'stage-estimate',   row: 0, col: 0 },
+    { label: 'Quote',         action: 'quote',   cls: 'stage-quote',      row: 0, col: 1 },
+    { label: 'Accepted',      action: 'quote',   cls: 'stage-accepted',   row: 0, col: 2 },
+    { label: 'Job Booked',    action: 'quote',   cls: 'stage-booked',     row: 0, col: 3 },
+    { label: 'Job Complete',  action: 'invoice', cls: 'stage-complete',   row: 1, col: 0 },
+    { label: 'Invoiced',      action: 'invoice', cls: 'stage-invoice',    row: 1, col: 1 },
+    { label: 'Paid',          action: 'receipt', cls: 'stage-paid',       row: 1, col: 2 },
   ];
+  const makeStation = (s, i) => {
+    const isDone   = i < stageRank;
+    const isActive = i === stageRank;
+    const dotCls   = isDone ? 'tube-done' : isActive ? `tube-active ${s.cls}` : 'tube-future';
+    const lblCls   = (isDone || isActive) ? 'lit' : '';
+    return `<div class="cdv-tube-station">
+      <button type="button" class="cdv-tube-dot ${dotCls}"
+        data-prog-doc-id="${esc(d.id)}"
+        data-prog-action="${s.action}"
+        title="${s.label}"></button>
+      <span class="cdv-tube-lbl ${lblCls}">${s.label}</span>
+    </div>`;
+  };
+  const makeSeg = (isDone) => `<div class="cdv-tube-seg${isDone ? ' done' : ''}"></div>`;
+  // Row 0 stations 0-3
+  const row0 = tubeStages.slice(0,4).map((s,i) => {
+    const isDone = i < stageRank;
+    return makeStation(s, i) + (i < 3 ? makeSeg(isDone) : '');
+  }).join('');
+  // Row 1 stations 4-6
+  const row1 = tubeStages.slice(4).map((s,i) => {
+    const realIdx = i + 4;
+    const isDone = realIdx < stageRank;
+    return makeStation(s, realIdx) + (i < 2 ? makeSeg(isDone) : '');
+  }).join('');
+  // Corner connector: done if stageRank >= 4
+  const cornerDone = stageRank >= 4;
   const progressionHtml = `
     <div class="cdv-tube-map">
       <div class="cdv-prog-label">Job Status</div>
-      <div class="cdv-tube-row">
-        ${tubeStages.map((s, i) => {
-          const isDone   = i < stageRank;
-          const isActive = i === stageRank;
-          const dotCls   = isDone ? 'done' : isActive ? `active ${s.cls}` : '';
-          const lblCls   = (isDone || isActive) ? 'lit' : '';
-          const seg      = i < tubeStages.length - 1
-            ? `<div class="cdv-tube-seg${isDone ? ' done' : ''}"></div>`
-            : '';
-          return `<div class="cdv-tube-station">
-            <button type="button" class="cdv-tube-dot ${dotCls}"
-              data-prog-doc-id="${esc(d.id)}"
-              data-prog-action="${s.action}">${s.letter}</button>
-            <span class="cdv-tube-lbl ${lblCls}">${s.label}</span>
-          </div>${seg}`;
-        }).join('')}
-        <div class="cdv-tube-arrow-end">&#8250;</div>
-      </div>
+      <div class="cdv-tube-row">${row0}<div class="cdv-tube-corner-wrap"><div class="cdv-tube-corner${cornerDone ? ' done' : ''}"></div></div></div>
+      <div class="cdv-tube-row cdv-tube-row2">${row1}</div>
     </div>`;
 
   const scheduleHtml = `
@@ -6803,8 +7137,10 @@ function renderSingleCustomerDashboard(group, groups) {
   const DSVG_EMAIL = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
   const DSVG_WA    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
   const DSVG_PHONE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.44 2 2 0 0 1 3.57 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.29 6.29l1.12-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
-  const DSVG_SHARE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
-  const DSVG_EDIT  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const DSVG_SHARE  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
+  const DSVG_EDIT   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const DSVG_CAMERA = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
+  const DSVG_DELETE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
   const contactBtns = `
     <div class="cdv-contact-btns">
       <button type="button" class="cal-icon-btn cal-icon-email cdv-labeled${!dashEmail ? ' cal-btn-disabled' : ''}"
@@ -6817,7 +7153,9 @@ function renderSingleCustomerDashboard(group, groups) {
         ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Call</span></a>`
         : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Call</span></button>`}
       <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share</span></button>
+      <button type="button" class="cal-icon-btn cdv-labeled" id="custDashCameraBtn" title="Add photo">${DSVG_CAMERA}<span>Photo</span></button>
       <button type="button" class="cal-icon-btn cal-icon-edit cdv-labeled" id="custDashEditBtn" title="Update this customer">${DSVG_EDIT}<span>Update</span></button>
+      <button type="button" class="cal-icon-btn cdv-labeled cdv-delete-btn" id="custDashDeleteBtn" title="Delete">${DSVG_DELETE}<span>Delete</span></button>
     </div>`;
 
   // contentHtml = pure dashboard content (used for download -no buttons)
@@ -6861,6 +7199,22 @@ function renderSingleCustomerDashboard(group, groups) {
   const dashEditBtn = document.getElementById('custDashEditBtn');
   if (dashEditBtn) dashEditBtn.onclick = () =>
     openCustomerEditChoice(group.docs.length === 1 ? firstDocId : null);
+
+  // Camera button - open add photo flow for first doc
+  const dashCameraBtn = document.getElementById('custDashCameraBtn');
+  if (dashCameraBtn) dashCameraBtn.onclick = () => {
+    if (group.docs.length === 1) {
+      executeCustomerEdit('addPhoto', firstDocId);
+    } else {
+      // Pick which job to add photo to
+      activeEditDocId = null;
+      customerEditPickDoc('addPhoto');
+    }
+  };
+
+  // Delete button - ask document or customer
+  const dashDeleteBtn = document.getElementById('custDashDeleteBtn');
+  if (dashDeleteBtn) dashDeleteBtn.onclick = () => openCustomerDeleteChoice(group);
 
   // Job status progression -event delegation
   body.addEventListener('click', e => {
@@ -7052,6 +7406,8 @@ function executeCustomerEdit(editType, docId) {
   } else if (editType === 'terms') {
     document.getElementById('customerDashboardModal').style.display = 'none';
     openJobTermsEdit(docId);
+  } else if (editType === 'addPhoto') {
+    if (docId) openPhotosModal(docId);
   }
 }
 
@@ -8593,8 +8949,12 @@ async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUr
     waPhone   ? doWhatsApp : null,
     doCopy
   );
-  const doEmail    = () => openEmailCompose(custEmail, subject, fullMsg, false, showPicker);
-  const doWhatsApp = () => window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(fullMsg)}`, '_blank');
+  const stampSentVia = (via) => {
+    const doc = activeDocId ? state.saved.find(d => d.id === activeDocId) : null;
+    if (doc && doc.sentVia !== via) { doc.sentVia = via; save(); }
+  };
+  const doEmail    = () => { stampSentVia('email');    openEmailCompose(custEmail, subject, fullMsg, false, showPicker); };
+  const doWhatsApp = () => { stampSentVia('whatsapp'); window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(fullMsg)}`, '_blank'); };
   const doCopy = async () => {
     if (fullMsg && navigator.clipboard) {
       try { await navigator.clipboard.writeText(fullMsg); toast('Message copied -paste it into WhatsApp or email.', '', 6000); }
@@ -10293,13 +10653,17 @@ function sendHoldingMessageForDoc(doc) {
   const signoff    = [traderName, bizName].filter((v, i, a) => v && a.indexOf(v) === i).join('\n');
   const msg        = `Hi ${custFirst || 'there'},\n\nThank you for accepting the ${docType}. I am really looking forward to getting the work done for you!\n\nI will be in touch shortly to confirm the booking details.\n\nKind regards\n${signoff}`.trim();
 
-  // Prefer WhatsApp, fall back to email, fall back to copy
-  if (phone) {
+  // Match the method used to send the original quote
+  const sentVia = doc.sentVia || (phone ? 'whatsapp' : 'email');
+  if (sentVia === 'whatsapp' && phone) {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
   } else if (email) {
     openEmailCompose(email, `Regarding your ${docType}`, msg);
+  } else if (phone) {
+    // sentVia email but no email address — fall back to WhatsApp
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
   } else {
-    // No contact details — show the full booking modal instead
+    // No contact details at all — show the full booking modal
     showBookingContactModal(doc);
   }
 }
