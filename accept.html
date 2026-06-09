@@ -128,7 +128,7 @@
   <div class="success-screen" id="successScreen">
     <div class="icon">✅</div>
     <h1>Quote Accepted!</h1>
-    <p class="sub">Thank you, <strong id="acceptedName"></strong>. Your acceptance has been recorded and your tradesperson has been notified. They will be in touch to confirm the booking.</p>
+    <p class="sub">Thank you, <strong id="acceptedName"></strong>. Your acceptance has been recorded and <strong id="acceptedBizName"></strong> will be in touch to confirm the booking.</p>
     <p class="legal" style="margin-top:16px">Lexi Handles It — so you don't have to.</p>
   </div>
 
@@ -199,6 +199,7 @@
       try {
         const data = JSON.parse(existing);
         if (data.status === 'accepted') {
+          document.getElementById('acceptedBizName').textContent = bizName || 'your tradesperson';
           document.getElementById('acceptedName').textContent = data.name || 'there';
           showScreen('successScreen');
           return;
@@ -225,6 +226,7 @@
       }
       const status = String(data.status || '').toLowerCase();
       if (status === 'accepted') {
+        document.getElementById('acceptedBizName').textContent = bizName || 'your tradesperson';
         document.getElementById('acceptedName').textContent = data.accepted_by || data.customer_name || 'there';
         showScreen('successScreen');
       } else if (status === 'declined') {
@@ -300,6 +302,7 @@
     };
     try {
       await saveAcceptanceResponse(data);
+      document.getElementById('acceptedBizName').textContent = bizName || 'your tradesperson';
       document.getElementById('acceptedName').textContent = name;
       showScreen('successScreen');
     } catch (error) {

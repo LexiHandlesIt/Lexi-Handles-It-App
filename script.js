@@ -1931,9 +1931,6 @@ function setupNavigation() {
 
   // Step 1 — reason selected, move to quiet season offer
   document.getElementById('daStep1NextBtn')?.addEventListener('click', () => {
-    if (!document.getElementById('daReason').value) {
-      toast('Please select a reason.', 'error'); return;
-    }
     daShowStep('daStep2');
   });
   document.getElementById('daStep1CancelBtn')?.addEventListener('click', daClose);
@@ -2029,6 +2026,10 @@ function setupOnboarding() {
 
   modal.style.display = 'flex';
   modal.classList.add('for-onboarding');
+
+  // Populate trial countdown badge
+  const badgeDays = document.getElementById('obTrialDays');
+  if (badgeDays) badgeDays.textContent = getTrialDaysRemaining() || TRIAL_DAYS;
 
   document.getElementById('startBtn').addEventListener('click', () => {
     const source = document.getElementById('referralSource').value;

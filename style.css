@@ -367,14 +367,15 @@ h3 { font-size: 1rem; font-weight: 600; }
   margin-bottom: 4px;
 }
 
-/* Numbered step titles — full-width green pill */
+/* Numbered step titles — full-width green banner */
 .page-title:has(.page-num) {
-  display: flex;
-  align-items: center;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   background: var(--sage);
   color: white;
   border-radius: 10px;
-  padding: 8px 18px 8px 10px;
+  padding: 8px 16px;
   margin-bottom: 12px;
 }
 
@@ -1350,6 +1351,44 @@ input[type="text"].sig-text-input:focus {
   position: relative;
   min-width: 0;
   overflow: visible;
+}
+
+.ob-portrait-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.ob-trial-badge {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  background: var(--walnut);
+  color: #fff;
+  border-radius: 50%;
+  width: 58px;
+  height: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(125,87,48,0.35);
+  z-index: 10;
+  line-height: 1;
+  gap: 1px;
+}
+.ob-trial-days {
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+.ob-trial-label {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.9;
 }
 
 .ob-portrait {

@@ -129,7 +129,7 @@
         <div class="ob-step">
           <span class="ob-num">2</span>
           <div class="ob-step-text">
-            <strong>Build your price list</strong>
+            <strong>Add your rates and services</strong>
             <span>You'll only do this once.</span>
           </div>
         </div>
@@ -160,7 +160,13 @@
 
     <!-- RIGHT COLUMN: portrait -->
     <div class="ob-right">
-      <img src="Lexi Portrait Transparent 3.png" alt="Lexi" class="ob-portrait" onerror="this.style.display='none'">
+      <div class="ob-portrait-wrap">
+        <img src="Lexi Portrait Transparent 3.png" alt="Lexi" class="ob-portrait" onerror="this.style.display='none'">
+        <div class="ob-trial-badge" id="obTrialBadge">
+          <span class="ob-trial-days" id="obTrialDays">90</span>
+          <span class="ob-trial-label">days<br>free</span>
+        </div>
+      </div>
     </div>
     </div>
 
@@ -2464,12 +2470,11 @@
 
       <!-- STEP 3: Final farewell -->
       <div id="daStep3" style="display:none">
-        <div style="font-size:2.2rem;margin:16px 0 8px">👋</div>
-        <h2 class="modal-title" style="margin-bottom:6px;color:#c0392b">We're sorry to see you go</h2>
-        <p style="color:#555;font-size:0.9rem;line-height:1.6;margin:0 0 8px">Fair enough. We'd love to welcome you back any time.</p>
-        <p style="color:#c0392b;font-size:0.85rem;font-weight:600;margin:0 0 24px">Once deleted, <strong>all your data is gone for good</strong> and cannot be recovered.</p>
+        <div style="margin:16px 0 8px"><img src="Waving.png" alt="Lexi waving" style="width:110px;height:auto;border-radius:12px;display:block;margin:0 auto"></div>
+        <h2 class="modal-title" style="margin-bottom:6px;color:#c0392b">I'm sorry to see you go</h2>
+        <p style="color:#c0392b;font-size:0.88rem;font-weight:600;margin:0 0 24px;line-height:1.6">Just a reminder that once deleted, all your data is gone for good and it cannot be recovered.</p>
         <button type="button" class="btn w-100" id="deleteAccountConfirmBtn" style="background:#c0392b;color:#fff;border:none;margin-bottom:10px;font-weight:700;padding:14px;border-radius:10px;font-size:1rem;cursor:pointer">Yes, delete everything and close my account</button>
-        <button type="button" class="btn btn-outline w-100" id="deleteAccountCancelBtn">Cancel — keep my account</button>
+        <button type="button" class="btn btn-outline w-100" id="deleteAccountCancelBtn">Cancel - keep my account. You're welcome back any time.</button>
       </div>
 
     </div>

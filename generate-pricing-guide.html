@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Generate Lexi Pricing Guide</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  body { font-family: sans-serif; background: #fdf8f3; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  h1 { color: #7D5730; }
+  button { background: #7D5730; color: #fff; border: none; padding: 14px 32px; border-radius: 8px; font-size: 1.1rem; cursor: pointer; margin-top: 20px; }
+  button:hover { background: #5a3e22; }
+  p { color: #555; max-width: 440px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>Lexi Pricing Guide Generator</h1>
+<p>Click the button below to generate and download <strong>Lexi's Pricing Guide.xlsx</strong>. Save it into the Lexi App 3 folder so the download link works.</p>
+<button onclick="generate()">Generate &amp; Download</button>
+<script>
+function generate() {
+  const wb = XLSX.utils.book_new();
+
+  // ── HELPER ──────────────────────────────────────────────────────────────────
+  function addSheet(name, rows, colWidths) {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = colWidths;
+    XLSX.utils.book_append_sheet(wb, ws, name);
+    return ws;
+  }
+
+  // ── TAB 1: WELCOME ──────────────────────────────────────────────────────────
+  addSheet('Welcome - Lexi', [
+    [''],
+    ['  Lexi\'s Pricing Guide 2025 / 2026'],
+    [''],
+    ['  Welcome to Lexi - the app that creates estimates, quotes, invoices and receipts'],
+    ['  for tradespeople faster than you can make a brew, right there on site.'],
+    [''],
+    ['  This guide is here to help you charge what you\'re worth.'],
+    ['  Prices are based on typical UK rates for 2025/2026 - use them as a starting point,'],
+    ['  then adjust for your area, your experience and your overheads.'],
+    [''],
+    ['  HOW TO USE THIS GUIDE'],
+    ['  -------------------------------------------------------'],
+    ['  1.  Click on the tab that best matches your trade or industry.'],
+    ['  2.  Browse the top 20 most common services and their typical price ranges.'],
+    ['  3.  Use these as a benchmark when setting your prices inside Lexi.'],
+    ['  4.  Remember - these are guides only. Your time, your skills, your call.'],
+    [''],
+    ['  TABS IN THIS WORKBOOK'],
+    ['  -------------------------------------------------------'],
+    ['  Plumbing & Heating'],
+    ['  Electrical'],
+    ['  Landscaping & Gardening'],
+    ['  Painting & Decorating'],
+    ['  Carpentry & Joinery'],
+    ['  Roofing'],
+    ['  Plastering'],
+    ['  Tiling'],
+    ['  Flooring'],
+    ['  General Handyman'],
+    [''],
+    ['  Prices shown are typical UK market rates (exc. VAT) for 2025/2026.'],
+    ['  Always consider your local market, material costs and overheads.'],
+    [''],
+    ['  Good luck - and remember, Lexi\'s got your back.'],
+  ], [{ wch: 80 }]);
+
+  // ── TRADE DATA ───────────────────────────────────────────────────────────────
+  const header = ['Service / Job', 'Unit', 'Low (£)', 'High (£)', 'Typical (£)', 'Notes'];
+  const cw = [{ wch: 42 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 40 }];
+
+  const trades = [
+    {
+      name: 'Plumbing & Heating',
+      rows: [
+        header,
+        ['Boiler service (annual)', 'per visit', 70, 120, 95, 'Gas Safe registered engineer required'],
+        ['Boiler replacement (combi)', 'per job', 1800, 3500, 2500, 'Incl. fit, exc. boiler cost'],
+        ['Power flush (8-10 rads)', 'per job', 350, 600, 450, 'Add per radiator for larger systems'],
+        ['Radiator replacement', 'per rad', 150, 300, 200, 'Exc. cost of new radiator'],
+        ['Radiator added (new)', 'per rad', 300, 500, 380, 'Incl. pipework extension'],
+        ['Leak repair (minor)', 'per job', 80, 200, 130, 'Depending on access & complexity'],
+        ['Tap replacement', 'per tap', 80, 180, 120, 'Exc. tap cost'],
+        ['Toilet replacement', 'per job', 150, 300, 220, 'Exc. WC unit cost'],
+        ['Bathroom basin install', 'per job', 120, 250, 175, 'Exc. basin cost'],
+        ['Shower installation', 'per job', 250, 600, 400, 'Exc. shower unit; electric vs. mixer varies'],
+        ['Outside tap installation', 'per job', 120, 250, 180, 'Incl. isolation valve'],
+        ['Unvented cylinder service', 'per visit', 80, 140, 100, 'Annual statutory check'],
+        ['Pressure vessel replacement', 'per job', 80, 200, 130, ''],
+        ['Central heating system drain & refill', 'per job', 100, 200, 150, 'Add inhibitor cost'],
+        ['Underfloor heating install (wet)', 'per m2', 70, 120, 90, 'Exc. screed & boarding'],
+        ['Gas hob connection', 'per job', 80, 150, 110, 'Gas Safe required'],
+        ['Bathroom suite full fit-out', 'per job', 800, 2000, 1300, 'Exc. materials'],
+        ['Soil pipe repair / replacement', 'per m', 60, 150, 90, ''],
+        ['Stopcock replacement', 'per job', 80, 180, 120, ''],
+        ['Immersion heater replacement', 'per job', 100, 220, 150, 'Exc. element cost'],
+      ]
+    },
+    {
+      name: 'Electrical',
+      rows: [
+        header,
+        ['Consumer unit replacement (RCBO)', 'per job', 400, 900, 650, 'Full Part P certification incl.'],
+        ['New socket installation', 'per socket', 80, 180, 120, 'Surface or chased'],
+        ['Additional double socket', 'per socket', 60, 130, 90, 'From existing ring main'],
+        ['Light fitting installation', 'per fitting', 50, 120, 80, 'Standard ceiling rose/pendant'],
+        ['Downlighter installation (per light)', 'per light', 40, 90, 60, 'Exc. fitting cost'],
+        ['EV charger installation', 'per job', 500, 1000, 700, 'OZEV grant eligible; incl. cert'],
+        ['EICR (2-bed property)', 'per job', 150, 280, 200, 'Electrical Installation Condition Report'],
+        ['EICR (4-bed property)', 'per job', 250, 400, 320, ''],
+        ['Smoke alarm installation', 'per alarm', 50, 120, 80, 'Mains-wired with battery backup'],
+        ['Carbon monoxide alarm', 'per alarm', 40, 100, 65, ''],
+        ['Outdoor socket / weatherproof', 'per socket', 100, 200, 150, 'Incl. RCD protection'],
+        ['Garden lighting circuit', 'per job', 250, 600, 400, 'Exc. fittings'],
+        ['Full rewire (3-bed semi)', 'per job', 3000, 6000, 4500, 'Highly variable by property'],
+        ['Shower circuit installation', 'per job', 250, 450, 340, 'Incl. correct RCD breaker'],
+        ['Security light installation', 'per light', 80, 180, 120, 'Exc. fitting'],
+        ['Data/Cat6 socket installation', 'per socket', 60, 130, 90, ''],
+        ['Fault finding / diagnostic', 'per hour', 60, 120, 85, 'Min 1 hr charge typical'],
+        ['Cooker circuit installation', 'per job', 150, 350, 240, 'New dedicated 32A circuit'],
+        ['Storage heater replacement', 'per heater', 150, 350, 240, 'Exc. unit cost'],
+        ['Loft lighting / power install', 'per job', 180, 350, 260, 'Boarding not incl.'],
+      ]
+    },
+    {
+      name: 'Landscaping & Gardening',
+      rows: [
+        header,
+        ['Lawn mowing (small garden)', 'per visit', 30, 60, 45, 'Up to 50m2'],
+        ['Lawn mowing (large garden)', 'per visit', 60, 120, 80, 'Over 100m2'],
+        ['Hedge trimming (small)', 'per job', 40, 80, 60, 'Single hedge, up to 10m'],
+        ['Hedge trimming (large)', 'per job', 80, 200, 130, 'Multiple hedges, tall/wide'],
+        ['Tree pruning (small)', 'per tree', 100, 300, 180, 'Up to 5m; exc. stump removal'],
+        ['Tree removal (large)', 'per tree', 500, 2000, 1000, 'Highly variable by size/access'],
+        ['Stump grinding', 'per stump', 80, 200, 130, 'Per stump; machine access required'],
+        ['Turf laying (new lawn)', 'per m2', 12, 22, 16, 'Exc. turf cost; incl. prep'],
+        ['Patio laying (standard slab)', 'per m2', 60, 120, 85, 'Exc. materials'],
+        ['Decking construction', 'per m2', 80, 180, 120, 'Exc. timber cost'],
+        ['Fence erection (panel)', 'per panel', 60, 120, 85, 'Exc. panel & post costs'],
+        ['Garden clearance (full)', 'per day', 250, 500, 350, 'Incl. skip or disposal'],
+        ['Weed treatment (spray)', 'per visit', 50, 120, 75, 'Professional grade; re-visit may be needed'],
+        ['Planting & borders', 'per hour', 30, 55, 42, 'Exc. plant costs'],
+        ['Raised bed construction', 'per bed', 150, 400, 250, 'Exc. timber & soil'],
+        ['Artificial grass installation', 'per m2', 40, 80, 55, 'Exc. turf cost; incl. prep & fixings'],
+        ['Pressure washing (patio/driveway)', 'per job', 80, 200, 130, 'Typical driveway/patio area'],
+        ['Gravel installation', 'per m2', 25, 60, 40, 'Exc. gravel cost; incl. membrane'],
+        ['Seasonal garden tidy', 'per visit', 80, 180, 120, 'Half-day typical'],
+        ['Irrigation system install', 'per job', 300, 1000, 600, 'Exc. materials'],
+      ]
+    },
+    {
+      name: 'Painting & Decorating',
+      rows: [
+        header,
+        ['Painting a bedroom (walls only)', 'per room', 200, 450, 300, '2 coats; exc. materials'],
+        ['Painting a living room (walls only)', 'per room', 280, 550, 380, '2 coats; exc. materials'],
+        ['Full room (walls, ceiling, woodwork)', 'per room', 400, 800, 560, 'Exc. materials'],
+        ['Exterior painting (house front)', 'per job', 400, 1200, 700, 'Variable by render/brick/size'],
+        ['Wallpapering (per roll hung)', 'per roll', 35, 65, 48, 'Paste-the-wall; exc. paper cost'],
+        ['Wallpapering (feature wall)', 'per wall', 150, 350, 230, '4-6 rolls typical; exc. paper'],
+        ['Stripping wallpaper', 'per room', 100, 250, 160, 'Difficult paper/walls may cost more'],
+        ['Ceiling painting', 'per ceiling', 80, 200, 130, 'Standard room; exc. materials'],
+        ['Gloss work / woodwork (per door)', 'per door', 50, 120, 75, 'Both sides; light sand & paint'],
+        ['Skirting boards & architrave (room)', 'per room', 80, 200, 130, 'Full room; exc. paint'],
+        ['Filling & prep (full room)', 'per room', 80, 200, 130, 'Cracks, holes, light sand'],
+        ['Coving installation', 'per m', 12, 25, 18, 'Exc. coving material cost'],
+        ['Staircase painting / varnish', 'per job', 300, 700, 480, 'Incl. spindles & handrail'],
+        ['Garden fence painting/staining', 'per m', 5, 15, 9, 'Both sides; exc. stain cost'],
+        ['Garage door painting', 'per door', 80, 200, 130, 'Prep, undercoat & topcoat'],
+        ['New build paint-out (3-bed)', 'per job', 1500, 4000, 2500, 'All rooms, all coats'],
+        ['Radiator painting', 'per rad', 30, 70, 45, ''],
+        ['Spray painting (furniture/cabinets)', 'per item', 80, 300, 180, 'Highly variable by size'],
+        ['Masonry paint (exterior wall)', 'per m2', 5, 12, 8, 'Exc. paint cost; incl. prep'],
+        ['UPVC painting (window frames)', 'per window', 40, 100, 65, 'Specialist UPVC paint only'],
+      ]
+    },
+    {
+      name: 'Carpentry & Joinery',
+      rows: [
+        header,
+        ['Door hanging (internal)', 'per door', 80, 180, 120, 'Exc. door cost; incl. latch/hinges'],
+        ['Door hanging (external)', 'per door', 120, 280, 190, 'Incl. weatherstrip & lock prep'],
+        ['Door frame replacement', 'per frame', 150, 350, 240, 'Exc. frame cost'],
+        ['Skirting boards (room)', 'per room', 150, 350, 230, 'Exc. material cost'],
+        ['Architrave fitting (per door)', 'per door', 60, 140, 90, 'Both sides'],
+        ['Staircase balustrade replacement', 'per job', 400, 1200, 750, 'Exc. materials'],
+        ['Loft hatch fitting', 'per job', 120, 280, 190, 'Exc. hatch cost'],
+        ['Loft boarding (10m2)', 'per job', 300, 700, 480, 'Exc. board cost; incl. noggins'],
+        ['Fitted wardrobe (alcove, 2-door)', 'per job', 500, 1500, 900, 'Made-to-measure; exc. materials'],
+        ['Kitchen fitting (units only)', 'per day', 200, 350, 260, 'Rate; exc. units & worktops'],
+        ['Worktop fitting', 'per m run', 60, 130, 90, 'Exc. worktop; incl. cut-outs'],
+        ['Flat-pack assembly (wardrobe)', 'per item', 60, 150, 100, ''],
+        ['Garden gate hanging', 'per gate', 80, 200, 130, 'Exc. gate cost'],
+        ['Decking frame (labour)', 'per m2', 30, 60, 42, 'Exc. timber; frame only'],
+        ['Window board fitting', 'per window', 60, 130, 90, 'Exc. board cost'],
+        ['Shelving (alcove, 3 shelves)', 'per job', 150, 400, 260, 'Exc. material cost'],
+        ['Fence post replacement', 'per post', 60, 140, 95, 'Exc. concrete & post'],
+        ['Cat flap installation', 'per job', 60, 130, 90, 'Exc. flap cost; timber door'],
+        ['Pocket door kit install', 'per job', 200, 450, 300, 'Exc. kit & door'],
+        ['Boxing in pipework (per m)', 'per m', 40, 90, 60, 'Exc. materials'],
+      ]
+    },
+    {
+      name: 'Roofing',
+      rows: [
+        header,
+        ['Roof inspection', 'per visit', 60, 150, 95, 'Report provided; may be deducted from job'],
+        ['Tile replacement (few tiles)', 'per tile', 25, 60, 40, 'Incl. re-bedding if needed'],
+        ['Ridge tile re-bedding (per tile)', 'per tile', 30, 70, 50, ''],
+        ['Re-pointing ridge tiles (per m)', 'per m', 25, 60, 40, 'Mortar or dry-verge system'],
+        ['Flat roof repair (EPDM patch)', 'per job', 150, 500, 300, 'Area-dependent'],
+        ['Flat roof replacement (per m2)', 'per m2', 60, 120, 85, 'EPDM or fibreglass; exc. boards'],
+        ['Felt & batten replacement (per m2)', 'per m2', 30, 70, 50, 'Exc. tiles'],
+        ['Lead flashing repair', 'per job', 100, 350, 200, 'Chimney or dormer junction'],
+        ['Chimney repointing', 'per job', 300, 800, 500, 'Full repoint; scaffold may be extra'],
+        ['Chimney pot replacement', 'per pot', 150, 400, 250, 'Exc. pot cost; scaffold extra'],
+        ['Gutter clearance (full house)', 'per job', 80, 200, 130, ''],
+        ['Gutter replacement (plastic, per m)', 'per m', 25, 55, 38, 'Exc. materials'],
+        ['Fascia & soffit replacement (per m)', 'per m', 35, 70, 50, 'UPVC; exc. materials'],
+        ['Velux window installation', 'per window', 300, 700, 480, 'Exc. window cost'],
+        ['Dormer window construction', 'per job', 5000, 15000, 9000, 'Full project; structural work incl.'],
+        ['Dry verge system installation (per m)', 'per m', 20, 45, 30, 'Exc. components'],
+        ['Pointing (general, per m2)', 'per m2', 20, 50, 32, 'Brickwork repointing'],
+        ['Roof moss treatment & clear', 'per job', 150, 400, 260, 'Biocide treatment incl.'],
+        ['Skylights / sun tunnel install', 'per job', 400, 1000, 650, 'Exc. unit cost'],
+        ['Emergency call-out (leak)', 'per job', 150, 400, 250, 'Out-of-hours premium may apply'],
+      ]
+    },
+    {
+      name: 'Plastering',
+      rows: [
+        header,
+        ['Skim coat (per m2)', 'per m2', 8, 18, 12, 'Smooth finish over existing plaster'],
+        ['Full plaster (per m2)', 'per m2', 15, 30, 22, 'Bonding + skim; bare brick/block'],
+        ['Single room skim (bedroom)', 'per room', 350, 700, 500, 'Walls only; approx 30m2'],
+        ['Single room full plaster', 'per room', 600, 1200, 850, 'Walls & ceiling; bare substrate'],
+        ['Ceiling skim (standard room)', 'per ceiling', 200, 500, 320, 'Approx 12-15m2'],
+        ['Patching (small area)', 'per job', 60, 150, 95, 'Up to 0.5m2'],
+        ['Artex removal & skim', 'per m2', 20, 45, 30, 'Pre-2000 artex may contain asbestos'],
+        ['Render (external, per m2)', 'per m2', 25, 55, 38, 'Scratch & float; exc. paint'],
+        ['Monocouche render (per m2)', 'per m2', 35, 70, 50, 'Coloured through; no painting needed'],
+        ['Dry lining / dot & dab (per m2)', 'per m2', 12, 25, 18, 'Exc. board cost'],
+        ['Coving (per m)', 'per m', 10, 22, 15, 'Plaster coving fitted & filled'],
+        ['Beading (per m)', 'per m', 4, 10, 7, 'Angle or stop bead'],
+        ['Stairwell plaster (full)', 'per job', 500, 1200, 800, 'Access scaffolding may be needed'],
+        ['New build plaster-out (3-bed)', 'per job', 3000, 7000, 4800, 'All rooms; multi-coat'],
+        ['Insulated plasterboard (per m2)', 'per m2', 20, 45, 30, 'Exc. board cost; dot & dab fix'],
+        ['Venetian plaster (per m2)', 'per m2', 50, 120, 80, 'Decorative finish; specialist skill'],
+        ['Floating coat only (per m2)', 'per m2', 10, 22, 15, ''],
+        ['Lath & plaster repair', 'per m2', 30, 80, 55, 'Heritage properties; specialist'],
+        ['Fire-resistant board lining (per m2)', 'per m2', 15, 35, 24, 'Exc. board cost'],
+        ['External corner beading & plaster', 'per m', 10, 25, 17, ''],
+      ]
+    },
+    {
+      name: 'Tiling',
+      rows: [
+        header,
+        ['Wall tiling (standard, per m2)', 'per m2', 25, 55, 38, 'Exc. tiles & adhesive'],
+        ['Floor tiling (standard, per m2)', 'per m2', 30, 65, 45, 'Exc. tiles & adhesive'],
+        ['Large format tiles (per m2)', 'per m2', 45, 90, 65, '>60x60cm; more complex levelling'],
+        ['Bathroom wall tiling (full room)', 'per job', 400, 1000, 650, 'Exc. tiles; standard size'],
+        ['Shower enclosure tiling', 'per job', 250, 700, 450, 'Incl. waterproof membrane'],
+        ['Splashback tiling (kitchen)', 'per m2', 30, 70, 48, 'Exc. tiles'],
+        ['Removing old tiles (per m2)', 'per m2', 10, 25, 16, 'Wall tile removal'],
+        ['Floor tile removal (per m2)', 'per m2', 12, 30, 20, 'Adhesive residue removal extra'],
+        ['Grouting only (per m2)', 'per m2', 8, 18, 12, 'Re-grouting existing tiles'],
+        ['Regrouting (strip & regrout)', 'per m2', 15, 35, 24, 'Full regrout'],
+        ['Re-siliconing (bathroom)', 'per job', 60, 150, 95, 'All joints; mould-resistant silicone'],
+        ['Mosaic tiling (per m2)', 'per m2', 50, 120, 80, 'Intricate; significantly more labour'],
+        ['Underfloor heating mat (per m2)', 'per m2', 20, 45, 30, 'Exc. mat cost; incl. thermostat wiring'],
+        ['Quarry tiles (per m2)', 'per m2', 35, 75, 52, 'Heavy; bed & sand method'],
+        ['Brick slips (per m2)', 'per m2', 35, 80, 55, 'Exc. slips & adhesive'],
+        ['Outdoor porcelain paving (per m2)', 'per m2', 40, 90, 60, 'Pedestal or mortar bed'],
+        ['Waterproof tanking membrane', 'per m2', 15, 35, 24, 'Wet room or shower tray area'],
+        ['Tile trim fitting (per m)', 'per m', 6, 15, 10, 'Aluminium or PVC edge trim'],
+        ['Diagonal tile laying premium', 'per m2', 5, 15, 10, 'Extra labour over straight lay'],
+        ['Herringbone pattern laying premium', 'per m2', 8, 20, 13, 'Extra labour over straight lay'],
+      ]
+    },
+    {
+      name: 'Flooring',
+      rows: [
+        header,
+        ['Laminate fitting (per m2)', 'per m2', 8, 18, 12, 'Exc. material; incl. underlay fitting'],
+        ['Engineered wood fitting (per m2)', 'per m2', 10, 25, 17, 'Exc. material; click or glue'],
+        ['Solid wood fitting (per m2)', 'per m2', 15, 35, 24, 'Nail or secret nail; exc. material'],
+        ['Carpet fitting (per m2)', 'per m2', 4, 10, 7, 'Exc. carpet & gripper'],
+        ['Carpet fitting (stairs, per stair)', 'per stair', 8, 20, 14, 'Exc. carpet'],
+        ['LVT / vinyl plank fitting (per m2)', 'per m2', 8, 18, 12, 'Exc. material'],
+        ['Sheet vinyl fitting (per m2)', 'per m2', 6, 14, 9, 'Exc. material'],
+        ['Floor tile fitting - see Tiling tab', '', '', '', '', ''],
+        ['Subfloor preparation (per m2)', 'per m2', 5, 15, 9, 'Sanding, levelling compound'],
+        ['Old floor removal (per m2)', 'per m2', 5, 12, 8, 'Carpet, vinyl or laminate'],
+        ['Old carpet removal & disposal', 'per room', 40, 120, 75, 'Incl. gripper & skip/disposal'],
+        ['Floor sanding (per m2)', 'per m2', 15, 35, 24, 'Incl. 3 coats lacquer or oil'],
+        ['Parquet restoration (per m2)', 'per m2', 20, 50, 35, 'Sand, repair, finish'],
+        ['Screeding (per m2)', 'per m2', 10, 25, 17, 'Traditional sand/cement screed'],
+        ['Self-levelling compound (per m2)', 'per m2', 8, 20, 13, 'Exc. compound cost'],
+        ['Underfloor heating screed premium', 'per m2', 5, 12, 8, 'Screed over UFH pipes'],
+        ['Threshold bar fitting', 'per bar', 15, 40, 25, 'Exc. bar cost'],
+        ['Skirting board fitting', 'per m', 8, 18, 12, 'Exc. skirting'],
+        ['Floor insulation boards (per m2)', 'per m2', 8, 20, 13, 'Exc. board cost; over concrete'],
+        ['Stair nosing installation (per step)', 'per step', 15, 40, 25, 'Exc. nosing'],
+      ]
+    },
+    {
+      name: 'General Handyman',
+      rows: [
+        header,
+        ['Hourly rate', 'per hour', 35, 70, 50, 'Typical UK range; London higher'],
+        ['Half-day rate (up to 4hrs)', 'per half day', 120, 250, 175, ''],
+        ['Day rate (up to 8hrs)', 'per day', 200, 400, 300, ''],
+        ['Call-out / minimum charge', 'per call-out', 50, 120, 75, 'Applies before work starts'],
+        ['Flat-pack furniture assembly', 'per item', 40, 120, 75, 'Wardrobe/bed/desk'],
+        ['TV wall mounting', 'per job', 60, 150, 100, 'Exc. bracket; incl. cable tidy'],
+        ['Picture / mirror hanging', 'per item', 20, 60, 35, 'Heavy items / wall type varies'],
+        ['Shelf installation (single)', 'per shelf', 40, 100, 65, 'Exc. shelf & fixings'],
+        ['Curtain pole / blind fitting', 'per job', 30, 80, 50, ''],
+        ['Door lock change', 'per lock', 50, 130, 85, 'Exc. lock cost'],
+        ['Cat flap / dog flap install', 'per job', 50, 120, 80, 'Timber door; composite extra'],
+        ['Letterbox replacement', 'per job', 40, 100, 65, 'Exc. letterbox'],
+        ['Draught-proofing (door/window)', 'per item', 30, 80, 50, ''],
+        ['Tile grouting / re-siliconing', 'per job', 50, 130, 85, 'Bathroom joints'],
+        ['Fence panel replacement', 'per panel', 60, 140, 95, 'Exc. panel & post costs'],
+        ['Gate fitting', 'per gate', 80, 200, 130, 'Exc. gate'],
+        ['Gutter clearance', 'per job', 60, 160, 100, 'Single-storey'],
+        ['Tap washer / dripping tap fix', 'per job', 50, 120, 75, ''],
+        ['IKEA kitchen assembly (per unit)', 'per unit', 30, 70, 48, 'Exc. fitting to wall'],
+        ['Small patch plastering / fill', 'per job', 50, 120, 80, 'Holes, cracks, surface prep'],
+      ]
+    }
+  ];
+
+  trades.forEach(t => {
+    addSheet(t.name, t.rows, cw);
+  });
+
+  XLSX.writeFile(wb, "Lexi's Pricing Guide.xlsx");
+  document.querySelector('button').textContent = 'Downloaded! Save to your Lexi App 3 folder.';
+}
+</script>
+</body>
+</html>
