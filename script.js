@@ -4742,7 +4742,7 @@ function closeSpreadsheetView() {
   document.body.style.overflow = '';
 }
 
-function refreshPriceList() {
+function refreshSavedDocs() {
   updateChasePaymentsBadge();
   renderAttentionWidget();
   const sel    = document.getElementById('savedFilterSelect');
@@ -10348,7 +10348,6 @@ function showQuoteAcceptedNotification() {
   save();
 
   // Fire a phone notification if permission already granted
-  const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'A customer';
   sendLexiNotification(
     'Quote accepted!',
     `${custName} has accepted your ${(q.type||'quote').toLowerCase()}. Time to book them in.`,
