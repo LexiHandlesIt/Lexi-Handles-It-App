@@ -1904,6 +1904,66 @@ function setupNavigation() {
     });
   }
 
+  // Delete account — multi-step offboarding
+  const daShowStep = step => {
+    ['daStep1','daStep2','daStep3'].forEach(id => {
+      document.getElementById(id).style.display = id === step ? '' : 'none';
+    });
+  };
+  const daClose = () => {
+    document.getElementById('deleteAccountModal').style.display = 'none';
+    daShowStep('daStep1'); // reset for next time
+    const r = document.getElementById('daReason');
+    if (r) r.value = '';
+  };
+
+  document.getElementById('menuDeleteAccount')?.addEventListener('click', () => {
+    closeMenu();
+    daShowStep('daStep1');
+    document.getElementById('deleteAccountModal').style.display = 'flex';
+  });
+
+  // Step 1 — reason selected, move to quiet season offer
+  document.getElementById('daStep1NextBtn')?.addEventListener('click', () => {
+    if (!document.getElementById('daReason').value) {
+      toast('Please select a reason.', 'error'); return;
+    }
+    daShowStep('daStep2');
+  });
+  document.getElementById('daStep1CancelBtn')?.addEventListener('click', daClose);
+
+  // Step 2 — quiet season offer
+  document.getElementById('daQuietSeasonYesBtn')?.addEventListener('click', () => {
+    daClose();
+    // Open quiet season mode
+    document.getElementById('menuQuietSeason')?.click();
+  });
+  document.getElementById('daQuietSeasonNoBtn')?.addEventListener('click', () => {
+    daShowStep('daStep3');
+  });
+
+  // Step 3 — final confirmation
+  document.getElementById('deleteAccountCancelBtn')?.addEventListener('click', daClose);
+  document.getElementById('deleteAccountConfirmBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('deleteAccountConfirmBtn');
+    btn.textContent = 'Deleting...';
+    btn.disabled = true;
+    try {
+      if (lexiSupabase && lexiAuthSession?.user?.id) {
+        const uid = lexiAuthSession.user.id;
+        await lexiSupabase.from('documents').delete().eq('user_id', uid);
+        await lexiSupabase.from('jobs').delete().eq('user_id', uid);
+        await lexiSupabase.from('quote_acceptances').delete().eq('user_id', uid);
+        await lexiSupabase.rpc('delete_own_account');
+      }
+    } catch(e) {
+      console.warn('Account deletion error:', e);
+    }
+    localStorage.clear();
+    daClose();
+    window.location.reload();
+  });
+
   // Page footer nav buttons
   document.getElementById('goToPriceListBtn').addEventListener('click', () => {
     if (!saveBusinessDetails(false)) return;
@@ -9452,7 +9512,7 @@ function sendChase(docId, channel) {
   const msg = buildChaseMessage(item, channel);
   if (channel === 'whatsapp') {
     const text = encodeURIComponent(msg);
-    window.open(`https://wa.me/${item.phone.replace(/\D/g,'')}?text=${text}`, '_blank');
+    window.open(`https://wa.me/${formatWhatsAppNumber(item.phone)}?text=${text}`, '_blank');
   } else {
     const m = msg;
     window.location.href = `mailto:${item.email}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
@@ -10141,6 +10201,9 @@ function getJobSearchQuery() {
 let _reviewDoc = null;
 
 function maybeAskForReview(doc) {
+  // Only ask once per job — if already asked (or dismissed), skip
+  if (doc.reviewAsked) return;
+
   const reviewLink = state.company.reviewLink || '';
   const q = doc.quote || {};
   const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'your customer';
@@ -10149,15 +10212,27 @@ function maybeAskForReview(doc) {
   if (msg) msg.textContent = `${custName}'s job is paid in full. Want to ask them for a Google review while they're happy?`;
   _reviewDoc = doc;
   document.getElementById('reviewRequestModal').style.display = 'flex';
+
+  const markAsked = () => {
+    doc.reviewAsked = true;
+    save();
+  };
+
   document.getElementById('reviewWhatsappBtn').onclick = () => {
     const text = reviewLink
       ? `Hi ${q.custFirstName || custName}, glad you're happy with the work! If you have two minutes, a Google review would really help my business: ${reviewLink} -thanks so much! ${traderName}`
       : `Hi ${q.custFirstName || custName}, really glad you're happy with the work! If you get a chance, a Google review would mean the world to me. Thanks! ${traderName}`;
-    window.location.href = 'https://wa.me/' + (q.custPhone || '').replace(/\D/g,'') + '?text=' + encodeURIComponent(text);
+    window.location.href = 'https://wa.me/' + formatWhatsAppNumber(q.custPhone || '') + '?text=' + encodeURIComponent(text);
     document.getElementById('reviewRequestModal').style.display = 'none';
+    markAsked(); // sent — never ask again for this job
   };
   document.getElementById('reviewLaterBtn').onclick = () => {
+    // Just close — will ask again next session
     document.getElementById('reviewRequestModal').style.display = 'none';
+  };
+  document.getElementById('reviewDontAskBtn').onclick = () => {
+    document.getElementById('reviewRequestModal').style.display = 'none';
+    markAsked(); // permanent — never ask again for this job
   };
 }
 

@@ -4746,6 +4746,13 @@ input[type="text"].sig-text-input:focus {
 .nav-menu-section-break {
   border-top: 2px solid var(--border);
 }
+.nav-menu-delete-account {
+  color: #b94040;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.nav-menu-delete-account svg { color: #b94040; }
+.nav-menu-delete-account:hover { background: #fff0f0; color: #922; opacity: 1; }
 .nav-menu-signout {
   margin-top: auto;
   border-top: 2px solid var(--border);

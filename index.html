@@ -320,6 +320,10 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
       Share Lexi
     </button>
+    <button class="nav-menu-item nav-menu-delete-account" id="menuDeleteAccount">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+      Delete Account
+    </button>
     <button class="nav-menu-item nav-menu-signout" id="menuSignOut">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       Sign Out
@@ -2328,7 +2332,53 @@
       <button type="button" class="btn btn-primary w-100" id="reviewWhatsappBtn" style="margin-bottom:10px">
         Ask on WhatsApp
       </button>
-      <button type="button" class="btn btn-outline w-100" id="reviewLaterBtn">Not Now</button>
+      <button type="button" class="btn btn-outline w-100" id="reviewLaterBtn" style="margin-bottom:8px">Not Now</button>
+      <button type="button" class="btn w-100" id="reviewDontAskBtn" style="background:none;border:none;color:#aaa;font-size:0.8rem;padding:4px;cursor:pointer">Don't ask again for this job</button>
+    </div>
+  </div>
+
+  <!-- DELETE ACCOUNT MODAL — multi-step offboarding -->
+  <div id="deleteAccountModal" class="modal-overlay" style="display:none;z-index:9999" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width:400px;text-align:center">
+
+      <!-- STEP 1: Reason -->
+      <div id="daStep1">
+        <div style="font-size:2.2rem;margin:16px 0 8px">🥺</div>
+        <h2 class="modal-title" style="margin-bottom:6px">Where are you going?</h2>
+        <p style="color:#555;font-size:0.9rem;line-height:1.6;margin:0 0 18px">Can I ask why you want to leave?</p>
+        <select id="daReason" class="form-control" style="margin-bottom:20px;text-align:left">
+          <option value="">Select a reason...</option>
+          <option value="expensive">It's too expensive</option>
+          <option value="notneeded">I don't need this anymore</option>
+          <option value="notusing">I'm not using it enough</option>
+          <option value="switching">I'm switching to something else</option>
+          <option value="other">Other</option>
+        </select>
+        <button type="button" class="btn btn-primary w-100" id="daStep1NextBtn" style="margin-bottom:10px">Continue</button>
+        <button type="button" class="btn btn-outline w-100" id="daStep1CancelBtn">Actually, keep my account</button>
+      </div>
+
+      <!-- STEP 2: Quiet Season offer -->
+      <div id="daStep2" style="display:none">
+        <div style="font-size:2.2rem;margin:16px 0 8px">🌿</div>
+        <h2 class="modal-title" style="margin-bottom:6px">Before you go...</h2>
+        <p style="color:#555;font-size:0.9rem;line-height:1.6;margin:0 0 10px">Did you know Lexi has a <strong>Quiet Season</strong> mode?</p>
+        <p style="color:#555;font-size:0.85rem;line-height:1.6;margin:0 0 18px;background:var(--cream);padding:12px;border-radius:10px">If work is slow or you need a break, Quiet Season pauses your account for up to <strong>6 months — free</strong>. Your data stays safe and you can pick up right where you left off when you're ready.</p>
+        <p style="font-weight:600;font-size:0.9rem;margin:0 0 18px;color:#333">Would you like to activate Quiet Season instead?</p>
+        <button type="button" class="btn btn-primary w-100" id="daQuietSeasonYesBtn" style="margin-bottom:10px">Yes — activate Quiet Season</button>
+        <button type="button" class="btn btn-outline w-100" id="daQuietSeasonNoBtn">No thanks, I still want to leave</button>
+      </div>
+
+      <!-- STEP 3: Final farewell -->
+      <div id="daStep3" style="display:none">
+        <div style="font-size:2.2rem;margin:16px 0 8px">👋</div>
+        <h2 class="modal-title" style="margin-bottom:6px;color:#c0392b">We're sorry to see you go</h2>
+        <p style="color:#555;font-size:0.9rem;line-height:1.6;margin:0 0 8px">Fair enough. We'd love to welcome you back any time.</p>
+        <p style="color:#c0392b;font-size:0.85rem;font-weight:600;margin:0 0 24px">Once deleted, <strong>all your data is gone for good</strong> and cannot be recovered.</p>
+        <button type="button" class="btn w-100" id="deleteAccountConfirmBtn" style="background:#c0392b;color:#fff;border:none;margin-bottom:10px;font-weight:700;padding:14px;border-radius:10px;font-size:1rem;cursor:pointer">Yes, delete everything and close my account</button>
+        <button type="button" class="btn btn-outline w-100" id="deleteAccountCancelBtn">Cancel — keep my account</button>
+      </div>
+
     </div>
   </div>
 
