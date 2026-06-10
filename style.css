@@ -3429,12 +3429,11 @@ input[type="text"].sig-text-input:focus {
   align-items: flex-start;
   position: relative;
 }
-/* Row 2: left to right but visually below row 1 */
+/* Row 2: reversed right-to-left (Paid, Invoiced, Job Complete) */
 .cdv-tube-row2 {
   margin-top: 6px;
-  padding-right: 42px; /* offset so it doesn't go full width - aligns under col 0-2 */
 }
-/* Corner connector wrapping from end of row 1 down to start of row 2 */
+/* Corner connector: vertical line on right dropping from Job Booked down to Job Complete */
 .cdv-tube-corner-wrap {
   flex-shrink: 0;
   width: 20px;
@@ -3446,14 +3445,13 @@ input[type="text"].sig-text-input:focus {
   height: 42px;
   border-top: none;
   border-right: 3px solid #e0d8cc;
-  border-bottom: 3px solid #e0d8cc;
+  border-bottom: none;
   border-left: none;
-  border-radius: 0 0 6px 0;
+  border-radius: 0;
   transition: border-color 0.2s;
 }
 .cdv-tube-corner.done {
   border-right-color: var(--gold-mid);
-  border-bottom-color: var(--gold-mid);
 }
 /* Track segment between stations */
 .cdv-tube-seg {
@@ -3630,6 +3628,7 @@ input[type="text"].sig-text-input:focus {
 /* Contact action buttons row (Email / WhatsApp / Phone) */
 .cdv-contact-btns {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
 }
@@ -4559,8 +4558,7 @@ input[type="text"].sig-text-input:focus {
   .modal-card { border-radius: var(--radius) var(--radius) 0 0; max-height: 92vh; }
   #customerDashboardModal .modal-card { max-height: 96vh; }
   #jobDetailsEditModal .modal-card { max-height: 96vh; }
-  .cal-icon-btn.cdv-labeled span { display: none; }
-  .cal-icon-btn.cdv-labeled { padding: 0 10px; }
+  .cal-icon-btn.cdv-labeled { padding: 6px 6px 5px; min-width: 42px; }
   .onboarding-card { border-radius: var(--radius); margin: 0 0 env(safe-area-inset-bottom); }
   .modal-overlay.for-onboarding { align-items: center; padding: 16px; }
 
@@ -5526,26 +5524,38 @@ input[type="text"].sig-text-input:focus {
   flex-shrink: 0;
 }
 .cal-icon-btn:hover { background: var(--walnut-tint); border-color: var(--walnut); color: var(--walnut); }
+/* Walnut brown: Email, WhatsApp, Call, Share, Photo */
 .cal-icon-btn.cal-icon-email,
 .cal-icon-btn.cal-icon-whatsapp,
 .cal-icon-btn.cal-icon-phone,
 .cal-icon-btn.cal-icon-share,
-.cal-icon-btn.cal-icon-edit { border-color: var(--walnut); color: var(--walnut); }
-.cal-icon-btn.cdv-delete-btn { border-color: #c0392b; color: #c0392b; }
+.cal-icon-btn.cal-icon-camera { border-color: var(--walnut); color: var(--walnut); }
 .cal-icon-btn.cal-icon-email:hover,
 .cal-icon-btn.cal-icon-whatsapp:hover,
 .cal-icon-btn.cal-icon-phone:hover,
 .cal-icon-btn.cal-icon-share:hover,
-.cal-icon-btn.cal-icon-edit:hover { background: var(--walnut-tint); border-color: var(--walnut-d); color: var(--walnut-d); }
+.cal-icon-btn.cal-icon-camera:hover { background: var(--walnut-tint); border-color: var(--walnut-d); color: var(--walnut-d); }
+/* Green: Update */
+.cal-icon-btn.cal-icon-update { border-color: var(--sage); color: var(--sage); }
+.cal-icon-btn.cal-icon-update:hover { background: #eef4ea; border-color: #4a7a3a; color: #4a7a3a; }
+/* Red: Delete */
+.cal-icon-btn.cdv-delete-btn { border-color: #c0392b; color: #c0392b; }
 .cal-icon-btn.cdv-delete-btn:hover { background: #fdf0ef; border-color: #a93226; color: #a93226; }
 
-/* Labeled variant — used in customer dashboard only */
+/* Labeled variant — icon on top, label underneath, used in customer dashboard */
 .cal-icon-btn.cdv-labeled {
   width: auto;
-  padding: 0 12px;
-  gap: 6px;
-  font-size: 0.75rem;
+  min-width: 48px;
+  height: auto;
+  padding: 6px 8px 5px;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.65rem;
   font-weight: 600;
+}
+.cal-icon-btn.cdv-labeled span {
+  line-height: 1;
+  white-space: nowrap;
 }
 
 /* View Customer button in day panel */
@@ -6516,6 +6526,10 @@ input[type="text"].sig-text-input:focus {
 }
 .ss-row:nth-child(even) .ss-td { background: #faf8f5; }
 .ss-row:hover .ss-td { background: #f5f0eb; }
+/* Sticky columns need explicit solid backgrounds so scrolling content goes underneath */
+.ss-td-sticky { background: #fff !important; }
+.ss-row:nth-child(even) .ss-td-sticky { background: #faf8f5 !important; }
+.ss-row:hover .ss-td-sticky { background: #f5f0eb !important; }
 /* Stage pills */
 .ss-stage {
   display: inline-block;
@@ -6535,6 +6549,91 @@ input[type="text"].sig-text-input:focus {
 .ss-estimate { background: #fdebd0; color: #784212; }
 .ss-draft    { background: #f5f5f5; color: #666; }
 .ss-repeat   { color: var(--walnut); font-weight: 700; }
+.ss-th-sort  { cursor: pointer; user-select: none; }
+.ss-th-sort:hover { background: #ede8e2; }
+.ss-td-wrap  { white-space: normal; max-width: 200px; line-height: 1.3; }
+.ss-td-open  { padding: 6px 10px; }
+.ss-open-btn {
+  padding: 4px 10px;
+  background: var(--walnut);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.ss-open-btn:hover { background: #6a4828; }
+.ss-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #faf7f4;
+  border-bottom: 1px solid #e8e0d8;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.ss-filter-sel {
+  padding: 5px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  background: #fff;
+  color: #333;
+  flex: 1;
+  min-width: 110px;
+}
+.ss-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--walnut);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ss-toolbar-btn:hover { background: #f5f0eb; border-color: var(--walnut); }
+.ss-col-panel {
+  position: absolute;
+  top: 100px;
+  right: 12px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  padding: 14px;
+  z-index: 10;
+  min-width: 200px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.ss-col-panel-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--walnut);
+  margin-bottom: 10px;
+}
+.ss-col-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 0.84rem;
+  color: #333;
+  cursor: pointer;
+}
+.ss-col-check-row input { accent-color: var(--walnut); cursor: pointer; }
 
 .filter-toggle {
   display: inline-flex;

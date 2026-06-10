@@ -2895,6 +2895,7 @@ function extractLogoColours() {
   }
 
   const img = new Image();
+  img.crossOrigin = 'anonymous';
   img.onload = () => {
     // Draw onto a small canvas for speed
     const canvas = document.createElement('canvas');
@@ -3062,6 +3063,21 @@ function setupPage2() {
     } else {
       toast("Can't read your input - remember format: name, price", 'error');
     }
+  });
+
+  // Save Rates button on page 2
+  document.getElementById('saveRatesBtn')?.addEventListener('click', () => {
+    ['rateHourly','rateHalfDay','rateDay','rateCallout'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const v = parseFloat(el.value);
+      state.company[id] = isNaN(v) ? 0 : v;
+      el.value = isNaN(v) ? '' : v.toFixed(2);
+    });
+    save();
+    if (typeof saveBusinessToSupabase === 'function') saveBusinessToSupabase().catch(() => {});
+    updateJobPicker();
+    showSavedPopup('Rates saved.');
   });
 
   // Category selector — Service / Material toggle
@@ -3342,8 +3358,9 @@ function editJobInline(row, job) {
   if (editingJobId === job.id) return;  // prevent re-entry on rapid taps
   editingJobId = job.id;
 
-  const catOpts = ['labour','materials'].map(c =>
-    `<button type="button" class="cat-btn${(job.category||'') === c ? ' active' : ''} edit-cat-btn" data-cat="${c}">${c === 'labour' ? 'Labour' : 'Materials'}</button>`
+  const currentCat = job.category === 'materials' ? 'materials' : 'service';
+  const catOpts = ['service','materials'].map(c =>
+    `<button type="button" class="cat-btn${currentCat === c ? ' active' : ''} edit-cat-btn" data-cat="${c}">${c === 'service' ? 'Service' : 'Material'}</button>`
   ).join('');
   row.innerHTML = `
     <div class="price-item-edit-row">
@@ -4632,67 +4649,144 @@ function renderAttentionWidget() {
 }
 
 // ── SPREADSHEET VIEW ───────────────────────────────────────────
-function openSpreadsheetView() {
-  const modal = document.getElementById('spreadsheetModal');
-  if (!modal) return;
+const SS_COL_KEY = 'lexi_ss_cols';
 
-  // Build table
-  const head = document.getElementById('ssHead');
-  const body = document.getElementById('ssBody');
+const SS_ALL_COLS = [
+  { key:'ref',           label:'Reference',       sticky:true,  visible:true,  locked:true  },
+  { key:'lastName',      label:'Last Name',       sticky:true,  visible:true,  locked:true  },
+  { key:'firstName',     label:'First Name',      sticky:true,  visible:true,  locked:true  },
+  { key:'phone',         label:'Phone',           sticky:false, visible:true,  locked:false },
+  { key:'jobs',          label:'Jobs',            sticky:false, visible:true,  locked:false },
+  { key:'stage',         label:'Stage',           sticky:false, visible:true,  locked:false },
+  { key:'startDate',     label:'Start Date',      sticky:false, visible:true,  locked:false },
+  { key:'total',         label:'Total',           sticky:false, visible:true,  locked:false },
+  { key:'outstanding',   label:'Outstanding',     sticky:false, visible:true,  locked:false },
+  { key:'repeat',        label:'Repeat?',         sticky:false, visible:true,  locked:false },
+  { key:'address',       label:'Address',         sticky:false, visible:false, locked:false },
+  { key:'postcode',      label:'Postcode',        sticky:false, visible:false, locked:false },
+  { key:'custNotes',     label:'Customer Notes',  sticky:false, visible:false, locked:false },
+  { key:'privNotes',     label:'Private Notes',   sticky:false, visible:false, locked:false },
+  { key:'completedDate', label:'Completed',       sticky:false, visible:false, locked:false },
+  { key:'invoiceDue',    label:'Invoice Due',     sticky:false, visible:false, locked:false },
+  { key:'paidAmount',    label:'Amount Paid',     sticky:false, visible:false, locked:false },
+];
 
-  const cols = [
-    { label: 'Ref',           key: 'ref' },
-    { label: 'Date',          key: 'date' },
-    { label: 'Last Name',     key: 'lastName' },
-    { label: 'First Name',    key: 'firstName' },
-    { label: 'Address',       key: 'address' },
-    { label: 'Postcode',      key: 'postcode' },
-    { label: 'Phone',         key: 'phone' },
-    { label: 'Jobs',          key: 'jobs' },
-    { label: 'Stage',         key: 'stage' },
-    { label: 'Total',         key: 'total' },
-    { label: 'Paid',          key: 'paid' },
-    { label: 'Outstanding',   key: 'outstanding' },
-    { label: 'Repeat?',       key: 'repeat' },
-  ];
+let _ssCols     = null;  // active column config
+let _ssSortKey  = 'ref';
+let _ssSortDir  = 'asc';
+let _ssFilter   = 'all';
 
-  head.innerHTML = `<tr>${cols.map(c => `<th class="ss-th">${esc(c.label)}</th>`).join('')}</tr>`;
-
-  // Sort newest first
-  const docs = [...(state.saved || [])].sort((a, b) => {
-    const da = a.createdAt || a.date || '';
-    const db = b.createdAt || b.date || '';
-    return da < db ? 1 : -1;
-  });
-
-  // Build customer repeat map
-  const custCounts = {};
-  docs.forEach(d => {
-    const q = d.quote || {};
-    const name = `${(q.custLastName||'').trim().toLowerCase()}|${(q.custFirstName||'').trim().toLowerCase()}|${(q.custPhone||'').trim()}`;
-    custCounts[name] = (custCounts[name] || 0) + 1;
-  });
-
-  // Stage label
-  function stageLabel(d) {
-    if (d.paid) return 'Paid';
-    if (d.receiptRef || (d.quote?.type||'').toLowerCase() === 'receipt') return 'Receipt';
-    if (d.invoiceSent || (d.quote?.type||'').toLowerCase() === 'invoice') {
-      if (d.invoiceDueDate && d.invoiceDueDate < todayStr()) return 'Overdue';
-      return 'Invoiced';
+function getSsCols() {
+  if (_ssCols) return _ssCols;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SS_COL_KEY) || 'null');
+    if (Array.isArray(saved)) {
+      _ssCols = SS_ALL_COLS.map(c => {
+        const s = saved.find(x => x.key === c.key);
+        return { ...c, visible: c.locked ? true : (s ? s.visible : c.visible) };
+      });
+      return _ssCols;
     }
-    if (d.jobCompleted) return 'Complete';
-    if (d.jobStartDate) return 'Job Booked';
-    if (d.jobAccepted || d.acceptStatus === 'accepted') return 'Accepted';
-    const t = (d.quote?.type || d.type || '').toLowerCase();
-    if (t === 'quote') return 'Quote';
-    if (t === 'estimate') return 'Estimate';
-    return 'Draft';
-  }
+  } catch(e) {}
+  _ssCols = SS_ALL_COLS.map(c => ({ ...c }));
+  return _ssCols;
+}
 
-  const stageCls = { 'Paid':'ss-paid', 'Overdue':'ss-overdue', 'Invoiced':'ss-invoiced',
-    'Accepted':'ss-accepted', 'Job Booked':'ss-booked', 'Complete':'ss-complete',
-    'Quote':'ss-quote', 'Estimate':'ss-estimate', 'Receipt':'ss-paid', 'Draft':'ss-draft' };
+function saveSsCols() {
+  localStorage.setItem(SS_COL_KEY, JSON.stringify(_ssCols.map(c => ({ key: c.key, visible: c.visible }))));
+}
+
+function ssStageLabel(d) {
+  if (d.paid) return 'Paid';
+  if (d.receiptRef || (d.quote?.type||'').toLowerCase() === 'receipt') return 'Receipt';
+  if (d.invoiceSent || (d.quote?.type||'').toLowerCase() === 'invoice') {
+    if (d.invoiceDueDate && d.invoiceDueDate < todayStr()) return 'Overdue';
+    return 'Invoiced';
+  }
+  if (d.jobCompleted) return 'Complete';
+  if (d.jobStartDate) return 'Job Booked';
+  if (d.jobAccepted || d.acceptStatus === 'accepted') return 'Accepted';
+  const t = (d.quote?.type || d.type || '').toLowerCase();
+  if (t === 'quote') return 'Quote';
+  if (t === 'estimate') return 'Estimate';
+  return 'Draft';
+}
+
+const SS_STAGE_CLS = { 'Paid':'ss-paid','Overdue':'ss-overdue','Invoiced':'ss-invoiced',
+  'Accepted':'ss-accepted','Job Booked':'ss-booked','Complete':'ss-complete',
+  'Quote':'ss-quote','Estimate':'ss-estimate','Receipt':'ss-paid','Draft':'ss-draft' };
+
+function ssGetCellValue(key, d, q, totalPaid, total, outstanding, isRepeat) {
+  switch(key) {
+    case 'ref':          return { text: d.ref || d.invoiceRef || q.ref || '-', html: null };
+    case 'lastName':     return { text: q.custLastName || '-', html: null };
+    case 'firstName':    return { text: q.custFirstName || '-', html: null };
+    case 'phone':        return { text: q.custPhone || '-', html: null };
+    case 'jobs':         return { text: (q.items||[]).map(i=>i.name).filter(Boolean).join(', ') || '-', html: null, wrap: true };
+    case 'stage': {
+      const s = ssStageLabel(d);
+      return { text: s, html: `<span class="ss-stage ${SS_STAGE_CLS[s]||''}">${s}</span>` };
+    }
+    case 'startDate':    return { text: d.jobStartDate ? formatDate(d.jobStartDate) : '-', html: null };
+    case 'total':        return { text: fmtPrice(total), html: null };
+    case 'outstanding':  return { text: outstanding > 0 ? fmtPrice(outstanding) : '-', html: null };
+    case 'repeat':       return { text: isRepeat ? 'Yes' : '-', html: isRepeat ? '<span class="ss-repeat">Yes</span>' : '-' };
+    case 'address':      return { text: q.custAddr || '-', html: null };
+    case 'postcode':     return { text: q.custPostcode || '-', html: null };
+    case 'custNotes':    return { text: q.notes || '-', html: null, wrap: true };
+    case 'privNotes':    return { text: q.privateNotes || '-', html: null, wrap: true };
+    case 'completedDate':return { text: d.jobCompletedDate ? formatDate(d.jobCompletedDate) : '-', html: null };
+    case 'invoiceDue':   return { text: d.invoiceDueDate ? formatDate(d.invoiceDueDate) : '-', html: null };
+    case 'paidAmount':   return { text: totalPaid > 0 ? fmtPrice(totalPaid) : '-', html: null };
+    default:             return { text: '-', html: null };
+  }
+}
+
+function buildSsRows() {
+  const custCounts = {};
+  (state.saved || []).forEach(d => {
+    const q = d.quote || {};
+    const k = `${(q.custLastName||'').toLowerCase()}|${(q.custFirstName||'').toLowerCase()}|${(q.custPhone||'').trim()}`;
+    custCounts[k] = (custCounts[k] || 0) + 1;
+  });
+
+  let docs = [...(state.saved || [])];
+
+  // Filter
+  if (_ssFilter === 'paid')     docs = docs.filter(d => d.paid);
+  else if (_ssFilter === 'invoiced') docs = docs.filter(d => d.invoiceSent && !d.paid);
+  else if (_ssFilter === 'overdue')  docs = docs.filter(d => d.invoiceSent && !d.paid && d.invoiceDueDate && d.invoiceDueDate < todayStr());
+  else if (_ssFilter === 'accepted') docs = docs.filter(d => d.jobAccepted || d.acceptStatus === 'accepted');
+  else if (_ssFilter === 'Quote')    docs = docs.filter(d => (d.quote?.type||d.type||'').toLowerCase() === 'quote');
+  else if (_ssFilter === 'Estimate') docs = docs.filter(d => (d.quote?.type||d.type||'').toLowerCase() === 'estimate');
+
+  // Sort
+  docs.sort((a, b) => {
+    const qa = a.quote || {}, qb = b.quote || {};
+    let va = '', vb = '';
+    switch(_ssSortKey) {
+      case 'ref':       va = a.ref||''; vb = b.ref||''; break;
+      case 'lastName':  va = qa.custLastName||''; vb = qb.custLastName||''; break;
+      case 'firstName': va = qa.custFirstName||''; vb = qb.custFirstName||''; break;
+      case 'stage':     va = ssStageLabel(a); vb = ssStageLabel(b); break;
+      case 'total':     return _ssSortDir === 'asc' ? (a.total||0)-(b.total||0) : (b.total||0)-(a.total||0);
+      case 'startDate': va = a.jobStartDate||''; vb = b.jobStartDate||''; break;
+      case 'outstanding': {
+        const pa = getDocPayments(a).reduce((s,p)=>s+(p.amount||0),0);
+        const pb = getDocPayments(b).reduce((s,p)=>s+(p.amount||0),0);
+        const oa = a.paid ? 0 : Math.max(0,(a.total||0)-pa);
+        const ob = b.paid ? 0 : Math.max(0,(b.total||0)-pb);
+        return _ssSortDir === 'asc' ? oa-ob : ob-oa;
+      }
+      default: va = a.createdAt||a.date||''; vb = b.createdAt||b.date||''; break;
+    }
+    const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
+    return _ssSortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const cols = getSsCols().filter(c => c.visible);
+  const body = document.getElementById('ssBody');
+  if (!body) return;
 
   body.innerHTML = docs.map(d => {
     const q = d.quote || {};
@@ -4700,46 +4794,166 @@ function openSpreadsheetView() {
     const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
     const total = Number(d.total || q.total || 0);
     const outstanding = d.paid ? 0 : Math.max(0, total - totalPaid);
-    const jobs = (q.items || []).map(i => i.name).filter(Boolean).join(', ') || '-';
-    const stage = stageLabel(d);
-    const cls = stageCls[stage] || '';
-    const custKey = `${(q.custLastName||'').trim().toLowerCase()}|${(q.custFirstName||'').trim().toLowerCase()}|${(q.custPhone||'').trim()}`;
+    const custKey = `${(q.custLastName||'').toLowerCase()}|${(q.custFirstName||'').toLowerCase()}|${(q.custPhone||'').trim()}`;
     const isRepeat = (custCounts[custKey] || 0) > 1;
 
-    const cells = [
-      d.ref || d.invoiceRef || q.ref || '-',
-      formatDate(d.date || q.date || ''),
-      esc(q.custLastName || '-'),
-      esc(q.custFirstName || '-'),
-      esc(q.custAddr || '-'),
-      esc(q.custPostcode || '-'),
-      esc(q.custPhone || '-'),
-      esc(jobs),
-      `<span class="ss-stage ${cls}">${stage}</span>`,
-      fmtPrice(total),
-      totalPaid > 0 ? fmtPrice(totalPaid) : '-',
-      outstanding > 0 ? fmtPrice(outstanding) : '-',
-      isRepeat ? '<span class="ss-repeat">Yes</span>' : '-',
-    ];
+    const cells = cols.map((c, i) => {
+      const { html, text, wrap } = ssGetCellValue(c.key, d, q, totalPaid, total, outstanding, isRepeat);
+      const leftPx = i===0 ? 0 : i===1 ? 90 : 200;
+      const minW = i===0 ? 'min-width:90px;' : i===1 ? 'min-width:110px;' : '';
+      const stickyStyle = c.sticky ? `position:sticky;left:${leftPx}px;z-index:1;${minW}` : '';
+      const stickyClass = c.sticky ? ' ss-td-sticky' : '';
+      return `<td class="ss-td${stickyClass}${wrap?' ss-td-wrap':''}" style="${stickyStyle}">${html !== null ? html : esc(String(text))}</td>`;
+    });
+    // Open button after first 3 sticky cols (col 4)
+    const openCell = `<td class="ss-td ss-td-open"><button type="button" class="ss-open-btn" data-id="${d.id}">Open</button></td>`;
+    cells.splice(3, 0, openCell);
 
-    return `<tr class="ss-row">${cells.map((c, i) => `<td class="ss-td${i===7?' ss-td-jobs':''}">${c}</td>`).join('')}</tr>`;
-  }).join('');
+    return `<tr class="ss-row">${cells.join('')}</tr>`;
+  }).join('') || `<tr><td class="ss-td" colspan="${cols.length + 1}" style="text-align:center;color:#999;padding:20px">No jobs found.</td></tr>`;
+
+  // Wire Open buttons
+  body.querySelectorAll('.ss-open-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      closeSpreadsheetView();
+      openCustomerDashboardForDoc(btn.dataset.id);
+    });
+  });
+}
+
+function buildSsHead() {
+  const head = document.getElementById('ssHead');
+  if (!head) return;
+  const cols = getSsCols().filter(c => c.visible);
+  const sortIcon = (key) => {
+    if (_ssSortKey !== key) return '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3"><polyline points="6 9 12 3 18 9"/><polyline points="6 15 12 21 18 15"/></svg>';
+    return _ssSortDir === 'asc'
+      ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 3 18 9"/></svg>'
+      : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 21 18 15"/></svg>';
+  };
+  const sortableCols = new Set(['ref','lastName','firstName','stage','total','startDate','outstanding']);
+  const thCells = cols.map((c, i) => {
+      const sortable = sortableCols.has(c.key);
+      const leftPx = i===0 ? 0 : i===1 ? 90 : 200;
+      const minW = i===0 ? 'min-width:90px;' : i===1 ? 'min-width:110px;' : '';
+      const stickyStyle = c.sticky ? `position:sticky;left:${leftPx}px;z-index:3;${minW}` : '';
+      return `<th class="ss-th${sortable?' ss-th-sort':''}" style="${stickyStyle}" data-sort="${c.key}">
+        ${esc(c.label)} ${sortable ? sortIcon(c.key) : ''}
+      </th>`;
+    });
+  // Insert Open header after first 3 sticky cols
+  thCells.splice(3, 0, `<th class="ss-th" style="min-width:70px"></th>`);
+  head.innerHTML = `<tr>${thCells.join('')}</tr>`;
+
+  head.querySelectorAll('.ss-th-sort').forEach(th => {
+    th.addEventListener('click', () => {
+      const k = th.dataset.sort;
+      if (_ssSortKey === k) _ssSortDir = _ssSortDir === 'asc' ? 'desc' : 'asc';
+      else { _ssSortKey = k; _ssSortDir = 'asc'; }
+      buildSsHead();
+      buildSsRows();
+    });
+  });
+}
+
+function openSsColPanel() {
+  const existing = document.getElementById('ssColPanel');
+  if (existing) { existing.remove(); return; }
+
+  const cols = getSsCols().filter(c => !c.locked);
+  const panel = document.createElement('div');
+  panel.id = 'ssColPanel';
+  panel.className = 'ss-col-panel';
+  panel.innerHTML = `
+    <div class="ss-col-panel-title">Show / hide columns</div>
+    ${cols.map(c => `
+      <label class="ss-col-check-row">
+        <input type="checkbox" data-key="${c.key}" ${c.visible ? 'checked' : ''}>
+        ${esc(c.label)}
+      </label>`).join('')}
+    <button type="button" class="btn btn-walnut btn-sm" id="ssColApplyBtn" style="margin-top:10px;width:100%">Apply</button>
+  `;
+  document.getElementById('spreadsheetModal').appendChild(panel);
+
+  document.getElementById('ssColApplyBtn').addEventListener('click', () => {
+    panel.querySelectorAll('input[data-key]').forEach(cb => {
+      const col = _ssCols.find(c => c.key === cb.dataset.key);
+      if (col) col.visible = cb.checked;
+    });
+    saveSsCols();
+    panel.remove();
+    buildSsHead();
+    buildSsRows();
+  });
+}
+
+function ssCsvDownload() {
+  const cols = getSsCols().filter(c => c.visible);
+  const header = [...cols.map(c => `"${c.label}"`), '"Open"'].join(',');
+
+  const custCounts = {};
+  (state.saved || []).forEach(d => {
+    const q = d.quote || {};
+    const k = `${(q.custLastName||'').toLowerCase()}|${(q.custFirstName||'').toLowerCase()}|${(q.custPhone||'').trim()}`;
+    custCounts[k] = (custCounts[k] || 0) + 1;
+  });
+
+  const rows = (state.saved || []).map(d => {
+    const q = d.quote || {};
+    const payments = getDocPayments(d);
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const total = Number(d.total || q.total || 0);
+    const outstanding = d.paid ? 0 : Math.max(0, total - totalPaid);
+    const custKey = `${(q.custLastName||'').toLowerCase()}|${(q.custFirstName||'').toLowerCase()}|${(q.custPhone||'').trim()}`;
+    const isRepeat = (custCounts[custKey] || 0) > 1;
+    const cells = cols.map(c => {
+      const { text } = ssGetCellValue(c.key, d, q, totalPaid, total, outstanding, isRepeat);
+      return `"${String(text).replace(/"/g, '""')}"`;
+    });
+    return cells.join(',');
+  });
+
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'lexi-jobs.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function openSpreadsheetView() {
+  const modal = document.getElementById('spreadsheetModal');
+  if (!modal) return;
+
+  // Reset sort/filter if opening fresh
+  _ssFilter = 'all';
+
+  // Build filter bar
+  const filterSel = document.getElementById('ssFilterSel');
+  if (filterSel) filterSel.value = 'all';
 
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
-  // Show rotate hint only in portrait
+  buildSsHead();
+  buildSsRows();
+
   const hint = document.getElementById('ssRotateHint');
   if (hint) hint.style.display = window.innerHeight > window.innerWidth ? 'flex' : 'none';
 
   document.getElementById('closeSpreadsheetBtn').onclick = closeSpreadsheetView;
-  modal.addEventListener('click', e => { if (e.target === modal) closeSpreadsheetView(); }, { once: true });
+  document.getElementById('ssColsBtn')?.addEventListener('click', openSsColPanel);
+  document.getElementById('ssCsvBtn')?.addEventListener('click', ssCsvDownload);
+  document.getElementById('ssFilterSel')?.addEventListener('change', e => {
+    _ssFilter = e.target.value; buildSsRows();
+  });
 }
 
 function closeSpreadsheetView() {
   const modal = document.getElementById('spreadsheetModal');
   if (modal) modal.style.display = 'none';
   document.body.style.overflow = '';
+  document.getElementById('ssColPanel')?.remove();
 }
 
 function refreshSavedDocs() {
@@ -6427,7 +6641,9 @@ function openPhotosModal(docId) {
   document.getElementById('beforePhotosInput').value = '';
   document.getElementById('afterPhotosInput').value = '';
   renderPhotosPreview(doc);
-  document.getElementById('photosModal').style.display = 'flex';
+  const pm = document.getElementById('photosModal');
+  pm.style.display = 'flex';
+  pm.style.zIndex  = '700';
 }
 
 function handlePhotoUpload(e, which) {
@@ -7185,11 +7401,13 @@ function buildCustomerJobSection(d, jobNum = 0) {
   // Cross-check the saved flags AND q.type so docs created directly as Invoice/Receipt
   // still show the correct step even if the invoiceSent flag wasn't set via the modal.
   const qTypeLower = (q.type || 'Estimate').toLowerCase();
-  const stageRank = d.paid                                    ? 6
-    : (d.receiptRef  || qTypeLower === 'receipt')             ? 5
-    : (d.invoiceSent || qTypeLower === 'invoice')             ? 4
-    : (d.jobCompleted)                                        ? 3
-    : (d.jobAccepted)                                         ? 2
+  // Ranks match tubeStages indices: 0=Estimate,1=Quote,2=Accepted,3=Job Booked,4=Job Complete,5=Invoiced,6=Paid
+  const isAcceptedFlag = d.jobAccepted || d.acceptStatus === 'accepted';
+  const stageRank = d.paid || qTypeLower === 'receipt' || d.receiptRef ? 6
+    : (d.invoiceSent || qTypeLower === 'invoice')             ? 5
+    : (d.jobCompleted)                                        ? 4
+    : (isAcceptedFlag && d.jobStartDate)                      ? 3
+    : isAcceptedFlag                                          ? 2
     : (qTypeLower === 'quote')                                ? 1
     :                                                           0;
   // 7 stages split across two rows: 4 top (left→right), 3 bottom (left→right)
@@ -7222,11 +7440,13 @@ function buildCustomerJobSection(d, jobNum = 0) {
     const isDone = i < stageRank;
     return makeStation(s, i) + (i < 3 ? makeSeg(isDone) : '');
   }).join('');
-  // Row 1 stations 4-6
-  const row1 = tubeStages.slice(4).map((s,i) => {
-    const realIdx = i + 4;
-    const isDone = realIdx < stageRank;
-    return makeStation(s, realIdx) + (i < 2 ? makeSeg(isDone) : '');
+  // Row 2 reversed: Paid(6), Invoiced(5), Job Complete(4) — reads right-to-left visually
+  const row2Stages = [...tubeStages.slice(4)].reverse(); // [Paid, Invoiced, JobComplete]
+  const row1 = row2Stages.map((s, j) => {
+    const realIdx = 6 - j; // 6=Paid, 5=Invoiced, 4=JobComplete
+    // Segment between DOM pos j (realIdx) and j+1 (realIdx-1): done if stage has reached both
+    const segDone = stageRank >= (6 - j);
+    return makeStation(s, realIdx) + (j < 2 ? makeSeg(segDone) : '');
   }).join('');
   // Corner connector: done if stageRank >= 4
   const cornerDone = stageRank >= 4;
@@ -7318,7 +7538,7 @@ function renderSingleCustomerDashboard(group, groups) {
 
   // Put customer name in modal title
   const titleEl = document.getElementById('customerDashboardTitle');
-  if (titleEl) titleEl.textContent = group.name;
+  if (titleEl) titleEl.textContent = `Dashboard: ${group.name}`;
 
   // Contact action buttons (Email / WhatsApp / Phone)
   const dashPhone = q.custPhone || '';
@@ -7343,8 +7563,8 @@ function renderSingleCustomerDashboard(group, groups) {
         ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Call</span></a>`
         : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Call</span></button>`}
       <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share</span></button>
-      <button type="button" class="cal-icon-btn cdv-labeled" id="custDashCameraBtn" title="Add photo">${DSVG_CAMERA}<span>Photo</span></button>
-      <button type="button" class="cal-icon-btn cal-icon-edit cdv-labeled" id="custDashEditBtn" title="Update this customer">${DSVG_EDIT}<span>Update</span></button>
+      <button type="button" class="cal-icon-btn cal-icon-camera cdv-labeled" id="custDashCameraBtn" title="Add photo">${DSVG_CAMERA}<span>Photo</span></button>
+      <button type="button" class="cal-icon-btn cal-icon-update cdv-labeled" id="custDashEditBtn" title="Update this customer">${DSVG_EDIT}<span>Update</span></button>
       <button type="button" class="cal-icon-btn cdv-labeled cdv-delete-btn" id="custDashDeleteBtn" title="Delete">${DSVG_DELETE}<span>Delete</span></button>
     </div>`;
 
@@ -10490,11 +10710,7 @@ function subscribeToQuoteAcceptances() {
         if (status === 'accepted') showQuoteAcceptedNotification();
       }
     })
-    .subscribe(subscribeStatus => {
-      if (subscribeStatus === 'SUBSCRIBED') {
-        console.log('[Real-time] Listening for quote acceptances');
-      }
-    });
+    .subscribe();
 }
 
 // ── Supabase / Mailchimp stubs ──
