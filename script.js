@@ -357,13 +357,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!canOpenApp) return;
 
   loadFromStorage();
-  await loadBusinessFromSupabase();
-  await loadPriceListFromSupabase();
-  await loadCustomersFromSupabase();
-  await loadSavedDocsFromSupabase();
-  savedDocsSyncReady = true;
-  syncAllLocalCustomersToSupabase();
-  queueSavedDocsSync();
+
+  // ── Render immediately from local cache so the app is usable at once ──
   setupOnboarding();
   setupNewJobPicker();
   setupDescriptionHelp();
@@ -378,6 +373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupPageJobs();
   setupPageCompletion();
   setupPage4();
+  setupExitConfirm();
   setupModals();
   setupSendChoice();
   setupChaseAndPause();
@@ -395,13 +391,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateColourPreview();
   populateAuthSig();
   personaliseText();
+  updateNotifToggleBtn();
 
-  // Returning user lands on their jobs page; new users start onboarding
+  // Show the app NOW — no waiting for Supabase
   if (canUseMainApp()) {
     showPage('page4');
   } else {
     showPage('page1');
   }
+
+  // ── Sync with Supabase in the background — never blocks UI ──
+  Promise.all([
+    loadBusinessFromSupabase(),
+    loadPriceListFromSupabase(),
+    loadCustomersFromSupabase(),
+    loadSavedDocsFromSupabase(),
+  ]).then(() => {
+    savedDocsSyncReady = true;
+    // Refresh UI with any data that changed after the Supabase sync
+    refreshPriceList();
+    refreshSavedDocs();
+    updateSavedBadge();
+    updateJobPicker();
+    populatePage1Fields();
+    updateColourPreview();
+    syncAllLocalCustomersToSupabase();
+    queueSavedDocsSync();
+  }).catch(err => {
+    console.warn('Background Supabase sync failed:', err);
+    savedDocsSyncReady = true; // still allow local saves to queue
+  });
 
 });
 
@@ -466,20 +485,46 @@ async function initialiseAuth() {
     return true;
   }
   const authScreen = document.getElementById('authScreen');
-  const { data, error } = await lexiSupabase.auth.getSession();
+  const overlay = document.getElementById('appLoadingOverlay');
+
+  let data, error;
+  try {
+    // Race getSession against a 12-second timeout so a paused/unreachable
+    // Supabase project never leaves the user stuck on the loading screen.
+    const result = await Promise.race([
+      lexiSupabase.auth.getSession(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase did not respond in time. Check your connection or try again.')), 12000)
+      )
+    ]);
+    data  = result.data;
+    error = result.error;
+  } catch (e) {
+    // Network failure or timeout — show login screen, let user try again
+    if (authScreen) authScreen.style.display = 'flex';
+    if (overlay) overlay.style.display = 'none';
+    setAuthMessage(
+      (e.message || 'Could not reach the server.') +
+      ' If this keeps happening, your account may need a moment to wake up — wait 30 seconds and refresh.',
+      'error'
+    );
+    return false;
+  }
+
   if (error) {
     if (authScreen) authScreen.style.display = 'flex';
+    if (overlay) overlay.style.display = 'none';
     setAuthMessage(error.message || 'I could not check your login. Try again.', 'error');
     return false;
   }
   lexiAuthSession = data?.session || null;
   if (!lexiAuthSession) {
     if (authScreen) authScreen.style.display = 'flex';
-    const overlay = document.getElementById('appLoadingOverlay');
     if (overlay) overlay.style.display = 'none';
     return false;
   }
-  await ensureSupabaseProfile(lexiAuthSession.user);
+  // Fire-and-forget - profile upsert doesn't block app load
+  ensureSupabaseProfile(lexiAuthSession.user).catch(e => console.warn('Profile sync:', e));
   if (authScreen) authScreen.style.display = 'none';
   return true;
 }
@@ -517,7 +562,7 @@ async function handleEmailAuth() {
       if (error) throw error;
       if (data?.session) {
         lexiAuthSession = data.session;
-        await ensureSupabaseProfile(data.user);
+        ensureSupabaseProfile(data.user).catch(e => console.warn('Profile sync:', e));
         location.reload();
         return;
       }
@@ -527,7 +572,7 @@ async function handleEmailAuth() {
       const { data, error } = await lexiSupabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       lexiAuthSession = data?.session || null;
-      await ensureSupabaseProfile(data?.user);
+      ensureSupabaseProfile(data?.user).catch(e => console.warn('Profile sync:', e));
       location.reload();
     }
   } catch (error) {
@@ -958,10 +1003,16 @@ async function saveCustomerToSupabase(q = {}) {
   if (!lexiSupabase || !lexiAuthSession?.user?.id || !customerHasUsefulData(q)) return;
   const userId = lexiAuthSession.user.id;
   const payload = customerToRow(q);
-  const { data: existingRows, error: findError } = await lexiSupabase
-    .from('customers')
-    .select('*')
-    .eq('user_id', userId);
+  // Build a targeted OR filter so we don't fetch every customer row on each call
+  const email = String(q.custEmail || '').trim().toLowerCase();
+  const phone = normalisePhone(q.custPhone || '');
+  const first = String(q.custFirstName || '').trim();
+  const last  = String(q.custLastName  || '').trim();
+  let query = lexiSupabase.from('customers').select('*').eq('user_id', userId);
+  if (email) query = query.eq('email', email);
+  else if (phone) query = query.eq('phone', phone);
+  else if (first && last) query = query.eq('first_name', first).eq('last_name', last);
+  const { data: existingRows, error: findError } = await query.limit(5);
 
   if (findError) throw findError;
 
@@ -994,16 +1045,24 @@ async function saveCustomerToSupabase(q = {}) {
   if (result.error) throw result.error;
 }
 
+// One-per-sync cache so we fetch all customers once and reuse across all docs
+let _custIdCache = null;
+let _custIdCacheUserId = null;
+function _clearCustIdCache() { _custIdCache = null; }
+
+async function _getCustIdCache(userId) {
+  if (_custIdCache && _custIdCacheUserId === userId) return _custIdCache;
+  const { data } = await lexiSupabase.from('customers').select('id,email,phone,first_name,last_name,postcode').eq('user_id', userId);
+  _custIdCache = data || [];
+  _custIdCacheUserId = userId;
+  return _custIdCache;
+}
+
 async function getSupabaseCustomerId(q = {}) {
   if (!lexiSupabase || !lexiAuthSession?.user?.id || !customerHasUsefulData(q)) return null;
   const userId = lexiAuthSession.user.id;
-  const { data: existingRows, error: findError } = await lexiSupabase
-    .from('customers')
-    .select('*')
-    .eq('user_id', userId);
-  if (findError) throw findError;
-
-  const existing = (existingRows || []).find(row => customerMatchesQuote(row, q));
+  const existingRows = await _getCustIdCache(userId);
+  const existing = existingRows.find(row => customerMatchesQuote(row, q));
   if (existing?.id) return existing.id;
 
   const payload = customerToRow(q);
@@ -1416,20 +1475,22 @@ async function saveSavedDocsToSupabase() {
     }
   }
 
-  // Step 1: find which remote rows should be deleted (docs that no longer exist locally)
+  // Step 1: find remote IDs — only select the lightweight local_id column
   const currentLocalIds = new Set((state.saved || []).map(d => d.id).filter(Boolean));
   const { data: remoteRows } = await lexiSupabase
     .from('documents')
     .select('local_id')
     .eq('user_id', userId);
   const toDelete = (remoteRows || []).map(r => r.local_id).filter(lid => lid && !currentLocalIds.has(lid));
-  for (const lid of toDelete) {
-    await lexiSupabase.from('documents').delete().eq('user_id', userId).eq('local_id', lid);
+  // Delete stale rows in one batch if possible
+  if (toDelete.length) {
+    await lexiSupabase.from('documents').delete().eq('user_id', userId).in('local_id', toDelete);
   }
 
   if (!state.saved.length) return;
 
-  // Step 2: upsert each doc individually (small statements = no timeout)
+  // Step 2: upsert each doc — customer cache is loaded once for all docs
+  _clearCustIdCache();
   const docsWithCustomers = [];
   for (const doc of state.saved) {
     const customerId = await getSupabaseCustomerId(doc.quote || {});
@@ -1444,15 +1505,16 @@ async function saveSavedDocsToSupabase() {
       throw err;
     }
   }
+  _clearCustIdCache(); // release memory
 
-  // Step 3: sync job summaries
+  // Step 3: sync job summaries (best-effort — skip if jobs table not set up)
   try {
     await saveJobSummariesToSupabase(userId, docsWithCustomers);
     localStorage.removeItem('lexi_last_jobs_sync_error');
   } catch (error) {
     console.warn('Documents synced, but job summaries did not sync to Supabase:', error);
     localStorage.setItem('lexi_last_jobs_sync_error', error?.message || String(error || 'Unknown jobs sync error'));
-    toast(`Documents synced, but job summaries need checking: ${error?.message || 'jobs table setup'}`, 'error', 9000);
+    // Don't toast — this is a background sync, silent failure is fine here
   }
 }
 
@@ -1509,7 +1571,7 @@ function queueSavedDocsSync(showError = false) {
       toast(`Document sync failed: ${error?.message || 'check Supabase table setup'}`, 'error', 9000);
       if (showError) toast('Jobs saved here. Supabase sync needs another try.', 'error');
     });
-  }, 400);
+  }, 30000); // 30s debounce — saves are local-first, cloud syncs in the background
 }
 
 window.lexiCheckDocumentSync = async function lexiCheckDocumentSync() {
@@ -2895,7 +2957,8 @@ function extractLogoColours() {
   }
 
   const img = new Image();
-  img.crossOrigin = 'anonymous';
+  // Do NOT set crossOrigin for data URLs — it taints the canvas in Safari/Chrome
+  if (!logo.startsWith('data:')) img.crossOrigin = 'anonymous';
   img.onload = () => {
     // Draw onto a small canvas for speed
     const canvas = document.createElement('canvas');
@@ -2908,7 +2971,12 @@ function extractLogoColours() {
 
     let data;
     try { data = ctx.getImageData(0, 0, canvas.width, canvas.height).data; }
-    catch (e) { return; } // tainted canvas safety
+    catch (e) {
+      console.warn('Logo colour extraction failed (canvas tainted):', e);
+      showSavedPopup("Couldn't read colours from this logo. Try saving it as a PNG and re-uploading.");
+      document.getElementById('useLogoColours').checked = false;
+      return;
+    }
 
     // Tally colours -quantize RGB to 32 levels per channel
     const tally = {};
@@ -2955,9 +3023,17 @@ function extractLogoColours() {
     const bgG = Math.round(header.g * 0.12 + 242 * 0.88);
     const bgB = Math.round(header.b * 0.12 + 242 * 0.88);
 
-    setColour('header', rgbToHex(header.r, header.g, header.b));
-    setColour('accent', rgbToHex(accent.r, accent.g, accent.b));
-    setColour('bg',     rgbToHex(bgR, bgG, bgB));
+    const hHex = rgbToHex(header.r, header.g, header.b);
+    const aHex = rgbToHex(accent.r, accent.g, accent.b);
+    const bHex = rgbToHex(bgR, bgG, bgB);
+    setColour('header', hHex);
+    setColour('accent', aHex);
+    setColour('bg',     bHex);
+    // Persist to state so colours survive reload without requiring Save My Business
+    state.company.brandPrimary = hHex;
+    state.company.brandAccent  = aHex;
+    state.company.brandBg      = bHex;
+    save();
     updateColourPreview();
     showSavedPopup("Done! I've extracted those great colours from your logo.");
   };
@@ -4704,6 +4780,7 @@ function ssStageLabel(d) {
     return 'Invoiced';
   }
   if (d.jobCompleted) return 'Complete';
+  if (d.jobStarted || (d.jobStartDate && d.jobStartDate <= todayStr())) return 'Job Started';
   if (d.jobStartDate) return 'Job Booked';
   if (d.jobAccepted || d.acceptStatus === 'accepted') return 'Accepted';
   const t = (d.quote?.type || d.type || '').toLowerCase();
@@ -4713,7 +4790,7 @@ function ssStageLabel(d) {
 }
 
 const SS_STAGE_CLS = { 'Paid':'ss-paid','Overdue':'ss-overdue','Invoiced':'ss-invoiced',
-  'Accepted':'ss-accepted','Job Booked':'ss-booked','Complete':'ss-complete',
+  'Accepted':'ss-accepted','Job Booked':'ss-booked','Job Started':'ss-started','Complete':'ss-complete',
   'Quote':'ss-quote','Estimate':'ss-estimate','Receipt':'ss-paid','Draft':'ss-draft' };
 
 function ssGetCellValue(key, d, q, totalPaid, total, outstanding, isRepeat) {
@@ -4888,17 +4965,18 @@ function openSsColPanel() {
 }
 
 function ssCsvDownload() {
-  const cols = getSsCols().filter(c => c.visible);
-  const header = [...cols.map(c => `"${c.label}"`), '"Open"'].join(',');
+  if (typeof XLSX === 'undefined') { toast('Spreadsheet library not loaded yet - try again in a moment.'); return; }
 
+  // ── Sheet 1: My Jobs ──────────────────────────────────────────
+  const cols = getSsCols().filter(c => c.visible);
   const custCounts = {};
   (state.saved || []).forEach(d => {
     const q = d.quote || {};
     const k = `${(q.custLastName||'').toLowerCase()}|${(q.custFirstName||'').toLowerCase()}|${(q.custPhone||'').trim()}`;
     custCounts[k] = (custCounts[k] || 0) + 1;
   });
-
-  const rows = (state.saved || []).map(d => {
+  const jobsData = [cols.map(c => c.label)];
+  (state.saved || []).forEach(d => {
     const q = d.quote || {};
     const payments = getDocPayments(d);
     const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
@@ -4906,19 +4984,38 @@ function ssCsvDownload() {
     const outstanding = d.paid ? 0 : Math.max(0, total - totalPaid);
     const custKey = `${(q.custLastName||'').toLowerCase()}|${(q.custFirstName||'').toLowerCase()}|${(q.custPhone||'').trim()}`;
     const isRepeat = (custCounts[custKey] || 0) > 1;
-    const cells = cols.map(c => {
-      const { text } = ssGetCellValue(c.key, d, q, totalPaid, total, outstanding, isRepeat);
-      return `"${String(text).replace(/"/g, '""')}"`;
-    });
-    return cells.join(',');
+    jobsData.push(cols.map(c => ssGetCellValue(c.key, d, q, totalPaid, total, outstanding, isRepeat).text));
   });
+  const wsJobs = XLSX.utils.aoa_to_sheet(jobsData);
 
-  const csv = [header, ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'lexi-jobs.csv';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+  // ── Sheet 2: Average Rates by Trade ──────────────────────────
+  const ratesData = [
+    ['Trade / Job Type', 'Avg Hourly Rate', 'Avg Half Day', 'Avg Day Rate', 'Avg Call-out', 'Notes'],
+    ['General Plumber',        '£55-£80',  '£190-£250',  '£350-£450',  '£75-£100', 'Higher in London/SE'],
+    ['Gas Engineer (domestic)','£65-£90',  '£220-£290',  '£400-£520',  '£85-£110', 'Gas Safe cert required'],
+    ['Boiler Installer',       '£70-£100', '£240-£320',  '£420-£560',  '£90-£120', 'Combi installs command premium'],
+    ['Heating Engineer',       '£60-£85',  '£200-£270',  '£370-£480',  '£80-£105', ''],
+    ['Electrician',            '£50-£80',  '£180-£250',  '£330-£450',  '£70-£100', 'Part P certification'],
+    ['Bathroom Fitter',        '£55-£80',  '£190-£260',  '£350-£460',  '£75-£100', 'Supply & fit vs labour only'],
+    ['Kitchen Fitter',         '£55-£85',  '£200-£280',  '£360-£480',  '£75-£100', ''],
+    ['Tiler (wall & floor)',    '£40-£60',  '£150-£210',  '£280-£380',  '£60-£85',  'Per m2 rates also common'],
+    ['Plasterer',              '£35-£55',  '£130-£200',  '£250-£360',  '£55-£80',  'Day rate most common'],
+    ['Painter & Decorator',    '£30-£50',  '£110-£180',  '£210-£330',  '£50-£75',  ''],
+    ['Carpenter / Joiner',     '£45-£70',  '£160-£230',  '£300-£420',  '£65-£90',  ''],
+    ['Roofer',                 '£50-£75',  '£175-£250',  '£320-£440',  '£70-£95',  'Scaffolding extra'],
+    ['Handyman (general)',      '£30-£45',  '£110-£160',  '£200-£290',  '£45-£70',  'Lower for non-specialist work'],
+    [],
+    ['Source: industry averages 2025. Rates vary by region, experience and job complexity.'],
+    ['Use these as a guide when setting your own rates in Lexi.'],
+  ];
+  const wsRates = XLSX.utils.aoa_to_sheet(ratesData);
+  wsRates['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 36 }];
+
+  // ── Build workbook ─────────────────────────────────────────────
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsJobs, 'My Jobs');
+  XLSX.utils.book_append_sheet(wb, wsRates, 'Average Rates');
+  XLSX.writeFile(wb, `Lexi-Jobs-${todayStr()}.xlsx`);
 }
 
 function openSpreadsheetView() {
@@ -5375,6 +5472,39 @@ function updateSavedBadge() {
   const count = state.saved.length;
   badge.textContent = count;
   badge.style.display = count > 0 ? 'flex' : 'none';
+}
+
+/* ===== EXIT CONFIRMATION (system back button) ===== */
+function setupExitConfirm() {
+  // Push a dummy state so the first back-press doesn't immediately leave the PWA
+  history.pushState({ lexi: true }, '');
+
+  window.addEventListener('popstate', (e) => {
+    // Only intercept when My Jobs (page4) is active and no modal is open
+    const page4 = document.getElementById('page4');
+    const anyModalOpen = [...document.querySelectorAll('.modal-overlay')].some(
+      m => m.id !== 'exitConfirmModal' && m.style.display !== 'none'
+    );
+    if (!page4?.classList.contains('active') || anyModalOpen) {
+      // Not on My Jobs or a modal is open — re-push so next back is intercepted
+      history.pushState({ lexi: true }, '');
+      return;
+    }
+    // Show exit confirmation
+    const modal = document.getElementById('exitConfirmModal');
+    if (modal) modal.style.display = 'flex';
+    // Re-push so the modal's own close doesn't trigger another popstate
+    history.pushState({ lexi: true }, '');
+  });
+
+  document.getElementById('exitConfirmNo')?.addEventListener('click', () => {
+    document.getElementById('exitConfirmModal').style.display = 'none';
+  });
+
+  document.getElementById('exitConfirmYes')?.addEventListener('click', () => {
+    // Go back past our dummy states to actually leave the app
+    history.go(-2);
+  });
 }
 
 /* ===== MODALS ===== */
@@ -7401,25 +7531,29 @@ function buildCustomerJobSection(d, jobNum = 0) {
   // Cross-check the saved flags AND q.type so docs created directly as Invoice/Receipt
   // still show the correct step even if the invoiceSent flag wasn't set via the modal.
   const qTypeLower = (q.type || 'Estimate').toLowerCase();
-  // Ranks match tubeStages indices: 0=Estimate,1=Quote,2=Accepted,3=Job Booked,4=Job Complete,5=Invoiced,6=Paid
+  // Ranks: 0=Estimate,1=Quote,2=Accepted,3=Job Booked,4=Job Started,5=Job Complete,6=Invoiced,7=Paid
   const isAcceptedFlag = d.jobAccepted || d.acceptStatus === 'accepted';
-  const stageRank = d.paid || qTypeLower === 'receipt' || d.receiptRef ? 6
-    : (d.invoiceSent || qTypeLower === 'invoice')             ? 5
-    : (d.jobCompleted)                                        ? 4
+  // Job Started: manual flag OR auto when today has reached the booked start date
+  const jobAutoStarted = d.jobStartDate && d.jobStartDate <= todayStr();
+  const jobStarted = d.jobStarted || jobAutoStarted;
+  const stageRank = d.paid || qTypeLower === 'receipt' || d.receiptRef ? 7
+    : (d.invoiceSent || qTypeLower === 'invoice')             ? 6
+    : (d.jobCompleted)                                        ? 5
+    : jobStarted                                              ? 4
     : (isAcceptedFlag && d.jobStartDate)                      ? 3
     : isAcceptedFlag                                          ? 2
     : (qTypeLower === 'quote')                                ? 1
     :                                                           0;
-  // 7 stages split across two rows: 4 top (left→right), 3 bottom (left→right)
-  // Visually the line wraps: row 1 ends at Job Booked, drops down, row 2 is Job Completed→Invoiced→Paid
+  // 8 stages: 4 top (left→right), 4 bottom (right→left snake)
   const tubeStages = [
     { label: 'Estimate',      action: 'quote',   cls: 'stage-estimate',   row: 0, col: 0 },
     { label: 'Quote',         action: 'quote',   cls: 'stage-quote',      row: 0, col: 1 },
     { label: 'Accepted',      action: 'quote',   cls: 'stage-accepted',   row: 0, col: 2 },
     { label: 'Job Booked',    action: 'quote',   cls: 'stage-booked',     row: 0, col: 3 },
-    { label: 'Job Complete',  action: 'invoice', cls: 'stage-complete',   row: 1, col: 0 },
+    { label: 'Job Started',   action: 'quote',   cls: 'stage-started',    row: 1, col: 3 },
+    { label: 'Job Complete',  action: 'invoice', cls: 'stage-complete',   row: 1, col: 2 },
     { label: 'Invoiced',      action: 'invoice', cls: 'stage-invoice',    row: 1, col: 1 },
-    { label: 'Paid',          action: 'receipt', cls: 'stage-paid',       row: 1, col: 2 },
+    { label: 'Paid',          action: 'receipt', cls: 'stage-paid',       row: 1, col: 0 },
   ];
   const makeStation = (s, i) => {
     const isDone   = i < stageRank;
@@ -7435,24 +7569,30 @@ function buildCustomerJobSection(d, jobNum = 0) {
     </div>`;
   };
   const makeSeg = (isDone) => `<div class="cdv-tube-seg${isDone ? ' done' : ''}"></div>`;
-  // Row 0 stations 0-3
+  // Row 0: stations 0–3 left to right
   const row0 = tubeStages.slice(0,4).map((s,i) => {
     const isDone = i < stageRank;
     return makeStation(s, i) + (i < 3 ? makeSeg(isDone) : '');
   }).join('');
-  // Row 2 reversed: Paid(6), Invoiced(5), Job Complete(4) — reads right-to-left visually
-  const row2Stages = [...tubeStages.slice(4)].reverse(); // [Paid, Invoiced, JobComplete]
+  // Row 1 reversed (DOM): Paid(7), Invoiced(6), Job Complete(5), Job Started(4) — right-to-left visually
+  const row2Stages = [...tubeStages.slice(4)].reverse(); // [Paid, Invoiced, JobComplete, JobStarted]
   const row1 = row2Stages.map((s, j) => {
-    const realIdx = 6 - j; // 6=Paid, 5=Invoiced, 4=JobComplete
-    // Segment between DOM pos j (realIdx) and j+1 (realIdx-1): done if stage has reached both
-    const segDone = stageRank >= (6 - j);
-    return makeStation(s, realIdx) + (j < 2 ? makeSeg(segDone) : '');
+    const realIdx = 7 - j; // 7=Paid, 6=Invoiced, 5=JobComplete, 4=JobStarted
+    const segDone = stageRank >= (7 - j);
+    return makeStation(s, realIdx) + (j < 3 ? makeSeg(segDone) : '');
   }).join('');
-  // Corner connector: done if stageRank >= 4
+  // Corner: done when stageRank >= 4 (Job Started reached)
   const cornerDone = stageRank >= 4;
+  // Warning: job auto-started today — show if date just passed and not manually confirmed
+  const autoStartedToday = d.jobStartDate === todayStr() && !d.jobStarted;
+  const startWarningHtml = autoStartedToday ? `
+    <div class="cdv-start-warning">
+      <strong>Your job starts today!</strong> If the date is wrong, update it below before it moves to Job Started.
+    </div>` : '';
   const progressionHtml = `
     <div class="cdv-tube-map">
       <div class="cdv-prog-label">Job Status</div>
+      ${startWarningHtml}
       <div class="cdv-tube-row">${row0}<div class="cdv-tube-corner-wrap"><div class="cdv-tube-corner${cornerDone ? ' done' : ''}"></div></div></div>
       <div class="cdv-tube-row cdv-tube-row2">${row1}</div>
     </div>`;
@@ -7538,7 +7678,7 @@ function renderSingleCustomerDashboard(group, groups) {
 
   // Put customer name in modal title
   const titleEl = document.getElementById('customerDashboardTitle');
-  if (titleEl) titleEl.textContent = `Dashboard: ${group.name}`;
+  if (titleEl) titleEl.innerHTML = `<span class="cdv-title-prefix">Dashboard:</span> ${esc(group.name)}`;
 
   // Contact action buttons (Email / WhatsApp / Phone)
   const dashPhone = q.custPhone || '';
@@ -10597,6 +10737,47 @@ function sendLexiNotification(title, body, tag = 'lexi') {
     });
     setTimeout(() => n.close(), 8000);
   } catch(e) { console.warn('Notification failed:', e); }
+}
+
+function openNotificationSettings() {
+  if (!('Notification' in window)) {
+    toast('Your browser does not support notifications.', 'error');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    toast('Notifications are already enabled.', 'success');
+    updateNotifToggleBtn();
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    // Blocked — user must go to phone/browser settings manually
+    toast('Notifications are blocked. Go to your phone Settings > Safari (or Chrome) > Notifications and allow Lexi.', 'info', 7000);
+    return;
+  }
+  // 'default' — ask for permission
+  requestLexiNotifications(() => updateNotifToggleBtn());
+}
+
+function updateNotifToggleBtn() {
+  const btn = document.getElementById('notifToggleBtn');
+  if (!btn) return;
+  if (!('Notification' in window)) { btn.textContent = 'Not supported'; btn.disabled = true; return; }
+  if (Notification.permission === 'granted') {
+    btn.textContent = 'Enabled';
+    btn.style.borderColor = 'var(--sage)';
+    btn.style.color = 'var(--sage)';
+    btn.disabled = true;
+  } else if (Notification.permission === 'denied') {
+    btn.textContent = 'Blocked';
+    btn.style.borderColor = '#c0392b';
+    btn.style.color = '#c0392b';
+    btn.disabled = false;
+  } else {
+    btn.textContent = 'Enable';
+    btn.style.borderColor = 'var(--walnut)';
+    btn.style.color = 'var(--walnut)';
+    btn.disabled = false;
+  }
 }
 
 async function requestLexiNotifications(onGranted) {

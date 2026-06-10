@@ -800,6 +800,7 @@ input[type="text"].sig-text-input:focus {
 
 @media (max-width: 480px) {
   .form-grid-2 { grid-template-columns: 1fr; }
+  .form-grid-2.rates-grid-2col { grid-template-columns: 1fr 1fr; gap: 8px; }
   .form-grid-3 { grid-template-columns: 1fr 1fr; }
   .form-grid-3 .fg-grow { grid-column: 1 / -1; }
 }
@@ -3415,6 +3416,16 @@ input[type="text"].sig-text-input:focus {
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+.cdv-start-warning {
+  font-size: 0.75rem;
+  color: #7a3010;
+  background: #fde8d8;
+  border: 1px solid #f0b89a;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
 .cdv-prog-label {
   font-size: 0.67rem;
   font-weight: 700;
@@ -3501,6 +3512,7 @@ input[type="text"].sig-text-input:focus {
 .cdv-tube-dot.tube-active.stage-quote     { background: var(--gold); border-color: var(--gold); }
 .cdv-tube-dot.tube-active.stage-accepted  { background: #4a7fb5; border-color: #4a7fb5; }
 .cdv-tube-dot.tube-active.stage-booked    { background: #7b5ea7; border-color: #7b5ea7; }
+.cdv-tube-dot.tube-active.stage-started   { background: #e07b39; border-color: #e07b39; }
 .cdv-tube-dot.tube-active.stage-complete  { background: var(--sage); border-color: var(--sage); }
 .cdv-tube-dot.tube-active.stage-invoice   { background: var(--walnut); border-color: var(--walnut); }
 .cdv-tube-dot.tube-active.stage-paid      { background: var(--success); border-color: var(--success); }
@@ -3625,6 +3637,7 @@ input[type="text"].sig-text-input:focus {
   padding-bottom: 12px;
   margin-bottom: 14px;
 }
+.cdv-title-prefix { color: var(--gold); }
 /* Contact action buttons row (Email / WhatsApp / Phone) */
 .cdv-contact-btns {
   display: flex;
@@ -4480,21 +4493,21 @@ input[type="text"].sig-text-input:focus {
   gap: 8px;
   padding: 12px 16px;
 }
-/* Icon-only compact buttons (Edit / Print / Preview) */
-.pf-icon-btn {
-  flex: 0 0 auto !important;
-  width: 44px !important;
-  min-width: 0 !important;
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-}
-/* Save and Send grow to fill remaining space equally */
-.pf-grow-btn {
+/* Preview header stacked buttons (icon on top, label below) */
+.pf-stacked-btn {
   flex: 1 !important;
   min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  padding: 5px 6px !important;
+  font-size: 0.62rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
 }
+.pf-stacked-btn span { white-space: nowrap; line-height: 1; }
 
 /* Preview header with action buttons on the right */
 .preview-modal-header {
@@ -4511,24 +4524,8 @@ input[type="text"].sig-text-input:focus {
   gap: 6px;
   flex: 1;
 }
-.preview-header-actions .pf-icon-btn {
-  flex: 0 0 auto;
-  width: 40px;
-  min-width: 0;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--walnut);
-  border-color: var(--walnut);
-}
-.preview-header-actions .pf-grow-btn {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 10px;
-  font-size: 0.85rem;
-}
-.preview-header-actions .btn-outline {
+.preview-header-actions .btn-outline,
+.preview-header-actions .pf-stacked-btn.btn-outline {
   color: var(--walnut);
   border-color: var(--walnut);
 }
@@ -6544,6 +6541,7 @@ input[type="text"].sig-text-input:focus {
 .ss-invoiced { background: #fff3cd; color: #7d5a00; }
 .ss-accepted { background: #cce5ff; color: #004085; }
 .ss-booked   { background: #d6eaff; color: #1a3c6e; }
+.ss-started  { background: #fde8d8; color: #7a3010; }
 .ss-complete { background: #e2d9f3; color: #4a235a; }
 .ss-quote    { background: #e8f4e8; color: #1e5c1e; }
 .ss-estimate { background: #fdebd0; color: #784212; }
@@ -6653,6 +6651,11 @@ input[type="text"].sig-text-input:focus {
 }
 .filter-toggle:hover { border-color: var(--sage); color: var(--sage); }
 .filter-toggle svg { flex-shrink: 0; transition: transform 0.2s; }
+.filter-toggle.icon-only,
+.jobs-refresh-btn.icon-only {
+  padding: 8px 10px;
+  gap: 0;
+}
 
 /* ===== JOB CARD ACTIONS ===== */
 .job-card-actions {
