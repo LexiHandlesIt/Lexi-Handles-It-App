@@ -441,6 +441,8 @@ function setAuthMode(mode) {
       ? "Use uppercase, lowercase and a number. I'll send a confirmation email before you log in."
       : 'Log in with the email and password you used to create your Lexi account.';
   }
+  const forgotBtn = document.getElementById('forgotPasswordBtn');
+  if (forgotBtn) forgotBtn.style.display = mode === 'login' ? 'block' : 'none';
   setAuthMessage('');
 }
 
@@ -462,6 +464,7 @@ function setupAuthScreen() {
   document.getElementById('authSignupTab')?.addEventListener('click', () => setAuthMode('signup'));
   document.getElementById('authLoginTab')?.addEventListener('click', () => setAuthMode('login'));
   document.getElementById('authSubmitBtn')?.addEventListener('click', handleEmailAuth);
+  document.getElementById('forgotPasswordBtn')?.addEventListener('click', handleForgotPassword);
   document.getElementById('authPassword')?.addEventListener('keydown', event => {
     if (event.key === 'Enter') handleEmailAuth();
   });
@@ -580,6 +583,26 @@ async function handleEmailAuth() {
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = authMode === 'signup' ? 'Create my free account' : 'Log in';
+  }
+}
+
+async function handleForgotPassword() {
+  if (!lexiSupabase) { setAuthMessage('Not connected.', 'error'); return; }
+  const email = document.getElementById('authEmail')?.value.trim();
+  if (!email) { setAuthMessage('Enter your email address first, then tap Forgot password.', 'error'); return; }
+  const btn = document.getElementById('forgotPasswordBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+  try {
+    const { error } = await lexiSupabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname + '?reset=true'
+    });
+    if (error) throw error;
+    setAuthMessage(`Password reset email sent to ${email}. Check your inbox.`, 'success');
+  } catch (err) {
+    const msg = err?.message || err?.error_description || (typeof err === 'string' ? err : null) || 'Could not send reset email — check your SMTP settings in Supabase.';
+    setAuthMessage(msg, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Forgot password?'; }
   }
 }
 
