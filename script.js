@@ -526,6 +526,15 @@ async function initialiseAuth() {
     if (overlay) overlay.style.display = 'none';
     return false;
   }
+  // If localStorage belongs to a different user, clear it so their data doesn't bleed across
+  const storedUserId = localStorage.getItem('lexi_user_id');
+  const currentUserId = lexiAuthSession.user.id;
+  if (storedUserId && storedUserId !== currentUserId) {
+    const keysToKeep = [KEY_AUTH_REMEMBER_EMAIL];
+    Object.keys(localStorage).forEach(k => { if (!keysToKeep.includes(k)) localStorage.removeItem(k); });
+  }
+  localStorage.setItem('lexi_user_id', currentUserId);
+
   // Fire-and-forget - profile upsert doesn't block app load
   ensureSupabaseProfile(lexiAuthSession.user).catch(e => console.warn('Profile sync:', e));
   if (authScreen) authScreen.style.display = 'none';
