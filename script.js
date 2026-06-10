@@ -1444,18 +1444,27 @@ async function loadSavedDocsFromSupabase() {
 }
 
 async function upsertSingleDocToSupabase(userId, doc, customerId) {
-  // Delete the existing row for this doc (by user_id + local_id) then insert fresh.
-  // This avoids needing a unique constraint and keeps each statement tiny.
   const localId = doc.id;
   if (!localId) return;
-  await lexiSupabase.from('documents').delete().eq('user_id', userId).eq('local_id', localId);
   const candidates = savedDocInsertCandidates(userId, doc, customerId);
   for (const row of candidates) {
-    const { error } = await lexiSupabase.from('documents').insert(row);
+    // Try true upsert first (requires unique constraint on user_id, local_id)
+    const { error } = await lexiSupabase
+      .from('documents')
+      .upsert(row, { onConflict: 'user_id,local_id', ignoreDuplicates: false });
     if (!error) return; // success
     const msg = String(error.message || '');
-    if (/column|schema cache|relationship|violates/i.test(msg)) continue; // try next candidate
-    throw error; // real error
+    // If upsert fails due to missing constraint, fall back to delete + insert
+    if (/unique constraint|duplicate|conflict/i.test(msg)) {
+      await lexiSupabase.from('documents').delete().eq('user_id', userId).eq('local_id', localId);
+      const { error: insertErr } = await lexiSupabase.from('documents').insert(row);
+      if (!insertErr) return;
+      const insertMsg = String(insertErr.message || '');
+      if (/column|schema cache|relationship|violates/i.test(insertMsg)) continue;
+      throw insertErr;
+    }
+    if (/column|schema cache|relationship|violates/i.test(msg)) continue; // try next candidate shape
+    throw error;
   }
 }
 
@@ -7605,7 +7614,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
           Job Accepted
         </label>
         <div class="cdv-start-date-wrap"${!d.jobAccepted ? ' style="display:none"' : ''}>
-          <span class="cdv-start-date-label">Date Started</span>
+          <span class="cdv-start-date-label">Date Booked For</span>
           <input type="date" class="cdv-start-date-input" data-doc-id="${esc(d.id)}"
             value="${esc(d.jobStartDate || '')}">
         </div>
@@ -7794,7 +7803,7 @@ function renderSingleCustomerDashboard(group, groups) {
       wrap.style.display = cb.checked ? '' : 'none';
       if (cb.checked) {
         const inp = wrap.querySelector('.cdv-start-date-input');
-        if (inp && !inp.value) { inp.value = todayStr(); doc.jobStartDate = inp.value; }
+        // Do not auto-fill today — leave blank so user picks an actual booking date
       }
     }
     save();
