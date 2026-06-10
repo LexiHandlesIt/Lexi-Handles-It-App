@@ -526,10 +526,10 @@ async function initialiseAuth() {
     if (overlay) overlay.style.display = 'none';
     return false;
   }
-  // If localStorage belongs to a different user, clear it so their data doesn't bleed across
+  // If localStorage belongs to a different user (or is untagged), clear it so data doesn't bleed across
   const storedUserId = localStorage.getItem('lexi_user_id');
   const currentUserId = lexiAuthSession.user.id;
-  if (storedUserId && storedUserId !== currentUserId) {
+  if (storedUserId !== currentUserId) {
     const keysToKeep = [KEY_AUTH_REMEMBER_EMAIL];
     Object.keys(localStorage).forEach(k => { if (!keysToKeep.includes(k)) localStorage.removeItem(k); });
   }
