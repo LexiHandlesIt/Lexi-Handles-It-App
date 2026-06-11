@@ -2184,13 +2184,19 @@ input[type="text"].sig-text-input:focus {
 
 /* Added Items card - sage green to distinguish from working cards above */
 .card.pj-added-card {
-  background: rgba(107,124,92,0.10) !important;
-  border: 2.5px solid var(--sage) !important;
-  box-shadow: 0 2px 8px rgba(107,124,92,0.15);
+  background: #f2f2f2 !important;
+  border: 1.5px solid #ccc !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 .card.pj-added-card .card-title,
-.card.pj-added-card .pj-section-title {
-  color: var(--sage);
+.card.pj-added-card .pj-section-title,
+.card.pj-added-card .form-group label,
+.card.pj-added-card .quote-group-label,
+.card.pj-added-card .quote-item-name,
+.card.pj-added-card .quote-item-unit-price,
+.card.pj-added-card .quote-item-total,
+.card.pj-added-card .qty-value {
+  color: #111 !important;
 }
 
 .section-sub {
@@ -2315,10 +2321,13 @@ input[type="text"].sig-text-input:focus {
   transition: background 0.15s, border-color 0.15s;
   user-select: none;
 }
-.pick-item:hover,
+.pick-item:hover {
+  background: #f0f0f0;
+  border-color: #aaa;
+}
 .pick-item.added {
-  background: rgba(107,124,92,0.08);
-  border-color: var(--sage);
+  background: #f7f7f7;
+  border-color: #888;
 }
 .pick-name {
   flex: 1;
@@ -2334,7 +2343,7 @@ input[type="text"].sig-text-input:focus {
 .pick-price {
   font-size: 0.86rem;
   font-weight: 700;
-  color: var(--sage);
+  color: #444;
   white-space: nowrap;
 }
 .pick-add-btn {
@@ -2342,7 +2351,7 @@ input[type="text"].sig-text-input:focus {
   height: 28px;
   border-radius: 50%;
   border: none;
-  background: var(--sage);
+  background: #555;
   color: white;
   font-size: 1rem;
   font-weight: 700;
@@ -2521,10 +2530,10 @@ input[type="text"].sig-text-input:focus {
 .qty-btn {
   width: 32px;
   height: 32px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid #ccc;
   border-radius: 6px;
   background: var(--white);
-  color: var(--walnut);
+  color: #333;
   font-size: 1.1rem;
   font-weight: 700;
   display: flex;
@@ -2534,7 +2543,7 @@ input[type="text"].sig-text-input:focus {
   transition: background var(--transition);
 }
 
-.qty-btn:hover { background: var(--walnut-tint); }
+.qty-btn:hover { background: #f0f0f0; }
 
 .qty-value {
   min-width: 24px;
@@ -2545,7 +2554,7 @@ input[type="text"].sig-text-input:focus {
 
 .quote-item-total {
   font-weight: 600;
-  color: var(--walnut);
+  color: #222;
   min-width: 60px;
   text-align: right;
   font-size: 0.9rem;
@@ -3867,6 +3876,27 @@ input[type="text"].sig-text-input:focus {
   background: var(--cream-d);
   border-bottom: 1px solid var(--border);
 }
+.cdv-job-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--white);
+}
+.cdv-action-btn {
+  flex: 1;
+  padding: 7px 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--walnut);
+  cursor: pointer;
+  text-align: center;
+}
+.cdv-action-invoice { border-color: var(--sage); color: var(--sage); }
+.cdv-action-receipt { border-color: #b08a3e; color: #b08a3e; }
 .cdv-job-header-right {
   display: flex;
   align-items: center;
@@ -7163,3 +7193,196 @@ input[type="text"].sig-text-input:focus {
     padding: 10px;
   }
 }
+
+/* ── QUOTE BUILDER TAB BAR — Excel/browser tab style ─────── */
+#quoteBuilderTabs {
+  position: fixed;
+  top: var(--header-h);
+  left: 0; right: 0;
+  z-index: 90;
+  display: none;
+  background: var(--cream-d);       /* bar background — tabs sit on this */
+  border-bottom: 2px solid var(--border);
+  padding: 8px 8px 0;
+}
+.qb-tabs-inner {
+  display: flex;
+  gap: 4px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+.qb-tab {
+  flex: 1;
+  padding: 10px 6px 11px;
+  font-size: 1rem;                  /* same weight as section headings */
+  font-weight: 700;
+  text-align: center;
+  color: var(--walnut-l);
+  background: var(--cream);         /* inactive: slightly raised but dull */
+  border: 2px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;      /* rounded TOP corners — Excel tab shape */
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  position: relative;
+  bottom: -2px;                     /* sit on top of bar's bottom border */
+}
+.qb-tab:hover {
+  background: var(--walnut-tint);
+  color: var(--walnut);
+}
+.qb-tab.active {
+  background: var(--white);         /* active tab: bright white = "open" */
+  color: var(--walnut);
+  border-color: var(--border);
+  border-bottom: 2px solid var(--white); /* erase bar border = connected feel */
+  z-index: 1;
+}
+.qb-tab.done {
+  color: var(--sage);
+}
+.qb-tab.done::after {
+  content: ' ✓';
+  font-size: 0.8rem;
+}
+/* Push page content down when tab bar is visible */
+body.qb-mode #page3,
+body.qb-mode #page-jobs,
+body.qb-mode #page-completion {
+  padding-top: calc(var(--header-h) + 58px);
+}
+
+/* ── ONE-OFF SERVICE (quote builder) ─────────────────────── */
+.oneoff-inline-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.oneoff-desc-input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: var(--white);
+}
+.oneoff-price-wrap {
+  flex: 0 0 90px;
+}
+.oneoff-price-input {
+  width: 100%;
+}
+.oneoff-add-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ── RATE ROWS (quote builder) ───────────────────────────── */
+.rate-row {
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--cream);
+  transition: border-color 0.15s, background 0.15s;
+}
+.rate-row-active {
+  border-color: var(--sage);
+  background: #f2f5ee;
+}
+.rate-row-check-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--charcoal);
+}
+.rate-row-check {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--sage);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.rate-row-fields {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+.rate-row-field {
+  flex: 1;
+}
+.rate-row-field label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--walnut-l);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.rate-row-field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.92rem;
+  background: var(--white);
+  color: var(--charcoal);
+  box-sizing: border-box;
+}
+
+/* ── INLINE PICKER STEPPER (services & materials added state) ── */
+.pick-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.pick-stepper .qty-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 1rem;
+  border-color: #ccc;
+  background: #fff;
+  color: #333;
+}
+.pick-stepper .qty-value {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #222;
+}
+
+/* ── TAB TWO-LINE LABELS ─────────────────────────────────── */
+.qb-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 4px 10px;
+}
+.qb-tab-the {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  opacity: 0.75;
+  line-height: 1;
+}
+.qb-tab-word {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.qb-tab-the {
+  white-space: nowrap;
+}
+.qb-tab.active .qb-tab-the { opacity: 0.5; }
+.qb-tab.active .qb-tab-word { color: var(--walnut); }
+.qb-tab.done .qb-tab-the { opacity: 0.5; }
+.qb-tab.done .qb-tab-word { color: var(--sage); }

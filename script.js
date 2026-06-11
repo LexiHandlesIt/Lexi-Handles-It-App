@@ -372,6 +372,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupPage3();
   setupPageJobs();
   setupPageCompletion();
+  initQuoteBuilderTabs();
   setupPage4();
   setupExitConfirm();
   setupModals();
@@ -1576,27 +1577,35 @@ async function saveJobSummariesToSupabase(userId, docsWithCustomers = []) {
   if (!lexiSupabase || !userId) return;
   if (!docsWithCustomers.length) return;
 
-  // Upsert each job summary individually -no bulk delete to avoid statement timeouts
+  const currentLocalIds = docsWithCustomers.map(d => d.doc.id).filter(Boolean);
+
+  // Single upsert for all job summaries — one round-trip instead of delete+insert per doc
+  const rows = [];
   for (const { doc, customerId } of docsWithCustomers) {
-    const localId = doc.id;
-    if (!localId) continue;
-    // Remove the old row for this doc, then insert fresh
-    await lexiSupabase.from('jobs').delete().eq('user_id', userId).eq('local_id', localId);
+    if (!doc.id) continue;
     const candidates = jobSummaryInsertCandidates(userId, doc, customerId);
-    for (const row of candidates) {
-      const { error } = await lexiSupabase.from('jobs').insert(row);
-      if (!error) break; // success
-      const msg = String(error?.message || '');
+    if (candidates.length) rows.push(candidates[0]);
+  }
+
+  if (rows.length) {
+    const { error } = await lexiSupabase.from('jobs').upsert(rows, { onConflict: 'user_id,local_id', ignoreDuplicates: false });
+    if (error) {
+      const msg = String(error.message || '');
+      // If upsert fails due to schema mismatch, fall back silently — don't throw for column errors
       if (!/column|schema cache|relationship|foreign key|violates/i.test(msg)) throw error;
     }
   }
 
-  // Clean up job summary rows for docs that no longer exist locally
-  const currentLocalIds = new Set(docsWithCustomers.map(d => d.doc.id).filter(Boolean));
-  const { data: remoteJobs } = await lexiSupabase.from('jobs').select('local_id').eq('user_id', userId);
-  const toDelete = (remoteJobs || []).map(r => r.local_id).filter(lid => lid && !currentLocalIds.has(lid));
-  for (const lid of toDelete) {
-    await lexiSupabase.from('jobs').delete().eq('user_id', userId).eq('local_id', lid);
+  // Remove rows for docs no longer in local storage — only fetch local_id column
+  const { data: remoteJobs, error: fetchErr } = await lexiSupabase
+    .from('jobs').select('local_id').eq('user_id', userId);
+  if (fetchErr) return; // non-fatal — skip cleanup this cycle
+
+  const localIdSet = new Set(currentLocalIds);
+  const orphanIds = (remoteJobs || []).map(r => r.local_id).filter(lid => lid && !localIdSet.has(lid));
+  if (orphanIds.length) {
+    // Delete orphans in one call using in-filter
+    await lexiSupabase.from('jobs').delete().eq('user_id', userId).in('local_id', orphanIds);
   }
 }
 
@@ -1745,7 +1754,8 @@ function showSavedPopup(label, onDone, duration = 2500) {
   const timer = setTimeout(dismiss, duration);
 }
 
-const KEY_NAV_HINT = 'tq_nav_hint_suppressed';
+const KEY_NAV_HINT   = 'tq_nav_hint_suppressed';
+const KEY_DRAFT_QUOTE = 'lexi_draft_quote'; // in-progress quote, survives refresh
 
 function showNavHint() {
   if (localStorage.getItem(KEY_NAV_HINT)) return;
@@ -1783,6 +1793,87 @@ function setupNavHint() {
 }
 
 /* ===== PAGE NAVIGATION ===== */
+/* ===== QUOTE BUILDER TABS ===== */
+const QB_PAGES = ['page3', 'page-jobs', 'page-completion'];
+const QB_TAB_ORDER = ['page3', 'page-jobs', 'page-completion', 'qb-preview'];
+
+function _updateQBTabs(activePageId) {
+  document.querySelectorAll('.qb-tab').forEach(btn => {
+    const tab = btn.dataset.qbtab;
+    btn.classList.toggle('active', tab === activePageId);
+    const idx = QB_TAB_ORDER.indexOf(tab);
+    const activeIdx = QB_TAB_ORDER.indexOf(activePageId);
+    btn.classList.toggle('done', idx < activeIdx);
+  });
+}
+
+function _saveCustomerQuiet() {
+  const first = (getVal('custFirstName') || '').trim();
+  if (!first) return; // nothing to save yet
+  Object.assign(state.quote, customerQuoteFromForm());
+  upsertLocalCustomer(state.quote);
+  queueCustomerSync(state.quote, false);
+  queueDraftSave();
+}
+
+function initQuoteBuilderTabs() {
+  // Tab click handler
+  document.querySelectorAll('.qb-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.qbtab;
+      if (target === 'qb-preview') {
+        // Auto-save then open preview
+        _saveCustomerQuiet();
+        recalcTotals();
+        if (typeof openQuoteModalFromCurrentForm === 'function') openQuoteModalFromCurrentForm();
+        return;
+      }
+      // Moving forward from customer tab: save quietly
+      if (target === 'page-jobs' || target === 'page-completion') {
+        _saveCustomerQuiet();
+      }
+      if (target === 'page-jobs') {
+        setVal('jobPickerSearch', '');
+        updateJobPicker();
+        renderQuoteItems();
+      }
+      if (target === 'page-completion') recalcTotals();
+      showPage(target);
+    });
+  });
+
+  // Auto-save customer fields on blur
+  ['custFirstName','custLastName','custPhone','custEmail','custAddr','custPostcode'].forEach(id => {
+    document.getElementById(id)?.addEventListener('blur', _saveCustomerQuiet);
+  });
+
+  // One-off service add
+  document.getElementById('addCustomServiceBtn')?.addEventListener('click', addCustomService);
+
+  // Back button: within QB pages go to previous tab; on first tab show exit prompt
+  const _origPopstate = window._lexiQBPopstateAdded;
+  if (!_origPopstate) {
+    window._lexiQBPopstateAdded = true;
+    window.addEventListener('popstate', () => {
+      const activePage = document.querySelector('.page.active');
+      if (!activePage) return;
+      const pageId = activePage.id;
+      if (!QB_PAGES.includes(pageId)) return;
+      const idx = QB_TAB_ORDER.indexOf(pageId);
+      if (idx <= 0) {
+        // First QB page — ask if they want to exit
+        history.pushState({}, '');
+        if (confirm('Do you want to exit without finishing your quote?')) {
+          showPage('page4');
+        }
+        return;
+      }
+      history.pushState({}, '');
+      showPage(QB_TAB_ORDER[idx - 1]);
+    }, { capture: false });
+  }
+}
+
 function showPage(pageId) {
   if (pageId !== 'page1' && !canUseMainApp()) {
     requireSetupGuard();
@@ -1794,6 +1885,13 @@ function showPage(pageId) {
     pg.classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  // Show/hide quote builder tab bar
+  const tabBar = document.getElementById('quoteBuilderTabs');
+  const inQB = QB_PAGES.includes(pageId) || pageId === 'qb-preview';
+  if (tabBar) tabBar.style.display = inQB ? 'block' : 'none';
+  document.body.classList.toggle('qb-mode', inQB);
+  if (inQB) _updateQBTabs(pageId);
   // Hide loading overlay once the correct page is shown
   const overlay = document.getElementById('appLoadingOverlay');
   if (overlay) overlay.style.display = 'none';
@@ -3582,6 +3680,7 @@ function setupPageJobs() {
 
   // Mic / voice button
   document.getElementById('voiceBtn')?.addEventListener('click', toggleVoice);
+  document.getElementById('voiceBtnMaterials')?.addEventListener('click', toggleVoiceMaterials);
 
   // Back to customer details
   document.getElementById('backToCustomerBtn')?.addEventListener('click', () => {
@@ -3591,14 +3690,21 @@ function setupPageJobs() {
   // Save and go to completion
   document.getElementById('saveJobsGoToCompletionBtn')?.addEventListener('click', () => {
     recalcTotals();
-    const titleEl = document.querySelector('#page-completion .page-title');
-    if (titleEl) titleEl.textContent = 'Add Jobs';
     showPage('page-completion');
   });
 }
 
 /* ===== PAGE COMPLETION -TOTALS, SIGNATURE & SAVE ===== */
 function setupPageCompletion() {
+  // Back → The Work
+  document.getElementById('backToWorkBtn')?.addEventListener('click', () => showPage('page-jobs'));
+
+  // Save → save quote then open preview
+  document.getElementById('saveTermsGoToPreviewBtn')?.addEventListener('click', () => {
+    recalcTotals();
+    if (typeof openQuoteModalFromCurrentForm === 'function') openQuoteModalFromCurrentForm();
+  });
+
   // Doc type radio checkboxes
   document.getElementById('dtEstimate').addEventListener('change', () => setDocType('Estimate'));
   document.getElementById('dtQuote').addEventListener('change',    () => setDocType('Quote'));
@@ -3641,11 +3747,11 @@ function setupPageCompletion() {
     document.getElementById('custSigText').dataset.userEdited = '1';
   });
 
-  // Quote footer buttons
-  document.getElementById('previewQuoteBtn').addEventListener('click', () => { if (docTypeGuard()) openPreview(buildQuoteDoc(), 'quote'); });
-  document.getElementById('saveQuoteBtn').addEventListener('click', saveQuote);
-  document.getElementById('printQuoteBtn').addEventListener('click', () => { if (docTypeGuard()) printDoc(buildQuoteDoc()); });
-  document.getElementById('sendQuoteBtn').addEventListener('click', () => { if (docTypeGuard()) openQuoteModalFromCurrentForm(); });
+  // Quote footer buttons (optional — some may not exist depending on page variant)
+  document.getElementById('previewQuoteBtn')?.addEventListener('click', () => { if (docTypeGuard()) openPreview(buildQuoteDoc(), 'quote'); });
+  document.getElementById('saveQuoteBtn')?.addEventListener('click', saveQuote);
+  document.getElementById('printQuoteBtn')?.addEventListener('click', () => { if (docTypeGuard()) printDoc(buildQuoteDoc()); });
+  document.getElementById('sendQuoteBtn')?.addEventListener('click', () => { if (docTypeGuard()) openQuoteModalFromCurrentForm(); });
 
   // Signature canvas
   setupSignatureCanvas();
@@ -3661,6 +3767,32 @@ function setDocType(type) {
   personaliseText();
 }
 
+/* ── DRAFT QUOTE (survives refresh) ─────────────────────── */
+let _draftSaveTimer = null;
+function queueDraftSave() {
+  clearTimeout(_draftSaveTimer);
+  _draftSaveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(KEY_DRAFT_QUOTE, JSON.stringify(state.quote));
+    } catch(e) { /* storage full — ignore */ }
+  }, 800);
+}
+function clearDraftQuote() {
+  clearTimeout(_draftSaveTimer);
+  localStorage.removeItem(KEY_DRAFT_QUOTE);
+}
+function hasDraftQuote() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY_DRAFT_QUOTE) || 'null');
+    return d && (d.custFirstName || d.custLastName || (d.items && d.items.length));
+  } catch(e) { return false; }
+}
+function restoreDraftQuote() {
+  try {
+    return JSON.parse(localStorage.getItem(KEY_DRAFT_QUOTE) || 'null');
+  } catch(e) { return null; }
+}
+
 function prepareNewQuote() {
   if (state.editingDocId) {
     const doc = state.saved.find(d => d.id === state.editingDocId);
@@ -3669,6 +3801,19 @@ function prepareNewQuote() {
       return;
     }
   }
+
+  // Restore draft if one exists (customer or items were entered)
+  const draft = restoreDraftQuote();
+  if (draft && (draft.custFirstName || draft.custLastName || (draft.items && draft.items.length))) {
+    state.quote = draft;
+    state.editingDocId = null;
+    const saveBtn = document.getElementById('saveQuoteBtn');
+    if (saveBtn) saveBtn.textContent = '✓ Save';
+    populateQuoteForm();
+    toast('Draft restored — carry on where you left off.', 'info');
+    return;
+  }
+
   // Fresh quote
   const stored = parseInt(localStorage.getItem(KEY_REF) || '100');
   pendingRefNum = Math.max(stored, 100) + 1;
@@ -3838,17 +3983,41 @@ function makePickItem(item, category) {
   const qty = quoteItem ? quoteItem.qty : 0;
   const el = document.createElement('div');
   el.className = 'pick-item' + (inQuote ? ' added' : '');
-  el.setAttribute('role', 'button');
-  el.setAttribute('tabindex', '0');
-  el.setAttribute('aria-label', 'Add ' + (item.name || '') + ' to quote');
-  el.innerHTML = `
-    <div class="pick-name">${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}</div>
-    <span class="pick-price">${fmtPrice(item.price)}</span>
-    <span class="pick-add-btn">${inQuote ? qty : '+'}</span>
-  `;
-  const doAdd = () => addJobToQuote(item.id || item.name, category);
-  el.addEventListener('click', doAdd);
-  el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doAdd(); } });
+
+  if (inQuote) {
+    // Show inline stepper so they can adjust without scrolling
+    el.innerHTML = `
+      <div class="pick-name">${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}</div>
+      <span class="pick-price">${fmtPrice(item.price)}</span>
+      <div class="pick-stepper">
+        <button type="button" class="qty-btn qty-minus" aria-label="Remove one">−</button>
+        <span class="qty-value">${qty}</span>
+        <button type="button" class="qty-btn qty-plus" aria-label="Add one">+</button>
+      </div>
+    `;
+    el.querySelector('.qty-minus').addEventListener('click', e => {
+      e.stopPropagation();
+      if (quoteItem.qty > 1) { quoteItem.qty--; } else { state.quote.items.splice(state.quote.items.indexOf(quoteItem), 1); }
+      renderQuoteItems(); recalcTotals(); updateJobPicker();
+    });
+    el.querySelector('.qty-plus').addEventListener('click', e => {
+      e.stopPropagation();
+      quoteItem.qty++;
+      renderQuoteItems(); recalcTotals(); updateJobPicker();
+    });
+  } else {
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', 'Add ' + (item.name || '') + ' to quote');
+    el.innerHTML = `
+      <div class="pick-name">${esc(item.name)}${item.unit ? `<span class="pick-unit">(${esc(item.unit)})</span>` : ''}</div>
+      <span class="pick-price">${fmtPrice(item.price)}</span>
+      <span class="pick-add-btn">+</span>
+    `;
+    const doAdd = () => addJobToQuote(item.id || item.name, category);
+    el.addEventListener('click', doAdd);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doAdd(); } });
+  }
   return el;
 }
 
@@ -3903,50 +4072,79 @@ function updateRatesSection() {
   if (!section || !row) return;
 
   const c = state.company;
+  // Order: col1 row1, col2 row1, col1 row2, col2 row2
   const rates = [
-    { label: 'Hourly Rate',     value: c.rateHourly,  unit: 'hr'  },
-    { label: 'Half Day Rate',   value: c.rateHalfDay, unit: 'day' },
-    { label: 'Day Rate',        value: c.rateDay,     unit: 'day' },
-    { label: 'Call-out Charge', value: c.rateCallout, unit: ''    },
+    { label: 'Hourly Rate',     key: 'rateHourly',  value: c.rateHourly,  unit: 'hr'  },
+    { label: 'Call-out Charge', key: 'rateCallout', value: c.rateCallout, unit: ''    },
+    { label: 'Half Day Rate',   key: 'rateHalfDay', value: c.rateHalfDay, unit: 'day' },
+    { label: 'Day Rate',        key: 'rateDay',     value: c.rateDay,     unit: 'day' },
   ].filter(r => r.value != null && r.value > 0);
 
   if (!rates.length) { section.style.display = 'none'; return; }
   section.style.display = '';
   row.innerHTML = '';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
 
   rates.forEach(r => {
     const existing = state.quote.items.find(i => i.name === r.label && i.category === 'rate');
-    const qty = existing ? existing.qty : 0;
-    const card = document.createElement('div');
-    card.className = 'rate-card' + (qty > 0 ? ' rate-card-added' : '');
-    card.innerHTML = `
-      <div class="rate-card-label">${esc(r.label)}</div>
-      <div class="rate-card-price">${fmtPrice(r.value)}</div>
-      ${qty > 0 ? `
-      <div class="rate-card-stepper">
-        <button type="button" class="qty-btn qty-minus" aria-label="Remove one">-</button>
-        <span class="qty-value">${qty}</span>
-        <button type="button" class="qty-btn qty-plus" aria-label="Add one">+</button>
-      </div>` : `<div class="rate-card-add">Tap to add</div>`}
+    const checked = !!existing;
+    const currentPrice = existing ? existing.unitPrice : r.value;
+    const currentQty   = existing ? existing.qty       : 1;
+    const qtyLabel = r.unit === 'hr' ? 'Hours' : r.unit === 'day' ? 'Days' : 'Qty';
+
+    const row2 = document.createElement('div');
+    row2.className = 'rate-row' + (checked ? ' rate-row-active' : '');
+    row2.innerHTML = `
+      <label class="rate-row-check-label">
+        <input type="checkbox" class="rate-row-check" ${checked ? 'checked' : ''}>
+        <span class="rate-row-name">${esc(r.label)}</span>
+      </label>
+      <div class="rate-row-fields" style="${checked ? '' : 'display:none'}">
+        <div class="rate-row-field">
+          <label>Rate (£)</label>
+          <input type="number" class="rate-row-price" value="${currentPrice}" min="0" step="any">
+        </div>
+        <div class="rate-row-field">
+          <label>${qtyLabel}</label>
+          <input type="number" class="rate-row-qty" value="${currentQty}" min="1" step="1">
+        </div>
+      </div>
     `;
-    if (qty === 0) {
-      card.addEventListener('click', () => {
-        state.quote.items.push({ id: uid(), name: r.label, unitPrice: r.value, unit: r.unit, qty: 1, category: 'rate' });
-        renderQuoteItems(); recalcTotals(); updateRatesSection();
-      });
-    } else {
-      card.querySelector('.qty-minus').addEventListener('click', e => {
-        e.stopPropagation();
-        if (existing.qty > 1) { existing.qty--; } else { state.quote.items.splice(state.quote.items.indexOf(existing), 1); }
-        renderQuoteItems(); recalcTotals(); updateRatesSection();
-      });
-      card.querySelector('.qty-plus').addEventListener('click', e => {
-        e.stopPropagation();
-        existing.qty++;
-        renderQuoteItems(); recalcTotals(); updateRatesSection();
-      });
+
+    const checkbox  = row2.querySelector('.rate-row-check');
+    const fields    = row2.querySelector('.rate-row-fields');
+    const priceInput = row2.querySelector('.rate-row-price');
+    const qtyInput  = row2.querySelector('.rate-row-qty');
+
+    function applyRateItem() {
+      const price = parseFloat(priceInput.value) || r.value;
+      const qty   = parseInt(qtyInput.value, 10)  || 1;
+      const idx   = state.quote.items.findIndex(i => i.name === r.label && i.category === 'rate');
+      if (idx >= 0) {
+        state.quote.items[idx].unitPrice = price;
+        state.quote.items[idx].qty       = qty;
+      } else {
+        state.quote.items.push({ id: uid(), name: r.label, unitPrice: price, unit: r.unit, qty, category: 'rate' });
+      }
+      renderQuoteItems(); recalcTotals();
     }
-    row.appendChild(card);
+
+    function removeRateItem() {
+      const idx = state.quote.items.findIndex(i => i.name === r.label && i.category === 'rate');
+      if (idx >= 0) state.quote.items.splice(idx, 1);
+      renderQuoteItems(); recalcTotals();
+    }
+
+    checkbox.addEventListener('change', () => {
+      row2.classList.toggle('rate-row-active', checkbox.checked);
+      fields.style.display = checkbox.checked ? '' : 'none';
+      if (checkbox.checked) applyRateItem(); else removeRateItem();
+    });
+
+    priceInput.addEventListener('change', () => { if (checkbox.checked) applyRateItem(); });
+    qtyInput.addEventListener('change',   () => { if (checkbox.checked) applyRateItem(); });
+
+    row.appendChild(row2);
   });
 }
 
@@ -3972,20 +4170,33 @@ function addJobToQuote(jobId, category) {
 function addCustomItem() {
   const name  = getVal('customItemName').trim();
   const price = parseFloat(getVal('customItemPrice'));
-  const unit  = getVal('customItemUnit').trim();
   if (!name)        { document.getElementById('customItemName').classList.add('error');  return; }
   if (isNaN(price)) { document.getElementById('customItemPrice').classList.add('error'); return; }
   document.getElementById('customItemName').classList.remove('error');
   document.getElementById('customItemPrice').classList.remove('error');
 
-  // One-off items added from the Materials section are always materials
-  state.quote.items.push({ id: uid(), name, unitPrice: price, unit: unit || 'each', qty: 1, category: 'materials' });
-  setVal('customItemName',''); setVal('customItemPrice',''); setVal('customItemUnit','');
+  state.quote.items.push({ id: uid(), name, unitPrice: price, unit: 'each', qty: 1, category: 'materials' });
+  setVal('customItemName',''); setVal('customItemPrice','');
+  renderQuoteItems();
+  recalcTotals();
+}
+
+function addCustomService() {
+  const name  = getVal('customServiceName').trim();
+  const price = parseFloat(getVal('customServicePrice'));
+  if (!name)        { document.getElementById('customServiceName').classList.add('error');  return; }
+  if (isNaN(price)) { document.getElementById('customServicePrice').classList.add('error'); return; }
+  document.getElementById('customServiceName').classList.remove('error');
+  document.getElementById('customServicePrice').classList.remove('error');
+
+  state.quote.items.push({ id: uid(), name, unitPrice: price, unit: '', qty: 1, category: 'service' });
+  setVal('customServiceName',''); setVal('customServicePrice','');
   renderQuoteItems();
   recalcTotals();
 }
 
 function renderQuoteItems() {
+  queueDraftSave(); // persist any item changes for refresh survival
   const container = document.getElementById('quoteItemsContainer');
   const empty     = document.getElementById('quoteItemsEmpty');
 
@@ -4187,6 +4398,7 @@ function saveQuote() {
     }
   }
 
+  clearDraftQuote(); // quote saved to jobs — draft no longer needed
   save();
   // Sync immediately -don't rely on the debounced timer in case of a quick refresh
   if (savedDocsSyncReady && lexiSupabase && lexiAuthSession?.user?.id) {
@@ -4258,7 +4470,7 @@ async function jobsRefresh() {
   if (btn) btn.style.opacity = '0.5';
   // 1. Close any stuck modals
   ['customerDashboardModal','quoteModal','invoiceModal','receiptModal',
-   'editChoiceModal','customerEditChoiceModal','previewModal'].forEach(id => {
+   'editChoiceModal','previewModal'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
@@ -4463,6 +4675,71 @@ function matchVoiceToJob(transcript) {
   setVal('vnfUnit', '');
   document.getElementById('voiceNotFoundModal').style.display = 'flex';
   setTimeout(() => document.getElementById('vnfPrice')?.focus(), 150);
+}
+
+function toggleVoiceMaterials() {
+  const isSR = ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+  if (!isSR) { toast('Voice input needs Chrome or Edge.', 'error'); return; }
+  if (voiceRecording) { voiceRecogniser && voiceRecogniser.stop(); stopVoiceMaterialsUI(); return; }
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  voiceRecogniser = new SR();
+  voiceRecogniser.continuous = false;
+  voiceRecogniser.interimResults = false;
+  voiceRecogniser.lang = 'en-GB';
+  voiceRecogniser.maxAlternatives = 1;
+
+  voiceRecogniser.onstart = () => {
+    voiceRecording = true;
+    document.getElementById('voiceBtnMaterials')?.classList.add('recording');
+    const box = document.getElementById('voiceBoxMaterials');
+    if (box) { box.textContent = 'Listening… speak a material name.'; box.classList.remove('hidden'); }
+  };
+  voiceRecogniser.onresult = e => {
+    const transcript = e.results[0][0].transcript;
+    const box = document.getElementById('voiceBoxMaterials');
+    if (box) box.textContent = `Heard: "${transcript}"`;
+    // Match against materials only
+    const t = transcript.toLowerCase().trim();
+    const matches = state.priceList.filter(j =>
+      j.category === 'materials' &&
+      (j.name.toLowerCase().includes(t) || t.includes(j.name.toLowerCase()))
+    );
+    if (matches.length === 1) {
+      addJobToQuote(matches[0].id || matches[0].name, 'materials');
+      if (box) box.textContent = `Added: ${matches[0].name}`;
+      setTimeout(() => box?.classList.add('hidden'), 2500);
+    } else if (matches.length > 1) {
+      if (box) box.classList.add('hidden');
+      // Reuse the voice pick modal
+      const list = document.getElementById('voicePickList');
+      list.innerHTML = '';
+      matches.forEach(j => {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'vpick-btn';
+        btn.innerHTML = `<span>${esc(j.name)}</span><span class="vpick-btn-price">${fmtPrice(j.price)}</span>`;
+        btn.addEventListener('click', () => { addJobToQuote(j.id || j.name, 'materials'); document.getElementById('voicePickModal').style.display = 'none'; });
+        list.appendChild(btn);
+      });
+      document.getElementById('voicePickModal').style.display = 'flex';
+    } else {
+      if (box) box.textContent = `"${transcript}" not found — try the search above.`;
+      setTimeout(() => box?.classList.add('hidden'), 3000);
+    }
+  };
+  voiceRecogniser.onerror = e => {
+    const msgs = { 'not-allowed': 'Microphone access denied.', 'no-speech': 'No speech detected. Try again.', 'aborted': '' };
+    const msg = msgs[e.error] || `Voice error: ${e.error}.`;
+    if (msg) toast(msg, 'error');
+    stopVoiceMaterialsUI();
+  };
+  voiceRecogniser.onend = () => stopVoiceMaterialsUI();
+  voiceRecogniser.start();
+}
+
+function stopVoiceMaterialsUI() {
+  voiceRecording = false;
+  document.getElementById('voiceBtnMaterials')?.classList.remove('recording');
 }
 
 function closeVoiceNotFoundModal() {
@@ -5638,41 +5915,10 @@ function setupModals() {
     activeCustomerGroup = null;
     if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
   });
-  document.getElementById('closeCustEditChoiceBtn')?.addEventListener('click', () => document.getElementById('customerEditChoiceModal').style.display = 'none');
-  document.getElementById('custEditDetailsBtn')?.addEventListener('click', () => customerEditPickDoc('details'));
-  document.getElementById('custEditJobBtn')?.addEventListener('click', () => customerEditPickDoc('job'));
-  document.getElementById('custEditMoneyBtn')?.addEventListener('click', () => customerEditPickDoc('money'));
-  document.getElementById('custEditTermsBtn')?.addEventListener('click', () => customerEditPickDoc('terms'));
-  document.getElementById('custEditInvoiceBtn')?.addEventListener('click', () => {
-    document.getElementById('customerEditChoiceModal').style.display = 'none';
-    document.getElementById('customerDashboardModal').style.display = 'none';
-    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
-    if (docId) previewInvoice(docId);
-  });
-  document.getElementById('custEditReceiptBtn')?.addEventListener('click', () => {
-    document.getElementById('customerEditChoiceModal').style.display = 'none';
-    // Keep customer dashboard open -warning modal overlays on top; X returns to dashboard
-    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
-    if (docId) handleReceiptRequest(docId);
-  });
-  document.getElementById('custEditAddPhotoBtn')?.addEventListener('click', () => {
-    document.getElementById('customerEditChoiceModal').style.display = 'none';
-    const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
-    if (docId) openPhotosModal(docId);
-  });
-  document.getElementById('custEditDownloadBtn')?.addEventListener('click', () => {
-    document.getElementById('customerEditChoiceModal').style.display = 'none';
-    if (activeCustomerGroup) {
-      const body = document.getElementById('customerDashboardBody');
-      downloadCustomerDashboard(activeCustomerGroup.name, body.innerHTML);
-    }
-  });
   document.getElementById('custEditDeleteBtn')?.addEventListener('click', () => {
     const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
     if (!docId) return;
     if (!confirm('Lexi says: Are you sure you want to delete this? Once it\'s gone, it\'s gone!')) return;
-    // Only close modals after user confirms
-    document.getElementById('customerEditChoiceModal').style.display = 'none';
     document.getElementById('customerDashboardModal').style.display = 'none';
     state.saved = state.saved.filter(d => d.id !== docId);
     save();
@@ -5733,7 +5979,6 @@ function setupModals() {
    document.getElementById('previewFirstModal'),
    document.getElementById('bizInfoModal'),
    document.getElementById('customerDashboardModal'),
-   document.getElementById('customerEditChoiceModal'),
    document.getElementById('customerDetailsEditModal')].forEach(m => {
     m?.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
   });
@@ -5749,17 +5994,13 @@ function setupModals() {
       openInvoiceModal(docId);
       return;
     }
-    // If in a customer dashboard context, open the full edit menu (gives access to Jobs, Terms, Signature etc.)
-    if (activeCustomerGroup && docId) {
-      document.getElementById('customerDashboardModal').style.display = 'flex';
-      openCustomerEditChoice(docId);
-      return;
-    }
-    // Otherwise show the edit choice modal so user can pick what to edit
+    // Load the quote into the builder for editing
     if (type === 'quote' && docId) {
-      openEditChoice(docId);
+      closePreview();
+      loadQuoteIntoBuilder(docId);
     } else if (type === 'quote' && !docId) {
-      // New quote in progress -already on page3, nothing needed
+      closePreview();
+      showPage('page3');
     }
   });
 
@@ -6293,7 +6534,96 @@ function openQuoteModalFromCurrentForm() {
     ref: q.ref,
     photos: { before: [], after: [] }
   };
-  populateQuoteSendModal(activeQuoteDraftDoc);
+  // Prime modal fields silently so Send from the preview works
+  populateQuoteSendModal(activeQuoteDraftDoc, { show: false });
+  // Go straight to the actual document preview — no intermediate form
+  quotePreviewed = true;
+  openPreview(buildDocHtml(activeQuoteDraftDoc, 'quote'), 'quote', null);
+}
+
+function populateQBPreviewPage(doc) {
+  const q = doc.quote || {};
+  const label = q.type || doc.type || 'Quote';
+  const el = document.getElementById('qbpTitle');
+  if (el) el.textContent = label + ' Preview';
+  setVal('qbpCustFirst', q.custFirstName || '');
+  setVal('qbpCustLast', q.custLastName || '');
+  setVal('qbpRef', q.ref || doc.ref || '');
+  setVal('qbpDate', q.date || doc.date || todayStr());
+  setVal('qbpItems', (q.items || []).map(i => `${i.name}, ${Number(i.unitPrice || 0).toFixed(2)}`).join('\n'));
+  setVal('qbpTotal', (doc.total || calcTotal(q) || 0).toFixed(2));
+  const docTypeLower = (q.type || 'quote').toLowerCase();
+  setVal('qbpNotes', `Thank you for allowing me to give you this free, no obligation ${docTypeLower} today. Please find below a full breakdown of the proposed work and costs. There is no pressure and no obligation to proceed. Please read through at your leisure, discuss it with anyone you need to, and let me know if you have any questions.`);
+  const photosEl = document.getElementById('qbpIncludePhotos');
+  if (photosEl) photosEl.checked = false;
+}
+
+function collectQBPreviewForm() {
+  return {
+    custFirstName: getVal('qbpCustFirst'),
+    custLastName:  getVal('qbpCustLast'),
+    ref:           getVal('qbpRef'),
+    date:          getVal('qbpDate'),
+    itemsText:     getVal('qbpItems'),
+    totalOverride: getVal('qbpTotal'),
+    quoteNotes:    getVal('qbpNotes'),
+    includePhotos: document.getElementById('qbpIncludePhotos')?.checked || false
+  };
+}
+
+function setupQBPreviewPage() {
+  document.getElementById('qbpBackBtn')?.addEventListener('click', () => showPage('page-completion'));
+
+  document.getElementById('qbpPreviewBtn')?.addEventListener('click', () => {
+    const doc = getActiveQuoteDoc();
+    if (!doc) return;
+    const data = collectQBPreviewForm();
+    // Sync back into the legacy modal fields so send flow works
+    setVal('quoteCustFirst', data.custFirstName); setVal('quoteCustLast', data.custLastName);
+    setVal('quoteRef', data.ref); setVal('quoteSendDate', data.date);
+    setVal('quoteItemsText', data.itemsText); setVal('quoteTotalOverride', data.totalOverride);
+    setVal('quoteSendNotes', data.quoteNotes);
+    const qi = document.getElementById('quoteIncludePhotos'); if (qi) qi.checked = data.includePhotos;
+    quotePreviewed = true;
+    openPreview(buildDocHtml(applyDocEdits(doc, data), 'quote', data), 'quote', doc.id || null);
+  });
+
+  document.getElementById('qbpSendBtn')?.addEventListener('click', () => {
+    document.getElementById('qbpPreviewBtn')?.click();
+  });
+
+  document.getElementById('qbpSaveBtn')?.addEventListener('click', () => {
+    const doc = getActiveQuoteDoc();
+    if (!doc) return;
+    const data = collectQBPreviewForm();
+    const editedDoc = applyDocEdits(doc, data);
+    const newId = uid();
+    const q = editedDoc.quote || {};
+    const newDoc = {
+      id: newId,
+      quote: q,
+      company: { ...state.company },
+      custName: buildCustName(q),
+      total: editedDoc.total || calcTotal(q),
+      type: editedDoc.type || q.type || 'Estimate',
+      date: editedDoc.date || q.date || todayStr(),
+      ref: editedDoc.ref || q.ref || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      invoiceSent: false, paid: false, paidAmount: 0, paidDate: '', payments: []
+    };
+    state.saved.unshift(newDoc);
+    save();
+    upsertLocalCustomer(q);
+    clearDraftQuote();
+    updateSavedBadge();
+    refreshSavedDocs();
+    if (savedDocsSyncReady && lexiSupabase && lexiAuthSession?.user?.id) {
+      saveSavedDocsToSupabase().catch(err => console.warn('Sync after save:', err));
+    }
+    showSavedPopup("Done. I've got it.");
+    showPage('page4');
+  });
 }
 
 function openQuoteModal(docId) {
@@ -7677,6 +8007,13 @@ function buildCustomerJobSection(d, jobNum = 0) {
       <span>${d.acceptedBy ? `Signed by ${esc(d.acceptedBy)}` : 'Customer has accepted this quote'}${d.acceptedAt ? ` on ${new Date(d.acceptedAt).toLocaleDateString('en-GB')}` : ''}</span>
     </div>` : '';
 
+  const jobActionBtns = `
+    <div class="cdv-job-actions">
+      <button type="button" class="cdv-action-btn cdv-action-edit" data-prog-doc-id="${esc(d.id)}" data-prog-action="editQuote">✏ Edit Quote</button>
+      <button type="button" class="cdv-action-btn cdv-action-invoice" data-prog-doc-id="${esc(d.id)}" data-prog-action="invoice">Invoice</button>
+      <button type="button" class="cdv-action-btn cdv-action-receipt" data-prog-doc-id="${esc(d.id)}" data-prog-action="receipt">Receipt</button>
+    </div>`;
+
   return `
     <div class="cdv-job-card">
       <div class="cdv-job-header">
@@ -7688,6 +8025,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
           data-prog-doc-id="${esc(d.id)}" data-prog-action="${statusClass === 'paid' ? 'receipt' : statusClass === 'invoiced' || statusClass === 'overdue' ? 'invoice' : 'quote'}"
           title="Open ${statusLabel}">${esc(statusLabel)}</button>
       </div>
+      ${jobActionBtns}
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
       ${acceptanceHtml}
@@ -7788,8 +8126,10 @@ function renderSingleCustomerDashboard(group, groups) {
   const modal = document.getElementById('customerDashboardModal');
 
   const dashEditBtn = document.getElementById('custDashEditBtn');
-  if (dashEditBtn) dashEditBtn.onclick = () =>
-    openCustomerEditChoice(group.docs.length === 1 ? firstDocId : null);
+  if (dashEditBtn) dashEditBtn.onclick = () => {
+    activeEditDocId = group.docs.length === 1 ? firstDocId : null;
+    loadQuoteIntoBuilder(activeEditDocId || firstDocId);
+  };
 
   // Camera button - open add photo flow for first doc
   const dashCameraBtn = document.getElementById('custDashCameraBtn');
@@ -7807,15 +8147,16 @@ function renderSingleCustomerDashboard(group, groups) {
   const dashDeleteBtn = document.getElementById('custDashDeleteBtn');
   if (dashDeleteBtn) dashDeleteBtn.onclick = () => openCustomerDeleteChoice(group);
 
-  // Job status progression -event delegation
+  // Job status progression + per-job action buttons — event delegation
   body.addEventListener('click', e => {
     const btn = e.target.closest('[data-prog-doc-id]');
     if (!btn) return;
     const docId  = btn.dataset.progDocId;
     const action = btn.dataset.progAction;
     if (action === 'receipt') {
-      // Keep dashboard open -warning modal overlays on top; X returns to dashboard
       handleReceiptRequest(docId);
+    } else if (action === 'editQuote') {
+      loadQuoteIntoBuilder(docId);
     } else {
       document.getElementById('customerDashboardModal').style.display = 'none';
       if      (action === 'quote')   openQuoteModal(docId);
@@ -7943,17 +8284,19 @@ function openUpdateFromCal(docId) {
 }
 
 function openCustomerEditChoice(docId) {
-  activeEditDocId = docId || null;
-  // Personalise the title with customer first name if available
-  try {
-    const first = (activeCustomerGroup?.docs[0]?.quote?.custFirstName || '').trim();
-    const titleEl = document.getElementById('customerEditChoiceModal')?.querySelector('.modal-title');
-    if (titleEl) titleEl.textContent = first ? `What would you like to edit, ${first}?` : 'What would you like to edit?';
-  } catch(e) {}
-  // Reset to main choice view and show
-  document.getElementById('custEditChoiceMain').style.display = '';
-  document.getElementById('custEditJobPicker').style.display = 'none';
-  document.getElementById('customerEditChoiceModal').style.display = 'flex';
+  // Removed the intermediate "What would you like to edit?" modal.
+  // Update now goes straight to the QB builder.
+  loadQuoteIntoBuilder(docId || activeEditDocId || activeCustomerGroup?.docs[0]?.id);
+}
+
+function loadQuoteIntoBuilder(docId) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  document.getElementById('customerDashboardModal').style.display = 'none';
+  state.editingDocId = docId;
+  clearDraftQuote();
+  prepareNewQuote();
+  showPage('page3');
 }
 
 function customerEditPickDoc(editType) {
@@ -7967,26 +8310,12 @@ function customerEditPickDoc(editType) {
   if (group.docs.length === 1) {
     executeCustomerEdit(editType, group.docs[0].id);
   } else {
-    // Show job picker
-    document.getElementById('custEditChoiceMain').style.display = 'none';
-    const jobList = document.getElementById('custEditJobPicker');
-    jobList.innerHTML = `
-      <p class="cec-pick-label">Which job?</p>
-      ${group.docs.map(d => `
-        <button type="button" class="cec-job-option" data-id="${d.id}" data-type="${editType}">
-          <span class="cec-job-ref">${esc(d.invoiceRef || d.ref || d.quote?.ref || 'No ref')}</span>
-          <span class="cec-job-desc">${esc((d.quote?.items || []).map(i => i.name).join(', ') || 'Job')}</span>
-          <span class="cec-job-total">${fmtPrice(d.total || 0)}</span>
-        </button>`).join('')}`;
-    jobList.style.display = '';
-    jobList.querySelectorAll('.cec-job-option').forEach(btn => {
-      btn.addEventListener('click', () => executeCustomerEdit(btn.dataset.type, btn.dataset.id));
-    });
+    // Multiple jobs — use first doc (per-job buttons in dashboard handle specific doc selection)
+    executeCustomerEdit(editType, group.docs[0].id);
   }
 }
 
 function executeCustomerEdit(editType, docId) {
-  document.getElementById('customerEditChoiceModal').style.display = 'none';
   if (editType === 'details') {
     openCustomerDetailsEdit(docId);
   } else if (editType === 'job') {
@@ -8051,9 +8380,8 @@ function persistCustomerDetailsForm() {
 function saveCustomerDetails() {
   persistCustomerDetailsForm();
 
-  // Close edit modals and return to dashboard
+  // Close edit modal and return to dashboard
   document.getElementById('customerDetailsEditModal').style.display = 'none';
-  document.getElementById('customerEditChoiceModal').style.display  = 'none';
 
   // Re-render and show the customer dashboard
   const group        = activeCustomerGroup;
@@ -10773,8 +11101,8 @@ function sendLexiNotification(title, body, tag = 'lexi') {
     const n = new Notification(title, {
       body,
       tag,
-      icon: '1 Lexi Handles It Transparent.png',
-      badge: '1 Lexi Handles It Transparent.png',
+      icon: 'photos/1 Lexi Handles It Transparent.png',
+      badge: 'photos/1 Lexi Handles It Transparent.png',
     });
     setTimeout(() => n.close(), 8000);
   } catch(e) { console.warn('Notification failed:', e); }
