@@ -582,6 +582,18 @@ h3 { font-size: 1rem; font-weight: 600; }
   justify-content: space-between;
   margin-bottom: 4px;
 }
+.obo-back-btn {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--walnut);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 4px 0;
+  margin-bottom: 8px;
+}
+.obo-back-btn:hover { text-decoration: underline; }
 .bulk-back-btn {
   font-size: 0.8rem;
   color: var(--walnut);
@@ -604,8 +616,9 @@ h3 { font-size: 1rem; font-weight: 600; }
 
 /* ===== JOBS ADDED (Your Price List) CARD ===== */
 .jobs-added-card {
-  border: 2px solid var(--walnut);
-  background: linear-gradient(160deg, #fff 0%, var(--walnut-tint) 100%);
+  background: #f2f2f2;
+  border: 1.5px solid #ccc;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   margin-top: 8px;
 }
 .jobs-added-card .card-header-row {
@@ -1989,6 +2002,23 @@ input[type="text"].sig-text-input:focus {
   color: var(--walnut);
 }
 
+.pl-sort-select {
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  color: var(--text-main, #1a1a1a);
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.price-item-cost {
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 2px;
+}
+
 .search-input {
   flex: 1;
   padding: 10px 12px;
@@ -2109,33 +2139,48 @@ input[type="text"].sig-text-input:focus {
 .icon-btn.delete:hover { color: var(--danger); background: var(--danger-l); }
 
 .price-item-edit-row {
-  display: grid;
-  grid-template-columns: 1fr 72px 60px auto auto;
-  gap: 6px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
-  padding: 8px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--cream-d);
 }
-
+.pie-row1 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pie-row1 .edit-name {
+  flex: 1;
+  min-width: 0;
+}
+.pie-row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.pie-row3 {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
 .price-item-edit-row input {
-  min-width: 0;          /* allows grid inputs to shrink below content width */
+  min-width: 0;
   width: 100%;
-  padding: 7px 8px;
+  padding: 7px 10px;
   border: 1.5px solid var(--border);
   border-radius: 6px;
   font-size: 0.88rem;
+  font-family: inherit;
   box-sizing: border-box;
 }
-
 .price-item-edit-row input:focus {
   outline: none;
   border-color: var(--walnut);
 }
-
-.price-item-edit-row .btn-sm {
-  padding: 6px 10px;
-  flex-shrink: 0;
+.pie-row3 .btn-sm {
+  padding: 7px 18px;
 }
 
 .badge {
@@ -6446,24 +6491,20 @@ input[type="text"].sig-text-input:focus {
 }
 .jobs-refresh-btn:hover { background: var(--cream); border-color: var(--sage); }
 
-.jobs-spreadsheet-btn {
+.ss-toggle-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 7px 11px;
-  background: var(--walnut);
-  border: 1.5px solid var(--walnut);
-  border-radius: 8px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: #fff;
+  gap: 7px;
   cursor: pointer;
-  white-space: nowrap;
   flex-shrink: 0;
-  transition: background 0.15s;
 }
-.jobs-spreadsheet-btn:hover { background: #6a4828; }
+.ss-toggle-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--walnut);
+  min-width: 64px;
+  text-align: right;
+}
 
 /* ===== SPREADSHEET VIEW ===== */
 .spreadsheet-shell {
@@ -6494,6 +6535,7 @@ input[type="text"].sig-text-input:focus {
   align-items: center;
   gap: 12px;
 }
+.spreadsheet-topbar-right .ss-toggle-label { color: #fff; min-width: 0; }
 .spreadsheet-rotate-hint {
   display: flex;
   align-items: center;
@@ -7251,6 +7293,194 @@ body.qb-mode #page3,
 body.qb-mode #page-jobs,
 body.qb-mode #page-completion {
   padding-top: calc(var(--header-h) + 58px);
+}
+
+/* ── SERVICES / MATERIALS TABS (Add Services & Materials card) ── */
+.obo-tab-bar {
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+}
+.obo-tabs-inner {
+  display: flex;
+  gap: 4px;
+}
+.obo-tab {
+  flex: 1;
+  padding: 9px 6px 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--walnut-l);
+  background: var(--cream);
+  border: 2px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  position: relative;
+  bottom: -2px;
+}
+.obo-tab:hover {
+  background: var(--walnut-tint);
+  color: var(--walnut);
+}
+.obo-tab.active {
+  background: var(--white);
+  color: var(--walnut);
+  border-color: var(--border);
+  border-bottom: 2px solid var(--white);
+  z-index: 1;
+}
+
+/* ── TRADE AUTO-FILL ─────────────────────────────────────── */
+.autofill-prompt {
+  margin-bottom: 16px;
+}
+.autofill-q {
+  font-size: 0.88rem;
+  color: var(--text-main, #1a1a1a);
+  font-style: normal;
+  margin: 0 0 10px;
+}
+.autofill-btns {
+  display: flex;
+  gap: 8px;
+}
+.btn-autofill-yes {
+  flex: 1;
+  padding: 9px 12px;
+  background: var(--walnut);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-autofill-yes:hover { opacity: 0.85; }
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.card-title-row .card-title {
+  margin-bottom: 0;
+}
+.rates-trade-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--gold);
+  background: var(--gold-light);
+  border: 1.5px solid var(--gold-mid);
+  border-radius: 20px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.rates-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+.btn-outline-walnut {
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--walnut);
+  border: 1.5px solid var(--walnut);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-outline-walnut:hover {
+  background: var(--walnut);
+  color: #fff;
+}
+
+.btn-change-trade {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--walnut);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.btn-change-trade:hover { opacity: 0.7; }
+
+.btn-autofill-no {
+  flex: 1;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--walnut);
+  border: 1.5px solid var(--walnut);
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-autofill-no:hover {
+  background: var(--walnut);
+  color: #fff;
+}
+.btn-autofill {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 14px;
+  background: transparent;
+  border: 1.5px dashed var(--walnut);
+  border-radius: 8px;
+  color: var(--walnut);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-autofill:hover {
+  background: var(--walnut);
+  color: #fff;
+}
+
+#tradePickerModal .modal-card {
+  padding: 24px 20px 20px;
+}
+
+.tpm-trade-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.tpm-trade-btn {
+  padding: 10px 6px;
+  border: 1.5px solid var(--border-color, #ddd);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text-main, #1a1a1a);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.tpm-trade-btn:hover,
+.tpm-trade-btn.active {
+  background: var(--walnut);
+  border-color: var(--walnut);
+  color: #fff;
 }
 
 /* ── ONE-OFF SERVICE (quote builder) ─────────────────────── */

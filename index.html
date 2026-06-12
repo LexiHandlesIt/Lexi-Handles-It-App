@@ -25,7 +25,7 @@
         <img src="photos/2 So you dont have to transparent.png" alt="So you don't have to" class="auth-strap-img" onerror="this.style.display='none'">
       </div>
       <h1 id="authTitle">Welcome</h1>
-      <p class="auth-sub">Hi, I'm Lexi, your AI assistant for the business side of your trade.</p>
+      <p class="auth-sub">Hi. I'm Lexi. I'm an avatar built to help you handle the business side of trade.</p>
       <p class="auth-trial"><strong>Start with 3 months free. No card needed.</strong></p>
 
       <div class="auth-tabs" role="tablist" aria-label="Choose sign up or log in">
@@ -175,51 +175,6 @@
       </div>
     </div>
     </div>
-
-    </div><!-- /.ob-card -->
-  </div>
-
-  <!-- PRICE LIST ONBOARDING -->
-  <div id="plOnboardingModal" class="ob-screen" style="display:none" role="dialog" aria-modal="true" aria-labelledby="plOnboardingTitle">
-    <div class="ob-card pl-card">
-
-      <div class="pl-content">
-        <div class="ob-logo-pair">
-          <img src="photos/1 Lexi Handles It Transparent.png" alt="Lexi Handles It" class="ob-logo-img" onerror="this.style.display='none'">
-          <img src="photos/2 So you dont have to transparent.png" alt="So you don't have to" class="ob-strap-img" onerror="this.style.display='none'">
-        </div>
-        <p class="ob-intro" id="plOnboardingTitle">Right, there are three ways to build your price list. You can...</p>
-
-        <div class="ob-steps">
-          <div class="ob-step">
-            <span class="ob-num">1</span>
-            <div class="ob-step-text">
-              <strong>Upload a file</strong>
-              <span>Drop in a CSV or TXT and I'll pull your jobs straight in.</span>
-            </div>
-          </div>
-          <div class="ob-step">
-            <span class="ob-num">2</span>
-            <div class="ob-step-text">
-              <strong>Paste a list</strong>
-              <span>Got a list already? Paste it in. One job per line, name then price.</span>
-            </div>
-          </div>
-          <div class="ob-step">
-            <span class="ob-num">3</span>
-            <div class="ob-step-text">
-              <strong>Add jobs one by one</strong>
-              <span>Type in a job name and price. Quick and easy.</span>
-            </div>
-          </div>
-        </div>
-
-        <button id="plOnboardingBtn" class="btn btn-sage btn-full ob-start-btn">Let's build my price list Lexi</button>
-      </div>
-
-      <div class="pl-portrait-wrap" id="plPortraitWrap">
-        <img src="photos/Lexi Portrait Transparent 4.png" alt="Lexi" class="pl-portrait" onerror="this.parentElement.style.display='none'">
-      </div>
 
     </div><!-- /.ob-card -->
   </div>
@@ -430,6 +385,36 @@
       <div class="vnf-actions">
         <button type="button" class="btn btn-primary w-100" id="vnfAddBothBtn">Save &amp; Add to Jobs</button>
         <button type="button" class="btn btn-outline w-100" id="vnfAddOnceBtn">Save for Customer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRADE PICKER MODAL -->
+  <div class="modal-overlay" id="tradePickerModal" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width:420px">
+      <button class="modal-close" id="tpmCancelBtn" aria-label="Close">&times;</button>
+      <h2 class="card-title" style="margin-bottom:6px">What's your trade(s)?</h2>
+      <p class="card-desc" style="margin-bottom:16px">Select one or more. We'll fill in UK average figures — adjust anything that doesn't match your area.</p>
+      <div class="tpm-trade-grid">
+        <button type="button" class="tpm-trade-btn" data-trade="Builder">Builder</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Carpenter">Carpenter</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Decorator">Decorator</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Electrician">Electrician</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Gardener">Gardener</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Gas Engineer">Gas Engineer</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Plasterer">Plasterer</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Plumber">Plumber</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Roofer">Roofer</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Tiler">Tiler</button>
+        <button type="button" class="tpm-trade-btn" data-trade="Other">Other</button>
+      </div>
+      <div id="tpmOtherWrap" style="display:none;margin-top:12px">
+        <input type="text" id="tpmOtherInput" placeholder="Enter your trade" class="form-input" style="width:100%;margin-bottom:10px">
+        <button type="button" class="btn btn-walnut btn-full" id="tpmOtherConfirmBtn">Save &amp; Continue</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="button" class="btn btn-outline" id="tpmCancelBtnFooter" style="flex:1">Cancel</button>
+        <button type="button" class="btn btn-walnut" id="tpmConfirmBtn" style="flex:2">Fill In</button>
       </div>
     </div>
   </div>
@@ -772,7 +757,10 @@
             <div class="toggle-label">Push notifications</div>
             <div class="toggle-desc">Get alerted when a quote is accepted, even when the app is closed.</div>
           </div>
-          <button type="button" class="btn btn-outline notif-toggle-btn" id="notifToggleBtn" style="font-size:0.8rem;padding:6px 14px;border-color:var(--walnut);color:var(--walnut)" onclick="openNotificationSettings()">Enable</button>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notifToggleBtn">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
         </div>
       </div>
 
@@ -792,37 +780,87 @@
 
       <!-- My Rates -->
       <div class="card" id="myRatesCard" style="border:2px solid var(--walnut)">
-        <h2 class="card-title">My Rates <button type="button" class="field-info-btn" data-title="My Rates" data-body="Set your standard labour rates here. These appear as quick-pick buttons when you build a quote, saving you time. You can always adjust the quantity on any individual quote.">?</button></h2>
-        <div class="form-grid-2 rates-grid-2col">
-          <div class="form-group">
-            <label for="rateHourly">Hourly Rate</label>
-            <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateHourly" min="0" step="0.01" placeholder="0.00"></div>
-          </div>
-          <div class="form-group">
-            <label for="rateHalfDay">Half Day Rate</label>
-            <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateHalfDay" min="0" step="0.01" placeholder="0.00"></div>
-          </div>
-          <div class="form-group">
-            <label for="rateDay">Day Rate</label>
-            <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateDay" min="0" step="0.01" placeholder="0.00"></div>
-          </div>
-          <div class="form-group">
-            <label for="rateCallout">Call-out Charge</label>
-            <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateCallout" min="0" step="0.01" placeholder="0.00"></div>
+        <div class="card-title-row">
+          <h2 class="card-title">Add Rates <button type="button" class="field-info-btn" data-title="My Rates" data-body="Set your standard labour rates here. These appear as quick-pick buttons when you build a quote, saving you time. You can always adjust the quantity on any individual quote.">?</button></h2>
+          <span class="rates-trade-label" id="ratesTradeLabel" style="display:none"></span>
+        </div>
+        <div class="autofill-prompt" id="autoFillRatesPrompt">
+          <p class="autofill-q">Would you like me to fill in the average rates for your trade?</p>
+          <div class="autofill-btns">
+            <button type="button" class="btn btn-autofill-yes" id="autoFillRatesBtn">Yes, autofill please</button>
+            <button type="button" class="btn btn-autofill-no" id="autoFillRatesNoBtn">No, I'll add it myself</button>
           </div>
         </div>
-        <button type="button" class="btn btn-walnut btn-full" id="saveRatesBtn" style="margin-top:12px">Save Rates</button>
+        <div id="ratesManualSection" style="display:none">
+          <div class="form-grid-2 rates-grid-2col">
+            <div class="form-group">
+              <label for="rateHourly">Hourly Rate</label>
+              <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateHourly" min="0" step="0.01" placeholder="0.00"></div>
+            </div>
+            <div class="form-group">
+              <label for="rateHalfDay">Half Day Rate</label>
+              <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateHalfDay" min="0" step="0.01" placeholder="0.00"></div>
+            </div>
+            <div class="form-group">
+              <label for="rateDay">Day Rate</label>
+              <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateDay" min="0" step="0.01" placeholder="0.00"></div>
+            </div>
+            <div class="form-group">
+              <label for="rateCallout">Call-out Charge</label>
+              <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" id="rateCallout" min="0" step="0.01" placeholder="0.00"></div>
+            </div>
+          </div>
+          <div class="rates-action-row">
+            <button type="button" class="btn btn-walnut" id="saveRatesBtn">Save Rates</button>
+            <button type="button" class="btn btn-outline-walnut" id="changeTradeBtnRates">Change Trade</button>
+          </div>
+        </div>
       </div>
 
       <!-- Add Services & Materials -->
       <div class="card" style="border:2px solid var(--walnut)">
 
         <!-- ONE BY ONE -->
-        <h2 class="card-title">My Services &amp; Materials</h2>
-        <div class="cat-selector" id="jobCatSelector" style="margin-bottom:14px">
-          <button type="button" class="cat-btn active" data-cat="service">Service</button>
-          <button type="button" class="cat-btn" data-cat="materials">Material</button>
+        <div class="obo-tab-bar">
+          <div class="obo-tabs-inner" id="jobCatSelector">
+            <button type="button" class="obo-tab active" data-cat="service">Add Services</button>
+            <button type="button" class="obo-tab" data-cat="materials">Add Materials</button>
+          </div>
         </div>
+        <div class="autofill-prompt" id="autoFillServicesPrompt">
+          <p class="autofill-q">Would you like me to add typical services for your trade?</p>
+          <div class="autofill-btns">
+            <button type="button" class="btn btn-autofill-yes" id="autoFillServicesBtn">Yes, autofill please</button>
+            <button type="button" class="btn btn-autofill-no" id="autoFillServicesNoBtn">No, I'll add it myself</button>
+          </div>
+        </div>
+        <div class="autofill-prompt" id="autoFillMaterialsPrompt" style="display:none">
+          <p class="autofill-q">Would you like me to add typical materials for your trade?</p>
+          <div class="autofill-btns">
+            <button type="button" class="btn btn-autofill-yes" id="autoFillMaterialsBtn">Yes, autofill please</button>
+            <button type="button" class="btn btn-autofill-no" id="autoFillMaterialsNoBtn">No, I'll add it myself</button>
+          </div>
+        </div>
+
+        <!-- Post-autofill state — shown after autofill, before manual section -->
+        <div id="oboPostFillServices" style="display:none">
+          <div class="autofill-btns">
+            <button type="button" class="btn btn-autofill-no" id="addMoreServicesManuallytBtn">Add more manually</button>
+            <button type="button" class="btn btn-autofill-no" id="changeTradeBtnSvc">Change trade</button>
+          </div>
+        </div>
+        <div id="oboPostFillMaterials" style="display:none">
+          <div class="autofill-btns">
+            <button type="button" class="btn btn-autofill-no" id="addMoreMaterialsManuallyBtn">Add more manually</button>
+            <button type="button" class="btn btn-autofill-no" id="changeTradeBtnMat">Change trade</button>
+          </div>
+        </div>
+
+        <!-- Manual entry — hidden until user clicks "No, I'll add it myself" or "Add more manually" -->
+        <div id="oboManualSection" style="display:none">
+
+        <button type="button" class="obo-back-btn" id="oboManualBackBtn">← Back</button>
+
         <!-- Service mode: Service | Charge | Per Unit -->
         <div class="obo-grid" id="oboServiceGrid">
           <div class="form-group obo-name">
@@ -877,11 +915,10 @@
         <div class="bulk-divider"></div>
 
         <!-- ADD IN BULK -->
-        <h2 class="card-title">Add Services or Materials in Bulk</h2>
+        <h2 class="card-title" id="bulkHeading">Add Services in Bulk</h2>
 
         <!-- Step 1: choose category -->
         <div id="bulkStep1">
-          <p class="pj-section-hint">What would you like to add?</p>
           <div class="bulk-choice-row">
             <button type="button" class="bulk-choice-btn" id="bulkChooseService">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -927,22 +964,33 @@
           </div>
         </div>
 
+        </div><!-- /oboManualSection -->
+
       </div>
 
       <!-- Price List -->
       <div class="card jobs-added-card">
         <div class="card-header-row">
-          <h2 class="card-title">Edit Services &amp; Materials</h2>
+          <h2 class="card-title">My Services &amp; Materials</h2>
           <span class="bulk-counter"><span id="priceListBadge">0</span> Added</span>
         </div>
         <div class="price-list-toolbar">
           <input type="text" id="priceListSearch" placeholder="Search..." class="search-input">
+          <select id="priceListSort" class="pl-sort-select">
+            <option value="default">Sort: Default</option>
+            <option value="alpha-asc">A → Z</option>
+            <option value="alpha-desc">Z → A</option>
+            <option value="price-asc">Price: Low → High</option>
+            <option value="price-desc">Price: High → Low</option>
+          </select>
           <button type="button" class="btn btn-sm btn-danger-outline" id="deleteSelectedBtn" style="display:none">Delete selected</button>
         </div>
-        <div class="pl-filter-tabs">
-          <button type="button" class="pl-filter-tab active" data-cat="all">All</button>
-          <button type="button" class="pl-filter-tab" data-cat="service">Services</button>
-          <button type="button" class="pl-filter-tab" data-cat="materials">Materials</button>
+        <div class="obo-tab-bar">
+          <div class="obo-tabs-inner">
+            <button type="button" class="obo-tab active" data-cat="all">All</button>
+            <button type="button" class="obo-tab" data-cat="service">Services</button>
+            <button type="button" class="obo-tab" data-cat="materials">Materials</button>
+          </div>
         </div>
         <div class="price-list-header">
           <label class="checkbox-label compact">
@@ -1346,10 +1394,13 @@
 
         <!-- Search + Filter toggle on same row -->
         <div class="jobs-search-row">
-          <button type="button" class="jobs-spreadsheet-btn" id="jobsSpreadsheetBtn" title="View all jobs as a spreadsheet" onclick="openSpreadsheetView()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-            Spreadsheet
-          </button>
+          <label class="ss-toggle-wrap" title="Toggle spreadsheet view">
+            <span class="ss-toggle-label" id="ssToggleLabel">View Spreadsheet</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="jobsSpreadsheetToggle">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </label>
           <div class="jobs-search-wrap">
             <svg class="jobs-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="search" id="jobSearchInput" class="jobs-search-input" placeholder="Search customers…" autocomplete="off">
@@ -2594,12 +2645,19 @@
   <div class="modal-overlay" id="spreadsheetModal" style="display:none" role="dialog" aria-modal="true" aria-label="Jobs spreadsheet view">
     <div class="spreadsheet-shell">
       <div class="spreadsheet-topbar">
-        <span class="spreadsheet-title">All Jobs</span>
+        <span class="spreadsheet-title" id="spreadsheetTitle">All Jobs</span>
         <div class="spreadsheet-topbar-right">
           <span class="spreadsheet-rotate-hint" id="ssRotateHint">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
             Rotate
           </span>
+          <label class="ss-toggle-wrap" title="Switch back to list view">
+            <span class="ss-toggle-label">View as list</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="ssBackToListToggle">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </label>
           <button type="button" class="spreadsheet-close" id="closeSpreadsheetBtn" aria-label="Close">&times;</button>
         </div>
       </div>

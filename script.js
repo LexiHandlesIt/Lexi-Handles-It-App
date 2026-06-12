@@ -111,6 +111,264 @@ function getTrialDaysRemaining() {
 /* ===== DEFAULT COLOURS ===== */
 const DEFAULT_COLOURS = { primary: '#1a1a1a', accent: '#555555', bg: '#ffffff' };
 
+// Tracks which state each obo tab is in so switchOboGrid and showPage can restore correctly
+const oboState = { svc: 'prompt', mat: 'prompt' }; // 'prompt' | 'postfill' | 'manual'
+let _switchOboGrid = null; // assigned inside DOMContentLoaded so showPage() can re-render the obo tab
+
+/* ===== TRADE AUTO-FILL DATA ===== */
+const TRADE_DATA = {
+  Builder: {
+    rates: { rateHourly: 40, rateHalfDay: 150, rateDay: 250, rateCallout: 60 },
+    services: [
+      { name: 'Brickwork repairs',       price: 40,   unit: 'hr'  },
+      { name: 'Block paving',            price: 35,   unit: 'm²'  },
+      { name: 'Concrete laying',         price: 80,   unit: 'm²'  },
+      { name: 'Partition wall build',    price: 350,  unit: ''    },
+      { name: 'Chimney repointing',      price: 450,  unit: ''    },
+      { name: 'Damp proofing survey',    price: 150,  unit: ''    },
+      { name: 'Extension groundwork',    price: 55,   unit: 'hr'  },
+      { name: 'Fence installation',      price: 250,  unit: ''    },
+      { name: 'Garden wall build',       price: 200,  unit: ''    },
+      { name: 'General labouring',       price: 40,   unit: 'hr'  },
+    ],
+    materials: [
+      { name: 'Cement (25kg bag)',       price: 8,    unit: 'bag' },
+      { name: 'Sand (bulk bag)',         price: 40,   unit: 'bag' },
+      { name: 'Concrete blocks',         price: 2,    unit: 'each'},
+      { name: 'Bricks (per 100)',        price: 50,   unit: '100' },
+      { name: 'Timber (2×4 per metre)', price: 3,    unit: 'm'   },
+      { name: 'Plywood sheet (8×4ft)',   price: 20,   unit: 'sheet'},
+      { name: 'DPC membrane (roll)',     price: 15,   unit: 'roll'},
+      { name: 'PVA bonding agent (5L)',  price: 10,   unit: 'tin' },
+    ],
+  },
+  Carpenter: {
+    rates: { rateHourly: 35, rateHalfDay: 130, rateDay: 220, rateCallout: 55 },
+    services: [
+      { name: 'Door hanging',            price: 150,  unit: ''    },
+      { name: 'Skirting boards',         price: 12,   unit: 'm'   },
+      { name: 'Staircase installation',  price: 1200, unit: ''    },
+      { name: 'Kitchen fitting',         price: 60,   unit: 'hr'  },
+      { name: 'Loft boarding',           price: 400,  unit: ''    },
+      { name: 'Built-in wardrobe',       price: 800,  unit: ''    },
+      { name: 'Decking installation',    price: 45,   unit: 'm²'  },
+      { name: 'Fascia & soffit replacement', price: 80, unit: 'm' },
+      { name: 'Fence panel installation',price: 180,  unit: ''    },
+      { name: 'Timber frame repair',     price: 50,   unit: 'hr'  },
+    ],
+    materials: [
+      { name: 'Timber batten (3×2 per m)', price: 3, unit: 'm'   },
+      { name: 'MDF sheet (8×4ft)',       price: 25,   unit: 'sheet'},
+      { name: 'Decking board',           price: 6,    unit: 'm'   },
+      { name: 'Screws assorted (200 box)',price: 5,   unit: 'box' },
+      { name: 'Wood stain (1L)',         price: 12,   unit: 'tin' },
+      { name: 'Decking oil (2.5L)',      price: 18,   unit: 'tin' },
+      { name: 'Sandpaper pack',          price: 4,    unit: 'pack'},
+      { name: 'Hardwood dowel',          price: 2,    unit: 'm'   },
+    ],
+  },
+  Decorator: {
+    rates: { rateHourly: 25, rateHalfDay: 100, rateDay: 180, rateCallout: 40 },
+    services: [
+      { name: 'Interior painting (room)',price: 150,  unit: 'room'},
+      { name: 'Exterior painting (elevation)', price: 200, unit: '' },
+      { name: 'Wallpaper hanging',       price: 100,  unit: 'roll'},
+      { name: 'Coving installation',     price: 10,   unit: 'm'   },
+      { name: 'Masonry painting',        price: 18,   unit: 'm²'  },
+      { name: 'Wood staining',           price: 25,   unit: 'hr'  },
+      { name: 'Gloss painting (room)',   price: 150,  unit: 'room'},
+      { name: 'Fence painting / staining', price: 5, unit: 'm²'  },
+      { name: 'Spray painting',          price: 40,   unit: 'hr'  },
+      { name: 'Feature wall',            price: 120,  unit: ''    },
+    ],
+    materials: [
+      { name: 'Emulsion paint (5L)',     price: 20,   unit: 'tin' },
+      { name: 'Gloss paint (2.5L)',      price: 18,   unit: 'tin' },
+      { name: 'Masonry paint (5L)',      price: 30,   unit: 'tin' },
+      { name: 'Wallpaper paste (pack)',  price: 5,    unit: 'pack'},
+      { name: 'Filler (500g)',           price: 4,    unit: 'tub' },
+      { name: 'Primer (5L)',             price: 20,   unit: 'tin' },
+      { name: 'Caulk (cartridge)',       price: 3,    unit: 'each'},
+      { name: 'Dust sheets (pack of 3)', price: 8,    unit: 'pack'},
+    ],
+  },
+  Electrician: {
+    rates: { rateHourly: 50, rateHalfDay: 180, rateDay: 300, rateCallout: 75 },
+    services: [
+      { name: 'Consumer unit replacement', price: 450, unit: ''  },
+      { name: 'Socket installation',     price: 80,   unit: ''    },
+      { name: 'Light fitting',           price: 65,   unit: ''    },
+      { name: 'Rewire (per room)',        price: 200,  unit: 'room'},
+      { name: 'EV charger installation', price: 900,  unit: ''    },
+      { name: 'CCTV installation',       price: 350,  unit: ''    },
+      { name: 'Smoke alarm installation',price: 60,   unit: ''    },
+      { name: 'Security lighting',       price: 90,   unit: ''    },
+      { name: 'Fault finding',           price: 75,   unit: 'hr'  },
+      { name: 'Outdoor power socket',    price: 150,  unit: ''    },
+    ],
+    materials: [
+      { name: 'Cable (twin & earth, m)', price: 1.50, unit: 'm'   },
+      { name: 'Single socket',           price: 5,    unit: 'each'},
+      { name: 'Double socket',           price: 8,    unit: 'each'},
+      { name: 'Light fitting (basic)',   price: 15,   unit: 'each'},
+      { name: 'MCB breaker',             price: 10,   unit: 'each'},
+      { name: 'Consumer unit',           price: 80,   unit: 'each'},
+      { name: 'Conduit (2m)',            price: 3,    unit: 'length'},
+      { name: 'LED bulb',                price: 4,    unit: 'each'},
+    ],
+  },
+  Gardener: {
+    rates: { rateHourly: 25, rateHalfDay: 90, rateDay: 160, rateCallout: 40 },
+    services: [
+      { name: 'Lawn mowing',             price: 40,   unit: ''    },
+      { name: 'Hedge trimming',          price: 80,   unit: ''    },
+      { name: 'Garden clearance',        price: 150,  unit: ''    },
+      { name: 'Tree pruning',            price: 120,  unit: ''    },
+      { name: 'Turf laying',             price: 12,   unit: 'm²'  },
+      { name: 'Pressure washing',        price: 80,   unit: ''    },
+      { name: 'Planting service',        price: 25,   unit: 'hr'  },
+      { name: 'Fence repair',            price: 100,  unit: ''    },
+      { name: 'Leaf clearance',          price: 50,   unit: ''    },
+      { name: 'Weeding',                 price: 25,   unit: 'hr'  },
+    ],
+    materials: [
+      { name: 'Topsoil (bulk bag)',      price: 45,   unit: 'bag' },
+      { name: 'Grass seed (5kg)',        price: 18,   unit: 'bag' },
+      { name: 'Garden fertiliser (5kg)', price: 12,   unit: 'bag' },
+      { name: 'Bark chippings (bulk bag)', price: 40, unit: 'bag' },
+      { name: 'Fence post',              price: 8,    unit: 'each'},
+      { name: 'Fence panel',             price: 35,   unit: 'each'},
+      { name: 'Weed membrane (10m roll)', price: 12,  unit: 'roll'},
+      { name: 'Plant food (liquid 1L)',  price: 6,    unit: 'bottle'},
+    ],
+  },
+  'Gas Engineer': {
+    rates: { rateHourly: 60, rateHalfDay: 200, rateDay: 350, rateCallout: 90 },
+    services: [
+      { name: 'Boiler service',          price: 80,   unit: ''    },
+      { name: 'Boiler repair',           price: 120,  unit: ''    },
+      { name: 'Boiler installation',     price: 2000, unit: ''    },
+      { name: 'Gas safety certificate',  price: 65,   unit: ''    },
+      { name: 'Radiator replacement',    price: 200,  unit: ''    },
+      { name: 'Thermostat installation', price: 120,  unit: ''    },
+      { name: 'Power flush',             price: 400,  unit: ''    },
+      { name: 'Gas leak investigation',  price: 90,   unit: ''    },
+      { name: 'Landlord gas safety record', price: 70, unit: ''   },
+      { name: 'Unvented cylinder service', price: 150, unit: ''   },
+    ],
+    materials: [
+      { name: 'Boiler flue kit',         price: 40,   unit: 'each'},
+      { name: 'Room thermostat',         price: 60,   unit: 'each'},
+      { name: 'Radiator valve (pair)',   price: 15,   unit: 'pair'},
+      { name: 'Pipe (15mm per metre)',   price: 3,    unit: 'm'   },
+      { name: 'Compression fitting',     price: 4,    unit: 'each'},
+      { name: 'Solder ring fitting',     price: 2,    unit: 'each'},
+      { name: 'PTFE tape (roll)',        price: 2,    unit: 'roll'},
+      { name: 'Gas jointing compound',   price: 8,    unit: 'tube'},
+    ],
+  },
+  Plasterer: {
+    rates: { rateHourly: 35, rateHalfDay: 130, rateDay: 220, rateCallout: 55 },
+    services: [
+      { name: 'Skimming (per room)',     price: 350,  unit: 'room'},
+      { name: 'Artex removal',           price: 30,   unit: 'm²'  },
+      { name: 'Dry lining',             price: 20,   unit: 'm²'  },
+      { name: 'Coving installation',     price: 12,   unit: 'm'   },
+      { name: 'External rendering',      price: 35,   unit: 'm²'  },
+      { name: 'Patch plaster repair',   price: 100,  unit: ''    },
+      { name: 'Sand & cement render',   price: 40,   unit: 'm²'  },
+      { name: 'Pebbledash removal',     price: 25,   unit: 'm²'  },
+      { name: 'Ceiling repair',         price: 200,  unit: ''    },
+      { name: 'Bonding coat',           price: 25,   unit: 'm²'  },
+    ],
+    materials: [
+      { name: 'Plasterboard (8×4ft)',   price: 8,    unit: 'sheet'},
+      { name: 'Finishing plaster (25kg)', price: 12, unit: 'bag' },
+      { name: 'Bonding coat (25kg)',    price: 14,   unit: 'bag' },
+      { name: 'Sand & cement (25kg)',   price: 6,    unit: 'bag' },
+      { name: 'Corner bead (2.4m)',     price: 3,    unit: 'length'},
+      { name: 'Scrim tape (roll)',      price: 3,    unit: 'roll'},
+      { name: 'Drywall screws (box)',   price: 5,    unit: 'box' },
+      { name: 'PVA bonding agent (5L)', price: 10,   unit: 'tin' },
+    ],
+  },
+  Plumber: {
+    rates: { rateHourly: 55, rateHalfDay: 190, rateDay: 320, rateCallout: 80 },
+    services: [
+      { name: 'Tap replacement',        price: 100,  unit: ''    },
+      { name: 'Toilet installation',    price: 150,  unit: ''    },
+      { name: 'Leak repair',            price: 120,  unit: ''    },
+      { name: 'Bathroom installation',  price: 2500, unit: ''    },
+      { name: 'Radiator installation',  price: 200,  unit: ''    },
+      { name: 'Shower installation',    price: 350,  unit: ''    },
+      { name: 'Pipe lagging',           price: 30,   unit: 'hr'  },
+      { name: 'Blocked drain clearance',price: 80,   unit: ''    },
+      { name: 'Stopcock replacement',   price: 100,  unit: ''    },
+      { name: 'Outdoor tap installation', price: 150, unit: ''   },
+    ],
+    materials: [
+      { name: 'Copper pipe (15mm per m)', price: 4,  unit: 'm'   },
+      { name: 'Push-fit fitting',       price: 3,    unit: 'each'},
+      { name: 'Compression fitting',    price: 4,    unit: 'each'},
+      { name: 'PTFE tape (roll)',       price: 2,    unit: 'roll'},
+      { name: 'Silicone sealant',       price: 5,    unit: 'tube'},
+      { name: 'Tap valve',              price: 6,    unit: 'each'},
+      { name: 'Radiator valve (pair)',  price: 15,   unit: 'pair'},
+      { name: 'Flexi hose',            price: 8,    unit: 'each'},
+    ],
+  },
+  Roofer: {
+    rates: { rateHourly: 40, rateHalfDay: 150, rateDay: 260, rateCallout: 65 },
+    services: [
+      { name: 'Tile replacement',       price: 150,  unit: ''    },
+      { name: 'Ridge tile re-bedding',  price: 350,  unit: ''    },
+      { name: 'Flat roof repair',       price: 400,  unit: ''    },
+      { name: 'Gutter cleaning',        price: 80,   unit: ''    },
+      { name: 'Felt replacement',       price: 30,   unit: 'm²'  },
+      { name: 'Lead flashing replacement', price: 200, unit: ''  },
+      { name: 'Chimney repointing',     price: 500,  unit: ''    },
+      { name: 'Roofline replacement',   price: 80,   unit: 'm'   },
+      { name: 'Moss removal & treatment', price: 200, unit: ''   },
+      { name: 'Skylight installation',  price: 1200, unit: ''    },
+    ],
+    materials: [
+      { name: 'Roof tile',              price: 2,    unit: 'each'},
+      { name: 'Mortar (25kg)',          price: 8,    unit: 'bag' },
+      { name: 'Lead sheet',             price: 45,   unit: 'm²'  },
+      { name: 'Roofing felt (roll)',    price: 25,   unit: 'roll'},
+      { name: 'Fascia board',           price: 8,    unit: 'm'   },
+      { name: 'Gutter (per metre)',     price: 6,    unit: 'm'   },
+      { name: 'Gutter bracket',         price: 3,    unit: 'each'},
+      { name: 'Ridge tile',             price: 8,    unit: 'each'},
+    ],
+  },
+  Tiler: {
+    rates: { rateHourly: 35, rateHalfDay: 130, rateDay: 220, rateCallout: 55 },
+    services: [
+      { name: 'Wall tiling',            price: 40,   unit: 'm²'  },
+      { name: 'Floor tiling',           price: 45,   unit: 'm²'  },
+      { name: 'Bathroom tiling',        price: 800,  unit: ''    },
+      { name: 'Kitchen backsplash',     price: 350,  unit: ''    },
+      { name: 'Wet room tiling',        price: 60,   unit: 'm²'  },
+      { name: 'Grout replacement',      price: 15,   unit: 'm²'  },
+      { name: 'Tile removal',           price: 20,   unit: 'm²'  },
+      { name: 'Mosaic tiling',          price: 80,   unit: 'm²'  },
+      { name: 'External tiling',        price: 50,   unit: 'm²'  },
+      { name: 'Tile repair',            price: 80,   unit: ''    },
+    ],
+    materials: [
+      { name: 'Tile adhesive (20kg)',   price: 12,   unit: 'bag' },
+      { name: 'Grout (5kg)',            price: 8,    unit: 'bag' },
+      { name: 'Tile spacers (pack)',    price: 2,    unit: 'pack'},
+      { name: 'Waterproof membrane (1L)', price: 15, unit: 'tin' },
+      { name: 'Tile silicone',          price: 5,    unit: 'tube'},
+      { name: 'Corner trim (2.4m)',     price: 4,    unit: 'length'},
+      { name: 'Levelling system (50 clips)', price: 10, unit: 'pack'},
+      { name: 'Primer (5L)',            price: 12,   unit: 'tin' },
+    ],
+  },
+};
+
 /* ===== COLOUR HELPERS ===== */
 // Returns true when a hex colour is perceptually light (text should be dark)
 function isColorLight(hex) {
@@ -393,6 +651,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   populateAuthSig();
   personaliseText();
   updateNotifToggleBtn();
+  document.getElementById('jobsSpreadsheetToggle')?.addEventListener('change', e => {
+    const lbl = document.getElementById('ssToggleLabel');
+    if (e.target.checked) {
+      if (lbl) lbl.textContent = 'View List';
+      openSpreadsheetView();
+    } else {
+      if (lbl) lbl.textContent = 'View Spreadsheet';
+      closeSpreadsheetView();
+    }
+  });
+
+  document.getElementById('notifToggleBtn')?.addEventListener('change', e => {
+    // Prevent toggle visually jumping — let updateNotifToggleBtn set the real state
+    e.target.checked = ('Notification' in window) && Notification.permission === 'granted';
+    openNotificationSettings();
+  });
 
   // Show the app NOW — no waiting for Supabase
   if (canUseMainApp()) {
@@ -1929,6 +2203,16 @@ function showPage(pageId) {
   // Update page2 header based on whether price list already has content
   if (pageId === 'page2') {
     updatePage2Header();
+    // Restore obo tab states based on what's already in the price list
+    const hasSvc = state.priceList.some(j => j.category !== 'materials');
+    const hasMat = state.priceList.some(j => j.category === 'materials');
+    if (hasSvc && oboState.svc === 'prompt') oboState.svc = 'postfill';
+    if (hasMat && oboState.mat === 'prompt') oboState.mat = 'postfill';
+    // Re-render the active obo tab so the visible panel matches oboState
+    if (typeof _switchOboGrid === 'function') {
+      const activeTab = document.querySelector('#jobCatSelector .obo-tab.active')?.dataset?.cat || 'service';
+      _switchOboGrid(activeTab);
+    }
   }
 
   personaliseText();
@@ -1978,7 +2262,7 @@ function updatePage2Header() {
   const sub   = document.getElementById('page2Sub');
   if (title) title.textContent = 'My Rates, Services & Materials';
   if (sub) {
-    sub.innerHTML = `Your jobs, your prices - make sure you're charging what you're worth.<br><span style="display:inline-flex;align-items:center;gap:6px;margin-top:6px">Not sure what to charge? <a href="Lexi's Pricing Guide.xlsx" download class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v13M5 16l7 7 7-7"/><path d="M3 21h18"/></svg> Download Lexi's Pricing Guide</a></span>`;
+    sub.textContent = `Your jobs, your prices. Make sure you're charging what you're worth.`;
     sub.style.display = '';
   }
 }
@@ -2225,17 +2509,6 @@ function setupNavigation() {
   // Page footer nav buttons
   document.getElementById('goToPriceListBtn').addEventListener('click', () => {
     if (!saveBusinessDetails(false)) return;
-    // Skip onboarding if they already have prices OR have seen it before
-    if (!localStorage.getItem(KEY_PL_ONBOARDED) && state.priceList.length === 0) {
-      document.getElementById('plOnboardingModal').style.display = 'flex';
-    } else {
-      showPage('page2');
-    }
-  });
-
-  document.getElementById('plOnboardingBtn').addEventListener('click', () => {
-    localStorage.setItem(KEY_PL_ONBOARDED, '1');
-    document.getElementById('plOnboardingModal').style.display = 'none';
     showPage('page2');
   });
   document.getElementById('goToQuoteBtn').addEventListener('click', () => {
@@ -2757,6 +3030,13 @@ function populatePage1Fields() {
   setVal('rateHalfDay', fmtRate(c.rateHalfDay));
   setVal('rateDay',     fmtRate(c.rateDay));
   setVal('rateCallout', fmtRate(c.rateCallout));
+  // If rates already saved, skip the prompt and show the fields directly
+  if (c.rateHourly || c.rateHalfDay || c.rateDay || c.rateCallout) {
+    const prompt = document.getElementById('autoFillRatesPrompt');
+    const manual = document.getElementById('ratesManualSection');
+    if (prompt) prompt.style.display = 'none';
+    if (manual) manual.style.display = '';
+  }
 }
 
 function saveBusinessDetails(showToast = true) {
@@ -3295,21 +3575,166 @@ function setupPage2() {
     showSavedPopup('Rates saved.');
   });
 
-  // Category selector — Service / Material toggle
+  // Trade auto-fill buttons
+  document.getElementById('autoFillRatesBtn')?.addEventListener('click', () => {
+    forceOpenTradePicker(autoFillRates, true, true);
+  });
+  document.getElementById('autoFillRatesNoBtn')?.addEventListener('click', () => {
+    document.getElementById('autoFillRatesPrompt').style.display = 'none';
+    document.getElementById('ratesManualSection').style.display = '';
+  });
+
+  document.getElementById('changeTradeBtnRates')?.addEventListener('click', () => {
+    const tradeLabel = document.getElementById('ratesTradeLabel');
+    if (tradeLabel) tradeLabel.style.display = 'none';
+    forceOpenTradePicker(autoFillRates, true, true);
+  });
+
+  document.getElementById('autoFillServicesBtn')?.addEventListener('click', () => {
+    openTradePickerForAutoFill(trades => { oboState.svc = 'postfill'; autoFillServices(trades); });
+  });
+  document.getElementById('autoFillMaterialsBtn')?.addEventListener('click', () => {
+    openTradePickerForAutoFill(trades => { oboState.mat = 'postfill'; autoFillMaterials(trades); });
+  });
+
+  const showManualSection = (promptId) => {
+    document.getElementById(promptId).style.display = 'none';
+    document.getElementById('oboManualSection').style.display = '';
+  };
+  document.getElementById('autoFillServicesNoBtn')?.addEventListener('click', () => {
+    oboState.svc = 'manual'; showManualSection('autoFillServicesPrompt');
+  });
+  document.getElementById('autoFillMaterialsNoBtn')?.addEventListener('click', () => {
+    oboState.mat = 'manual'; showManualSection('autoFillMaterialsPrompt');
+  });
+
+  // Post-autofill: "Add more manually"
+  document.getElementById('addMoreServicesManuallytBtn')?.addEventListener('click', () => {
+    oboState.svc = 'manual';
+    document.getElementById('oboPostFillServices').style.display = 'none';
+    document.getElementById('oboManualSection').style.display = '';
+  });
+  document.getElementById('addMoreMaterialsManuallyBtn')?.addEventListener('click', () => {
+    oboState.mat = 'manual';
+    document.getElementById('oboPostFillMaterials').style.display = 'none';
+    document.getElementById('oboManualSection').style.display = '';
+  });
+
+  // Manual section "Back" — return to the prompt so they can auto-fill instead
+  document.getElementById('oboManualBackBtn')?.addEventListener('click', () => {
+    const isMat = document.querySelector('#jobCatSelector .obo-tab.active')?.dataset?.cat === 'materials';
+    if (isMat) oboState.mat = 'prompt'; else oboState.svc = 'prompt';
+    if (typeof _switchOboGrid === 'function') _switchOboGrid(isMat ? 'materials' : 'service');
+  });
+
+  // Post-autofill: "Change trade"
+  document.getElementById('changeTradeBtnSvc')?.addEventListener('click', () => {
+    oboState.svc = 'prompt';
+    document.getElementById('oboPostFillServices').style.display = 'none';
+    document.getElementById('autoFillServicesPrompt').style.display = '';
+    forceOpenTradePicker(trades => { oboState.svc = 'postfill'; autoFillServices(trades); });
+  });
+  document.getElementById('changeTradeBtnMat')?.addEventListener('click', () => {
+    oboState.mat = 'prompt';
+    document.getElementById('oboPostFillMaterials').style.display = 'none';
+    document.getElementById('autoFillMaterialsPrompt').style.display = '';
+    forceOpenTradePicker(trades => { oboState.mat = 'postfill'; autoFillMaterials(trades); });
+  });
+
+  // Trade picker modal
+  document.getElementById('tpmCancelBtn')?.addEventListener('click', closeTradePickerModal);
+  document.getElementById('tpmCancelBtnFooter')?.addEventListener('click', closeTradePickerModal);
+  document.getElementById('tpmConfirmBtn')?.addEventListener('click', () => {
+    const activeBtns = [...document.querySelectorAll('.tpm-trade-btn.active')];
+    if (!activeBtns.length) { toast('Please select at least one trade.', 'error'); return; }
+    const trades = activeBtns.map(b => b.dataset.trade);
+    const knownTrades = trades.filter(t => t !== 'Other' && TRADE_DATA[t]);
+    const hasOther = trades.includes('Other');
+    if (hasOther && !knownTrades.length) {
+      // Only "Other" selected — need free-text input
+      const otherWrap = document.getElementById('tpmOtherWrap');
+      if (otherWrap) otherWrap.style.display = '';
+      return;
+    }
+    closeTradePickerModal();
+    const modal = document.getElementById('tradePickerModal');
+    const cb = modal && modal._callback;
+    // Only the Rates picker persists the company trade (it owns the pill).
+    // Services/Materials can pick multiple trades without touching the Rates trade.
+    if (modal && modal._persistTrade) {
+      state.company.trade = knownTrades[0];
+      setVal('p1Trade', knownTrades[0]);
+      save();
+      if (typeof saveBusinessToSupabase === 'function') saveBusinessToSupabase().catch(() => {});
+    }
+    if (cb) cb(knownTrades);
+  });
+  document.getElementById('tpmOtherConfirmBtn')?.addEventListener('click', () => {
+    const label = (document.getElementById('tpmOtherInput')?.value || '').trim();
+    if (!label) { toast('Please enter your trade.', 'error'); return; }
+    closeTradePickerModal();
+    toast(`Got it! We don't have auto-fill data for "${label}" yet — but you can add your services and materials manually using the forms below.`, 'info', 6000);
+    state.company.trade = label;
+    setVal('p1Trade', 'Other');
+    save();
+    if (typeof saveBusinessToSupabase === 'function') saveBusinessToSupabase().catch(() => {});
+  });
+  document.querySelectorAll('.tpm-trade-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const modal = document.getElementById('tradePickerModal');
+      const singleSelect = modal && modal._singleSelect;
+      if (singleSelect) {
+        document.querySelectorAll('.tpm-trade-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      } else {
+        btn.classList.toggle('active');
+      }
+      const otherWrap = document.getElementById('tpmOtherWrap');
+      const otherActive = document.querySelector('.tpm-trade-btn[data-trade="Other"].active');
+      if (otherWrap) otherWrap.style.display = otherActive ? '' : 'none';
+    });
+  });
+
+  // Category tabs — Services / Materials
   const oboServiceGrid  = document.getElementById('oboServiceGrid');
   const oboMaterialGrid = document.getElementById('oboMaterialGrid');
+  // oboState is declared at module scope (below) so showPage() can also access it
   const switchOboGrid = (cat) => {
     const isMat = cat === 'materials';
     if (oboServiceGrid)  oboServiceGrid.style.display  = isMat ? 'none' : '';
     if (oboMaterialGrid) oboMaterialGrid.style.display = isMat ? '' : 'none';
+    // Hide all state panels first
+    document.getElementById('autoFillServicesPrompt').style.display  = 'none';
+    document.getElementById('autoFillMaterialsPrompt').style.display = 'none';
+    document.getElementById('oboPostFillServices').style.display     = 'none';
+    document.getElementById('oboPostFillMaterials').style.display    = 'none';
+    document.getElementById('oboManualSection').style.display        = 'none';
+    // Restore correct state for the active tab
+    const tabState = isMat ? oboState.mat : oboState.svc;
+    if (tabState === 'prompt') {
+      document.getElementById(isMat ? 'autoFillMaterialsPrompt' : 'autoFillServicesPrompt').style.display = '';
+    } else if (tabState === 'postfill') {
+      document.getElementById(isMat ? 'oboPostFillMaterials' : 'oboPostFillServices').style.display = '';
+    } else if (tabState === 'manual') {
+      document.getElementById('oboManualSection').style.display = '';
+    }
+    // Bulk section
+    const bulkHeading = document.getElementById('bulkHeading');
+    if (bulkHeading) bulkHeading.textContent = isMat ? 'Add Materials in Bulk' : 'Add Services in Bulk';
+    const bulkChooseService   = document.getElementById('bulkChooseService');
+    const bulkChooseMaterials = document.getElementById('bulkChooseMaterials');
+    if (bulkChooseService)   bulkChooseService.style.display   = isMat ? 'none' : '';
+    if (bulkChooseMaterials) bulkChooseMaterials.style.display = isMat ? '' : 'none';
   };
-  document.querySelectorAll('#jobCatSelector .cat-btn').forEach(btn => {
+  document.querySelectorAll('#jobCatSelector .obo-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#jobCatSelector .cat-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#jobCatSelector .obo-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       switchOboGrid(btn.dataset.cat);
     });
   });
+  // Expose so showPage() can re-render the active obo tab to match oboState
+  _switchOboGrid = switchOboGrid;
   // Start on Service grid
   switchOboGrid('service');
 
@@ -3327,11 +3752,12 @@ function setupPage2() {
   document.getElementById('priceListSearch').addEventListener('input', () => {
     if (!editingJobId) refreshPriceList();
   });
+  document.getElementById('priceListSort')?.addEventListener('change', () => refreshPriceList());
 
   // Category filter tabs
-  document.querySelectorAll('.pl-filter-tab').forEach(tab => {
+  document.querySelectorAll('.jobs-added-card .obo-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.pl-filter-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.jobs-added-card .obo-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       refreshPriceList();
     });
@@ -3352,6 +3778,7 @@ function setupPage2() {
     document.getElementById('deleteSelectedBtn').style.display = 'none';
     save();
     queuePriceListSync(true);
+    syncOboStateWithPriceList();
     refreshPriceList();
     updateJobPicker();
     toast(`Deleted ${checked.length} job${checked.length===1?'':'s'}.`);
@@ -3435,7 +3862,7 @@ function downloadTemplate() {
 }
 
 function addIndividualJob() {
-  const activeBtn = document.querySelector('#jobCatSelector .cat-btn.active');
+  const activeBtn = document.querySelector('#jobCatSelector .obo-tab.active');
   const category  = activeBtn ? activeBtn.dataset.cat : 'service';
   const isMat     = category === 'materials';
 
@@ -3479,6 +3906,126 @@ function addIndividualJob() {
   showSavedPopup('Added', null, 3000);
 }
 
+/* ===== TRADE AUTO-FILL FUNCTIONS ===== */
+
+function forceOpenTradePicker(callback, singleSelect = false, persistTrade = false) {
+  const modal = document.getElementById('tradePickerModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal._callback = callback;
+  modal._singleSelect = singleSelect;
+  modal._persistTrade = persistTrade;
+  const otherWrap = document.getElementById('tpmOtherWrap');
+  if (otherWrap) otherWrap.style.display = 'none';
+  document.getElementById('tpmOtherInput') && (document.getElementById('tpmOtherInput').value = '');
+  document.querySelectorAll('.tpm-trade-btn').forEach(b => b.classList.remove('active'));
+}
+
+// Used by Services/Materials. Inherits the Rates trade if one is set; otherwise asks.
+// Never persists the chosen trade as the company trade (so it can't change the Rates pill).
+function openTradePickerForAutoFill(callback) {
+  const modal = document.getElementById('tradePickerModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal._callback = callback;
+  modal._singleSelect = false;   // Services/Materials can have multiple trades
+  modal._persistTrade = false;   // never overwrite the Rates trade/pill
+  const otherWrap = document.getElementById('tpmOtherWrap');
+  if (otherWrap) otherWrap.style.display = 'none';
+  document.getElementById('tpmOtherInput') && (document.getElementById('tpmOtherInput').value = '');
+  // Pre-select the Rates trade (if any) as a sensible default — but still let
+  // them add more trades, which is essential for multi-skilled tradespeople.
+  const trade = state.company && state.company.trade;
+  document.querySelectorAll('.tpm-trade-btn').forEach(b => {
+    b.classList.toggle('active', !!trade && trade !== 'Other' && TRADE_DATA[trade] && b.dataset.trade === trade);
+  });
+}
+
+function closeTradePickerModal() {
+  const modal = document.getElementById('tradePickerModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function autoFillRates(trades) {
+  const tradeList = Array.isArray(trades) ? trades : [trades];
+  const data = TRADE_DATA[tradeList[0]];
+  if (!data) return;
+  const { rateHourly, rateHalfDay, rateDay, rateCallout } = data.rates;
+  setVal('rateHourly',  rateHourly.toFixed(2));
+  setVal('rateHalfDay', rateHalfDay.toFixed(2));
+  setVal('rateDay',     rateDay.toFixed(2));
+  setVal('rateCallout', rateCallout.toFixed(2));
+  state.company.rateHourly  = rateHourly;
+  state.company.rateHalfDay = rateHalfDay;
+  state.company.rateDay     = rateDay;
+  state.company.rateCallout = rateCallout;
+  save();
+  if (typeof saveBusinessToSupabase === 'function') saveBusinessToSupabase().catch(() => {});
+  updateJobPicker();
+  // Show the rates fields so user can see and adjust what was filled in
+  const prompt = document.getElementById('autoFillRatesPrompt');
+  const manual = document.getElementById('ratesManualSection');
+  if (prompt) prompt.style.display = 'none';
+  if (manual) manual.style.display = '';
+  const tradeLabel = document.getElementById('ratesTradeLabel');
+  if (tradeLabel) { tradeLabel.textContent = `${tradeList[0]} Rates`; tradeLabel.style.display = 'inline-block'; }
+  showSavedPopup(`Average ${tradeList[0]} rates filled in. Adjust anything that doesn't fit your area.`);
+}
+
+function autoFillServices(trades) {
+  const tradeList = Array.isArray(trades) ? trades : [trades];
+  let added = 0;
+  tradeList.forEach(trade => {
+    const data = TRADE_DATA[trade];
+    if (!data) return;
+    data.services.forEach(s => {
+      const exists = state.priceList.some(j => j.name.toLowerCase() === s.name.toLowerCase());
+      if (!exists) { addJob(s.name, s.price, s.unit, 'service', null); added++; }
+    });
+  });
+  const svcPrompt = document.getElementById('autoFillServicesPrompt');
+  if (svcPrompt) svcPrompt.style.display = 'none';
+  document.getElementById('oboPostFillServices').style.display = '';
+  if (added > 0) {
+    save(); queuePriceListSync(true); refreshPriceList(); updateJobPicker();
+    const tradeLabel = tradeList.length === 1 ? tradeList[0] : tradeList.join(' & ');
+    showSavedPopup(`${added} (${tradeLabel}) service${added > 1 ? 's' : ''} added. Adjust prices if necessary.`);
+  } else {
+    showSavedPopup('All those services are already on your list!');
+  }
+}
+
+function autoFillMaterials(trades) {
+  const tradeList = Array.isArray(trades) ? trades : [trades];
+  let added = 0;
+  tradeList.forEach(trade => {
+    const data = TRADE_DATA[trade];
+    if (!data) return;
+    data.materials.forEach(m => {
+      const exists = state.priceList.some(j => j.name.toLowerCase() === m.name.toLowerCase());
+      if (!exists) { addJob(m.name, m.price, m.unit, 'materials', null); added++; }
+    });
+  });
+  const matPrompt = document.getElementById('autoFillMaterialsPrompt');
+  if (matPrompt) matPrompt.style.display = 'none';
+  document.getElementById('oboPostFillMaterials').style.display = '';
+  if (added > 0) {
+    save(); queuePriceListSync(true); refreshPriceList(); updateJobPicker();
+    const tradeLabel = tradeList.length === 1 ? tradeList[0] : tradeList.join(' & ');
+    showSavedPopup(`${added} (${tradeLabel}) material${added > 1 ? 's' : ''} added. Update prices to what you actually pay.`);
+  } else {
+    showSavedPopup('All those materials are already on your list!');
+  }
+}
+
+function saveTradeThenCallback(trade, callback) {
+  state.company.trade = trade;
+  setVal('p1Trade', trade);
+  save();
+  if (typeof saveBusinessToSupabase === 'function') saveBusinessToSupabase().catch(() => {});
+  callback(trade);
+}
+
 function showDuplicatePrompt(name, onConfirm) {
   // Remove any existing duplicate prompt
   document.getElementById('dupPrompt')?.remove();
@@ -3504,7 +4051,7 @@ function addJob(name, price, unit, category = '', costPrice = null) {
 
 function refreshPriceList() {
   const q    = getVal('priceListSearch').toLowerCase();
-  const activeTab = document.querySelector('.pl-filter-tab.active')?.dataset?.cat || 'all';
+  const activeTab = document.querySelector('.jobs-added-card .obo-tab.active')?.dataset?.cat || 'all';
   let filtered = state.priceList.filter(j => {
     const matchesSearch = j.name.toLowerCase().includes(q);
     if (!matchesSearch) return false;
@@ -3512,6 +4059,12 @@ function refreshPriceList() {
     if (activeTab === 'service')   return j.category !== 'materials';
     return true;
   });
+
+  const sort = document.getElementById('priceListSort')?.value || 'default';
+  if (sort === 'alpha-asc')   filtered.sort((a, b) => a.name.localeCompare(b.name));
+  else if (sort === 'alpha-desc')  filtered.sort((a, b) => b.name.localeCompare(a.name));
+  else if (sort === 'price-asc')   filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
+  else if (sort === 'price-desc')  filtered.sort((a, b) => (b.price || 0) - (a.price || 0));
   const container = document.getElementById('priceListContainer');
   const empty     = document.getElementById('priceListEmpty');
   const badge     = document.getElementById('priceListBadge');
@@ -3546,6 +4099,7 @@ function refreshPriceList() {
       <div class="price-item-info">
         <div class="price-item-name">${esc(job.name)}${job.category === 'materials' ? `<span class="cat-pill cat-pill-materials">Material</span>` : (job.category ? `<span class="cat-pill cat-pill-labour">Service</span>` : '')}</div>
         ${job.unit ? `<div class="price-item-meta">${esc(job.unit)}</div>` : ''}
+        ${job.category === 'materials' && job.costPrice != null ? `<div class="price-item-cost">Your cost: ${fmtPrice(job.costPrice)}</div>` : ''}
       </div>
       <div class="price-item-price">${fmtPrice(job.price)}</div>
       <div class="price-item-actions">
@@ -3579,13 +4133,19 @@ function editJobInline(row, job) {
   ).join('');
   row.innerHTML = `
     <div class="price-item-edit-row">
-      <div class="cat-selector edit-cat-selector">${catOpts}</div>
-      <input type="text" class="edit-name" value="${esc(job.name)}" placeholder="Description" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
-      <input type="number" class="edit-price" value="${job.price}" placeholder="Sell price" min="0" step="0.01" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
-      <input type="number" class="edit-cost" value="${job.costPrice != null ? job.costPrice : ''}" placeholder="Cost price (optional)" min="0" step="0.01" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
-      <input type="text" class="edit-unit" value="${esc(job.unit||'')}" placeholder="Unit" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:15px">
-      <button class="btn btn-sm btn-primary save-edit">✓</button>
-      <button class="btn btn-sm btn-outline cancel-edit">✕</button>
+      <div class="pie-row1">
+        <div class="cat-selector edit-cat-selector">${catOpts}</div>
+        <input type="text" class="edit-name" value="${esc(job.name)}" placeholder="Description">
+      </div>
+      <div class="pie-row2">
+        <input type="number" class="edit-price" value="${job.price}" placeholder="Sell price" min="0" step="0.01">
+        <input type="number" class="edit-cost" value="${job.costPrice != null ? job.costPrice : ''}" placeholder="Cost price (optional)" min="0" step="0.01">
+        <input type="text" class="edit-unit" value="${esc(job.unit||'')}" placeholder="Unit">
+      </div>
+      <div class="pie-row3">
+        <button class="btn btn-sm btn-primary save-edit">Save</button>
+        <button class="btn btn-sm btn-outline cancel-edit">Cancel</button>
+      </div>
     </div>
   `;
   row.querySelectorAll('.edit-cat-btn').forEach(btn => {
@@ -3629,9 +4189,23 @@ function deleteJob(id) {
   state.priceList = state.priceList.filter(j => j.id !== id);
   save();
   queuePriceListSync(true);
+  syncOboStateWithPriceList();
   refreshPriceList();
   updateJobPicker();
   toast('Job deleted.');
+}
+
+// If a category has no items left, reset its Add tab back to the auto-fill /
+// manual prompt so the user can regenerate or add their own.
+function syncOboStateWithPriceList() {
+  const hasSvc = state.priceList.some(j => j.category !== 'materials');
+  const hasMat = state.priceList.some(j => j.category === 'materials');
+  if (!hasSvc) oboState.svc = 'prompt';
+  if (!hasMat) oboState.mat = 'prompt';
+  if (typeof _switchOboGrid === 'function') {
+    const activeTab = document.querySelector('#jobCatSelector .obo-tab.active')?.dataset?.cat || 'service';
+    _switchOboGrid(activeTab);
+  }
 }
 
 /* ===== PAGE 3 -CUSTOMER DETAILS ===== */
@@ -5350,6 +5924,20 @@ function openSpreadsheetView() {
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
+  // Title = trader's name + "'s Jobs" (preferred name, else first name)
+  const titleEl = document.getElementById('spreadsheetTitle');
+  if (titleEl) {
+    const name = (state.company.preferredName || state.company.firstName || '').trim();
+    titleEl.textContent = name ? `${name}'s Jobs` : 'All Jobs';
+  }
+
+  // "View as list" toggle returns to the list (same as the close button)
+  const backToggle = document.getElementById('ssBackToListToggle');
+  if (backToggle) {
+    backToggle.checked = false;
+    backToggle.onchange = () => { closeSpreadsheetView(); };
+  }
+
   buildSsHead();
   buildSsRows();
 
@@ -5369,6 +5957,11 @@ function closeSpreadsheetView() {
   if (modal) modal.style.display = 'none';
   document.body.style.overflow = '';
   document.getElementById('ssColPanel')?.remove();
+  // Reset toggle
+  const tog = document.getElementById('jobsSpreadsheetToggle');
+  const lbl = document.getElementById('ssToggleLabel');
+  if (tog) tog.checked = false;
+  if (lbl) lbl.textContent = 'View Spreadsheet';
 }
 
 function refreshSavedDocs() {
@@ -5504,14 +6097,12 @@ function refreshSavedDocs() {
           <span class="saved-doc-name">${esc(name)}</span>
           <div class="saved-doc-ref">No job yet</div>
         </div>
-        <div style="text-align:right">
-          <div class="saved-doc-total">${fmtPrice(0)}</div>
-          <span class="type-badge estimate">Customer</span>
-        </div>
+        <div class="saved-doc-total">${fmtPrice(0)}</div>
       </div>
       <div class="job-card-actions">
         <button type="button" class="jca-open">Start Job</button>
         <button type="button" class="jca-primary jca-send">Add Jobs</button>
+        <span class="type-badge estimate jca-badge">Customer</span>
       </div>
       <div class="saved-doc-payment-tally">
         <span class="sdpt-payment-info">Saved customer. No paperwork created yet.</span>
@@ -11128,25 +11719,11 @@ function openNotificationSettings() {
 }
 
 function updateNotifToggleBtn() {
-  const btn = document.getElementById('notifToggleBtn');
-  if (!btn) return;
-  if (!('Notification' in window)) { btn.textContent = 'Not supported'; btn.disabled = true; return; }
-  if (Notification.permission === 'granted') {
-    btn.textContent = 'Enabled';
-    btn.style.borderColor = 'var(--sage)';
-    btn.style.color = 'var(--sage)';
-    btn.disabled = true;
-  } else if (Notification.permission === 'denied') {
-    btn.textContent = 'Blocked';
-    btn.style.borderColor = '#c0392b';
-    btn.style.color = '#c0392b';
-    btn.disabled = false;
-  } else {
-    btn.textContent = 'Enable';
-    btn.style.borderColor = 'var(--walnut)';
-    btn.style.color = 'var(--walnut)';
-    btn.disabled = false;
-  }
+  const cb = document.getElementById('notifToggleBtn');
+  if (!cb) return;
+  const granted = ('Notification' in window) && Notification.permission === 'granted';
+  cb.checked = granted;
+  cb.disabled = ('Notification' in window) && Notification.permission === 'denied';
 }
 
 async function requestLexiNotifications(onGranted) {
