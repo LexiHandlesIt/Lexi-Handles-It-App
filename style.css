@@ -367,15 +367,9 @@ h3 { font-size: 1rem; font-weight: 600; }
   margin-bottom: 4px;
 }
 
-/* Numbered step titles — full-width green banner */
+/* Numbered step titles */
 .page-title:has(.page-num) {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--sage);
-  color: white;
-  border-radius: 10px;
-  padding: 8px 16px;
+  color: var(--walnut);
   margin-bottom: 12px;
 }
 
@@ -1461,8 +1455,8 @@ input[type="text"].sig-text-input:focus {
 .ob-portrait {
   position: absolute;
   top: 24px;
-  right: -92px;
-  width: calc(100% + 190px);
+  right: 0;
+  width: 100%;
   max-width: none;
   height: auto;
   object-fit: contain;
@@ -5304,6 +5298,39 @@ input[type="text"].sig-text-input:focus {
 }
 .nav-menu-signout svg { color: #b94040; }
 .nav-menu-signout:hover { background: #fff0f0; color: #922; }
+
+.nav-account-email {
+  padding: 8px 16px 14px;
+  font-size: 0.72rem;
+  color: #9a9a9a;
+  text-align: center;
+  word-break: break-all;
+}
+.nav-account-email span { color: #777; font-weight: 600; }
+
+/* Account Information modal */
+.acc-info-block { margin-bottom: 14px; }
+.acc-info-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #999;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+.acc-info-value {
+  font-size: 0.95rem;
+  color: #333;
+  font-weight: 600;
+  word-break: break-all;
+}
+.acc-info-sync-note {
+  font-size: 0.78rem;
+  color: #888;
+  line-height: 1.45;
+  margin: 14px 0 0;
+  text-align: center;
+}
 
 .nav-menu-badge {
   margin-left: auto;

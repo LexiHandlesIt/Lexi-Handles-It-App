@@ -615,6 +615,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   loadFromStorage();
 
+  // New device / fresh login: pull the business record from Supabase BEFORE
+  // deciding onboarding, so a returning user isn't wrongly asked to set up again.
+  if (!canUseMainApp()) {
+    try {
+      await Promise.race([
+        loadBusinessFromSupabase(),
+        new Promise(r => setTimeout(r, 8000)) // never hang if Supabase is slow
+      ]);
+    } catch (e) { console.warn('Pre-onboarding business load failed:', e); }
+  }
+
   // ── Render immediately from local cache so the app is usable at once ──
   setupOnboarding();
   setupNewJobPicker();
@@ -2441,6 +2452,12 @@ function setupNavigation() {
     overlay.classList.add('open');
     hamburger.setAttribute('aria-expanded', 'true');
     navMenu.setAttribute('aria-hidden', 'false');
+    // Show who's logged in
+    const email = lexiAuthSession?.user?.email || '';
+    const emailEl = document.getElementById('navAccountEmail');
+    const emailWrap = document.getElementById('navAccountEmailWrap');
+    if (emailEl) emailEl.textContent = email;
+    if (emailWrap) emailWrap.style.display = email ? '' : 'none';
   }
 
   function closeMenu() {
@@ -2590,6 +2607,21 @@ function setupNavigation() {
       document.getElementById('backupRestoreModal').style.display = 'flex';
     });
   }
+
+  // Account Information
+  document.getElementById('menuAccountInfo')?.addEventListener('click', () => {
+    closeMenu();
+    openAccountInfoModal();
+  });
+  document.getElementById('closeAccountInfoBtn')?.addEventListener('click', closeAccountInfoModal);
+  document.getElementById('accountInfoModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeAccountInfoModal();
+  });
+  document.getElementById('accountManagePlanBtn')?.addEventListener('click', () => {
+    closeAccountInfoModal();
+    openTrialPlansModal();
+  });
+  document.getElementById('accountSavePwBtn')?.addEventListener('click', saveNewPassword);
 
   document.getElementById('menuTrialPlans')?.addEventListener('click', () => {
     closeMenu();
@@ -2752,6 +2784,108 @@ function openTrialPlansModal() {
 function closeTrialPlansModal() {
   const modal = document.getElementById('trialPlansModal');
   if (modal) modal.style.display = 'none';
+}
+
+/* ── Account Information modal ── */
+function closeAccountInfoModal() {
+  const modal = document.getElementById('accountInfoModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function openAccountInfoModal() {
+  const user = lexiAuthSession?.user || null;
+
+  // Email
+  const emailEl = document.getElementById('accountEmail');
+  if (emailEl) emailEl.textContent = user?.email || 'Not signed in';
+
+  // Member since
+  const createdWrap = document.getElementById('accountCreatedWrap');
+  const createdEl = document.getElementById('accountCreated');
+  if (user?.created_at && createdEl) {
+    createdEl.textContent = new Date(user.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (createdWrap) createdWrap.style.display = '';
+  } else if (createdWrap) {
+    createdWrap.style.display = 'none';
+  }
+
+  // Quiet Season status
+  const qsWrap = document.getElementById('accountQuietSeasonWrap');
+  const qsEl = document.getElementById('accountQuietSeason');
+  if (isPaused() && qsEl) {
+    const data = getPauseData();
+    const days = data?.endDate ? Math.max(0, Math.ceil((new Date(data.endDate) - Date.now()) / 86400000)) : 0;
+    qsEl.textContent = `In Quiet Season — ${days} day${days === 1 ? '' : 's'} left`;
+    if (qsWrap) qsWrap.style.display = '';
+  } else if (qsWrap) {
+    qsWrap.style.display = 'none';
+  }
+
+  // Plan / trial status — default to trial line, override with paid plan if found
+  const planEl = document.getElementById('accountPlan');
+  if (planEl) {
+    const days = getTrialDaysRemaining();
+    planEl.textContent = days > 0 ? `Free trial — ${days} day${days === 1 ? '' : 's'} left` : 'Trial ended';
+    if (lexiSupabase && user?.id) {
+      try {
+        const { data } = await lexiSupabase
+          .from('subscriptions')
+          .select('plan_name, status')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const plan = (data?.plan_name || '').toLowerCase();
+        const status = (data?.status || '').toLowerCase();
+        if (data && plan && plan !== 'trial' && status !== 'trialing') {
+          const nice = data.plan_name.charAt(0).toUpperCase() + data.plan_name.slice(1);
+          planEl.textContent = `Plan: ${nice}${status && status !== 'active' ? ' (' + status + ')' : ''}`;
+        }
+      } catch (e) { console.warn('Could not load plan:', e); }
+    }
+  }
+
+  // Reset password fields
+  const newPw = document.getElementById('accountNewPw');
+  const confirmPw = document.getElementById('accountConfirmPw');
+  const msg = document.getElementById('accountPwMsg');
+  if (newPw) newPw.value = '';
+  if (confirmPw) confirmPw.value = '';
+  if (msg) { msg.textContent = ''; msg.className = 'auth-message'; }
+
+  const modal = document.getElementById('accountInfoModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+async function saveNewPassword() {
+  const newPw = document.getElementById('accountNewPw')?.value || '';
+  const confirmPw = document.getElementById('accountConfirmPw')?.value || '';
+  const msg = document.getElementById('accountPwMsg');
+  const setMsg = (text, type) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = 'auth-message' + (type ? ' ' + type : '');
+  };
+
+  if (!lexiSupabase || !lexiAuthSession?.user) { setMsg('You are not signed in.', 'error'); return; }
+  if (newPw.length < 8) { setMsg('Password must be at least 8 characters.', 'error'); return; }
+  if (newPw !== confirmPw) { setMsg('Passwords do not match.', 'error'); return; }
+
+  const btn = document.getElementById('accountSavePwBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
+    const { error } = await lexiSupabase.auth.updateUser({ password: newPw });
+    if (error) throw error;
+    setMsg('Password updated.', 'success');
+    const np = document.getElementById('accountNewPw');
+    const cp = document.getElementById('accountConfirmPw');
+    if (np) np.value = '';
+    if (cp) cp.value = '';
+  } catch (e) {
+    setMsg(e?.message || 'Could not update password. Try again.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save new password'; }
+  }
 }
 
 async function submitReferral(source) {
@@ -10331,10 +10465,6 @@ function buildDocHtml(doc, docType, extra = {}) {
         <div class="doc-accept-body">
           <div class="doc-accept-heading">Acceptance</div>
           <p>Please let me know if this meets your needs. To accept this ${(q.type||'quote').toLowerCase()}, click the button below to sign.</p>
-          <div style="display:flex;gap:12px;margin:18px 0">
-            <div style="flex:1;padding:13px;border-radius:10px;background:#4a5d3a;color:#fff;text-align:center;font-weight:700;font-size:1rem">✔ Accept</div>
-            <div style="flex:1;padding:13px;border-radius:10px;background:#fff;color:#C4553A;border:1.5px solid #C4553A;text-align:center;font-weight:700;font-size:1rem">✘ Decline</div>
-          </div>
           <div class="doc-sig-grid">
             <div class="doc-sig-box">
               ${sigContent}
@@ -11987,9 +12117,28 @@ function showQuoteAcceptedNotification() {
   const ref = q.ref || doc.ref || '';
   const el = document.getElementById('quoteAcceptedModal');
   const msg = document.getElementById('quoteAcceptedMsg');
+  const bookingSection = document.getElementById('acceptedBookingSection');
+  const okBtn = document.getElementById('quoteAcceptedOkBtn');
+  // Reset to step 1 each time the modal opens
+  if (bookingSection) bookingSection.style.display = 'none';
   if (msg) msg.innerHTML = `<strong>${custName}</strong> has accepted your ${(q.type || 'quote').toLowerCase()}${ref ? ' (' + ref + ')' : ''}.<br><br>
     ${doc.acceptedBy ? 'Signed off by: <strong>' + doc.acceptedBy + '</strong><br>' : ''}
     ${doc.acceptedAt ? 'At: ' + new Date(doc.acceptedAt).toLocaleString('en-GB') : ''}`;
+
+  // Configure the action button based on the auto-holding-message preference.
+  // A browser only lets us open WhatsApp/email in response to a tap, so each
+  // send gets its own button press — step 1 sends the holding message, step 2
+  // sends the booking invite with the chosen date.
+  if (okBtn) {
+    if (state.company?.autoHoldingMessage) {
+      okBtn.textContent = 'Send holding message';
+      okBtn.onclick = () => onAcceptedSendHolding(doc);
+    } else {
+      okBtn.textContent = "Let's get the job booked in.";
+      okBtn.onclick = () => { if (el) el.style.display = 'none'; showBookingContactModal(doc); };
+    }
+  }
+
   if (el) el.style.display = 'flex';
   // Mark as notified so we don't show again
   accepted.forEach(d => { d.acceptNotified = true; });
@@ -12649,6 +12798,67 @@ function sendHoldingMessageForDoc(doc) {
   }
 }
 
+/* ── Step 1: send the holding message, then reveal the booking step ── */
+function onAcceptedSendHolding(doc) {
+  sendHoldingMessageForDoc(doc);
+  const msg            = document.getElementById('quoteAcceptedMsg');
+  const bookingSection = document.getElementById('acceptedBookingSection');
+  const okBtn          = document.getElementById('quoteAcceptedOkBtn');
+  const notifPrompt    = document.getElementById('acceptedNotifPrompt');
+  const custFirst      = getCustomerFirstName(doc);
+  if (msg) msg.innerHTML = `<strong>Holding message sent</strong> to ${esc(custFirst || 'your customer')}.<br>Now pick a date to book them in.`;
+  if (notifPrompt) notifPrompt.style.display = 'none';
+  if (bookingSection) bookingSection.style.display = 'block';
+  if (okBtn) {
+    okBtn.textContent = 'Send booking invite';
+    okBtn.onclick = () => onAcceptedSendBooking(doc);
+  }
+}
+
+/* ── Step 2: open the booking template pre-filled with the chosen date ── */
+function onAcceptedSendBooking(doc) {
+  const date = document.getElementById('acceptedBookDate')?.value || '';
+  const time = document.getElementById('acceptedBookTime')?.value || '';
+  // Save the chosen date as the job start date so it shows in My Jobs + calendar
+  if (date) {
+    doc.jobAccepted = true;
+    doc.jobStartDate = date;
+    save();
+    refreshSavedDocs();
+  }
+  sendBookingInviteForDoc(doc, date, time);
+  const el = document.getElementById('quoteAcceptedModal');
+  if (el) el.style.display = 'none';
+}
+
+/* ── Booking-invite template (WhatsApp / email), pre-filled with the date ── */
+function sendBookingInviteForDoc(doc, date, time) {
+  if (!doc) return;
+  const q          = doc.quote || {};
+  const traderName = (state.company?.preferredName || state.company?.firstName || '').trim();
+  const custFirst  = getCustomerFirstName(doc);
+  const phone      = formatWhatsAppNumber(q.custPhone || '');
+  const email      = (q.custEmail || '').trim();
+  const docType    = (q.type || 'quote').toLowerCase();
+  const bizName    = (state.company?.businessName || traderName || '').trim();
+  const signoff    = [traderName, bizName].filter((v, i, a) => v && a.indexOf(v) === i).join('\n');
+  const whenLine   = date
+    ? `${formatDate(date)}${time ? ' at ' + time : ''}`
+    : '(date to be confirmed)';
+  const msg = `Hi ${custFirst || 'there'},\n\nThank you for accepting the ${docType}. I am delighted to get started!\n\nI would like to book you in for:\n\n${whenLine}\n\nPlease reply to confirm this works for you.\n\nKind regards\n${signoff}`.trim();
+
+  const sentVia = doc.sentVia || (phone ? 'whatsapp' : 'email');
+  if (sentVia === 'whatsapp' && phone) {
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  } else if (email) {
+    openEmailCompose(email, `Booking your ${docType}`, msg);
+  } else if (phone) {
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  } else {
+    showBookingContactModal(doc);
+  }
+}
+
 /* ── Get the best first name available from a doc ── */
 function getCustomerFirstName(doc) {
   const q = doc?.quote || {};
@@ -12741,17 +12951,8 @@ function showBookingContactModal(doc) {
 }
 
 function setupReviewModal() {
-  // Quote accepted modal
-  document.getElementById('quoteAcceptedOkBtn')?.addEventListener('click', () => {
-    document.getElementById('quoteAcceptedModal').style.display = 'none';
-    if (!_quoteAcceptedDoc) return;
-    // If auto holding message is ON, skip straight to sending the holding message
-    if (state.company?.autoHoldingMessage) {
-      sendHoldingMessageForDoc(_quoteAcceptedDoc);
-    } else {
-      showBookingContactModal(_quoteAcceptedDoc);
-    }
-  });
+  // Quote accepted modal — the action button's handler is set dynamically in
+  // showQuoteAcceptedNotification() so it can run the two-step send flow.
   document.getElementById('quoteAcceptedModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
   });
