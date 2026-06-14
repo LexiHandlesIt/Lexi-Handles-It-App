@@ -5798,20 +5798,37 @@ input[type="text"].sig-text-input:focus {
 .cal-template-btn:hover, .cal-template-btn.selected { border-color: var(--walnut); background: var(--walnut-tint); }
 .cal-template-btn-title { font-size: 0.82rem; font-weight: 700; color: var(--charcoal); }
 .cal-template-btn-desc { font-size: 0.72rem; color: #888; margin-top: 2px; }
+.cal-template-group-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--walnut);
+  margin: 14px 0 4px;
+}
+.cal-template-group-title:first-child { margin-top: 0; }
 .cal-email-preview {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   background: var(--cream);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px;
-  font-size: 0.78rem;
+  font-family: inherit;
+  font-size: 0.82rem;
   color: var(--charcoal);
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 200px;
+  min-height: 160px;
+  resize: vertical;
   overflow-y: auto;
+  margin-top: 12px;
   margin-bottom: 14px;
+  outline: none;
 }
+.cal-email-preview:focus { border-color: var(--walnut); }
 
 /* Job schedule strip inside customer dashboard job card */
 .cdv-job-schedule {

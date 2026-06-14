@@ -1365,6 +1365,24 @@ function findMatchingCustomerIdx(q = {}) {
   return -1;
 }
 
+// True when two quotes describe the same person — used to hide a thin standalone
+// customer once a fuller doc (or customer) exists for them.
+function quotesSamePerson(a = {}, b = {}) {
+  const aEmail = String(a.custEmail || '').trim().toLowerCase();
+  const bEmail = String(b.custEmail || '').trim().toLowerCase();
+  if (aEmail && bEmail) return aEmail === bEmail;          // both have email -> decisive
+  const aPhone = normalisePhone(a.custPhone);
+  const bPhone = normalisePhone(b.custPhone);
+  if (aPhone && bPhone) return aPhone === bPhone;          // both have phone -> decisive
+  const aFirst = String(a.custFirstName || '').trim().toLowerCase();
+  const bFirst = String(b.custFirstName || '').trim().toLowerCase();
+  if (!aFirst || !bFirst || aFirst !== bFirst) return false;
+  const aLast = String(a.custLastName || '').trim().toLowerCase();
+  const bLast = String(b.custLastName || '').trim().toLowerCase();
+  if (aLast && bLast) return aLast === bLast;              // same first, surnames must agree
+  return true;                                             // same first, one side has no surname -> same person
+}
+
 // Merge two customer quotes: incoming wins where it has a value, otherwise keep
 // what we already had — so a thin update never wipes richer existing data.
 function mergeCustomerQuotes(existing = {}, incoming = {}) {
@@ -6464,22 +6482,15 @@ function refreshSavedDocs() {
     });
   }
 
-  const savedCustomerKeys = new Set(
-    (state.saved || [])
-      .map(d => customerLocalKey(d.quote || {}))
-      .filter(Boolean)
-  );
-  const savedCustomerNames = new Set(
-    (state.saved || [])
-      .map(d => (buildCustName(d.quote || '') || '').toLowerCase())
-      .filter(Boolean)
-  );
+  const savedQuotes = (state.saved || []).map(d => d.quote || {});
   let standaloneCustomers = filter === 'all'
     ? (state.customers || []).filter(customer => {
         const quote = customer.quote || {};
         const key = customer.key || customerLocalKey(quote);
-        const name = (buildCustName(quote) || customer.name || '').toLowerCase();
-        return key && !savedCustomerKeys.has(key) && !savedCustomerNames.has(name);
+        if (!key) return false;
+        // Hide if a saved doc already represents this same person (matches by
+        // email/phone/name even when the customer record is thin).
+        return !savedQuotes.some(dq => quotesSamePerson(quote, dq));
       })
     : [];
   if (q) {
@@ -11474,19 +11485,22 @@ function openCalEmailComposer(docId, eventType, channel) {
   const total      = fmtPrice(doc.total || 0);
   const jobDesc    = (q.items || []).map(i => i.name).filter(Boolean).join(', ') || 'your recent work';
   const qTypeName  = (q.type || 'Estimate').toLowerCase();
+  const bookingDate = doc.jobStartDate ? formatDate(doc.jobStartDate) : '[date]';
   calEmailAddr     = q.custEmail || '';
   calEmailPhone    = formatWhatsAppNumber(q.custPhone || '');
 
   const templates = [
+    // ── Before acceptance ──────────────────────────────────────────
     {
       id: 'follow_up',
+      group: 'before',
       title: 'Quote Follow-up',
       desc: 'Check if they\'ve had a chance to look it over',
-      subject: `Following up on your ${qTypeName} -${ref}`,
+      subject: `Following up on your quote -${ref}`,
       body:
 `Hi ${custFirst},
 
-Just following up on the ${qTypeName} I sent over for ${jobDesc}.
+Just following up on the quote I sent over for ${jobDesc}.
 
 Reference: ${ref}
 Total: ${total}
@@ -11499,7 +11513,86 @@ Thanks,
 ${traderName}`,
     },
     {
+      id: 'estimate_follow_up',
+      group: 'before',
+      title: 'Estimate Follow-up',
+      desc: 'Check if they\'ve had a chance to look it over',
+      subject: `Following up on your estimate -${ref}`,
+      body:
+`Hi ${custFirst},
+
+Just following up on the estimate I sent over for ${jobDesc}.
+
+Reference: ${ref}
+Total: ${total}
+
+Have you had a chance to look it over? Happy to answer any questions or tweak anything.
+
+Looking forward to hearing from you.
+
+Thanks,
+${traderName}`,
+    },
+    // ── After acceptance ───────────────────────────────────────────
+    {
+      id: 'holding',
+      group: 'after',
+      title: 'Holding Message',
+      desc: 'Thank them for accepting while you sort the booking',
+      subject: `Thank you for accepting -${ref}`,
+      body:
+`Hi ${custFirst},
+
+Thank you for accepting the ${qTypeName}. I am really looking forward to getting the work done for you!
+
+I will be in touch shortly to confirm the booking details.
+
+Kind regards,
+${traderName}`,
+    },
+    {
+      id: 'book_in',
+      group: 'after',
+      title: 'Book In',
+      desc: 'Propose a date and ask them to confirm',
+      subject: `Booking your ${qTypeName} -${ref}`,
+      body:
+`Hi ${custFirst},
+
+Thank you for accepting the ${qTypeName}. I am delighted to get started!
+
+I would like to book you in for:
+
+${bookingDate} at [time]
+
+Please reply to confirm this works for you.
+
+Kind regards,
+${traderName}`,
+    },
+    {
+      id: 'booking_reminder',
+      group: 'after',
+      title: 'Booking Reminder',
+      desc: 'Day-before reminder with time and any access notes',
+      subject: `Reminder: your booking on ${bookingDate}`,
+      body:
+`Hi ${custFirst},
+
+Just a quick reminder that I'm booked in to see you tomorrow, ${bookingDate} at [time], for ${jobDesc}.
+
+A couple of things to have ready:
+- Access / parking: [add any access codes, parking notes here]
+
+Looking forward to it. Any problems before then, just give me a shout.
+
+Thanks,
+${traderName}`,
+    },
+    // ── After job completion ───────────────────────────────────────
+    {
       id: 'invoice_reminder',
+      group: 'complete',
       title: 'Invoice Reminder',
       desc: 'A friendly nudge that payment is due or overdue',
       subject: `Invoice reminder -${ref}`,
@@ -11514,26 +11607,16 @@ Thanks for your business,
 ${traderName}`,
     },
     {
-      id: 'job_confirmed',
-      title: 'Job Confirmation',
-      desc: 'Let them know the job is confirmed and you\'re ready',
-      subject: `Your job is confirmed -${ref}`,
-      body:
-`Hi ${custFirst},
-
-Great news -I'm confirmed to carry out the work for ${jobDesc}.
-
-Reference: ${ref}
-Total: ${total}
-
-I'll be in touch with the exact start details. If you need anything before then, just reply here or give me a call.
-
-Looking forward to working with you.
-
-${traderName}`,
+      id: 'receipt',
+      group: 'complete',
+      title: 'Receipt',
+      desc: 'Send them a copy of their receipt',
+      subject: `Your receipt -${ref}`,
+      body: '',
     },
     {
       id: 'payment_thanks',
+      group: 'complete',
       title: 'Payment Thanks',
       desc: 'A warm thank-you once the money comes in',
       subject: `Payment received, thank you! (${ref})`,
@@ -11555,7 +11638,7 @@ ${traderName}`,
     invoiceDue: 'invoice_reminder',
     overdue:    'invoice_reminder',
     paid:       'payment_thanks',
-    startDate:  'job_confirmed',
+    startDate:  'book_in',
   };
   const defaultId = defaultMap[eventType] || 'follow_up';
   calEmailSelectedTemplate = templates.find(t => t.id === defaultId) || templates[0];
@@ -11580,7 +11663,7 @@ ${traderName}`,
 
   const listEl = document.getElementById('calTemplateList');
   if (listEl) {
-    listEl.innerHTML = templates.map(t => `
+    const btnHtml = t => `
       <button type="button" class="cal-template-btn${calEmailSelectedTemplate?.id === t.id ? ' selected' : ''}"
         onclick="calSelectTemplate('${t.id}')"
         data-tmpl-id="${t.id}"
@@ -11588,7 +11671,18 @@ ${traderName}`,
         data-body="${encodeURIComponent(t.body)}">
         <div class="cal-template-btn-title">${t.title}</div>
         <div class="cal-template-btn-desc">${t.desc}</div>
-      </button>`).join('') + `
+      </button>`;
+    const groups = [
+      { id: 'before',   label: 'Before Acceptance' },
+      { id: 'after',    label: 'After Acceptance' },
+      { id: 'complete', label: 'After Job Completion' },
+    ];
+    listEl.innerHTML = groups.map(g => {
+      const items = templates.filter(t => t.group === g.id);
+      if (!items.length) return '';
+      return `<div class="cal-template-group-title">${g.label}</div>` + items.map(btnHtml).join('');
+    }).join('') + `
+      <div class="cal-template-group-title">Your Own Words</div>
       <button type="button" class="cal-template-btn${calEmailSelectedTemplate?.id === 'custom' ? ' selected' : ''}"
         onclick="calSelectTemplate('custom')"
         data-tmpl-id="custom" data-subj="" data-body="">
@@ -11615,6 +11709,12 @@ function calSelectTemplate(templateId) {
     return;
   }
 
+  // "Receipt" shares the actual receipt document — build + upload + link (async)
+  if (templateId === 'receipt') {
+    calReceiptShare();
+    return;
+  }
+
   document.querySelectorAll('.cal-template-btn').forEach(btn => {
     btn.classList.toggle('selected', btn.dataset.tmplId === templateId);
   });
@@ -11629,18 +11729,68 @@ function calSelectTemplate(templateId) {
   updateCalEmailPreview();
 }
 
+// Build the receipt document, upload it, and put a message + read-only link into
+// the editable preview so the trader can send it like any other template.
+async function calReceiptShare() {
+  const doc = (state.saved || []).find(d => d.id === calEmailDocId);
+  if (!doc) return;
+  document.querySelectorAll('.cal-template-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.tmplId === 'receipt');
+  });
+  const preview = document.getElementById('calEmailPreview');
+  const sendBtn = document.getElementById('sendCalEmailBtn');
+  if (preview) { preview.style.display = 'block'; preview.value = 'Preparing receipt…'; preview.readOnly = true; }
+  if (sendBtn) sendBtn.disabled = true;
+
+  const q          = doc.quote || {};
+  const co         = state.company || {};
+  const custFirst  = q.custFirstName || 'there';
+  const traderName = [co.firstName, co.lastName].filter(Boolean).join(' ') || (co.firstName || 'your tradesperson');
+  const ref        = doc.receiptRef || doc.ref || q.ref || '';
+  const total      = fmtPrice(doc.total || 0);
+
+  try {
+    const html     = wrapDoc(buildDocHtml(doc, 'receipt', {}));
+    const filename = getDocFilenameFromRef(ref || 'receipt');
+    const url      = await uploadDocToStorage(html, filename, '', 'receipt');
+    if (!url) throw new Error('Receipt link not generated');
+    const body =
+`Hi ${custFirst},
+
+Thank you for your payment of ${total} for ${ref}. Here is your receipt:
+
+${url}
+
+Thanks again,
+${traderName}`;
+    calEmailSelectedTemplate = { id: 'receipt', subject: `Your receipt -${ref}`, body };
+    if (preview) { preview.value = body; preview.readOnly = false; }
+  } catch (e) {
+    // uploadDocToStorage already surfaces a toast on failure
+    if (preview) { preview.value = ''; preview.readOnly = false; }
+    calEmailSelectedTemplate = null;
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+  }
+}
+
 function updateCalEmailPreview() {
   const previewEl = document.getElementById('calEmailPreview');
   if (!calEmailSelectedTemplate || !previewEl) return;
   previewEl.style.display = 'block';
-  previewEl.textContent = calEmailSelectedTemplate.body || '';
+  previewEl.readOnly = false;
+  previewEl.value = calEmailSelectedTemplate.body || '';
 }
 
 function sendCalEmail() {
   if (!calEmailSelectedTemplate) return;
 
+  // Use whatever is currently in the editable preview, so trader tweaks send too
+  const previewEl = document.getElementById('calEmailPreview');
+  const liveBody  = previewEl ? previewEl.value : (calEmailSelectedTemplate.body || '');
+
   if (calEmailChannel === 'whatsapp') {
-    const text = encodeURIComponent(calEmailSelectedTemplate.body || '');
+    const text = encodeURIComponent(liveBody || '');
     window.open(`https://wa.me/?text=${text}`, '_blank');
   } else {
     if (!calEmailAddr) {
@@ -11648,7 +11798,7 @@ function sendCalEmail() {
       return;
     }
     const subject = encodeURIComponent(calEmailSelectedTemplate.subject || '');
-    const body    = encodeURIComponent(calEmailSelectedTemplate.body || '');
+    const body    = encodeURIComponent(liveBody || '');
     window.location.href = `mailto:${calEmailAddr}?subject=${subject}&body=${body}`;
   }
 
