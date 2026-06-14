@@ -13,7 +13,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=fix-syntax-20260609">
+  <!-- Auto cache-buster: always fetch the latest CSS/JS, no manual version bumps -->
+  <script>window.LEXI_BUST = Date.now();</script>
+  <script>document.write('<link rel="stylesheet" href="style.css?v=' + window.LEXI_BUST + '">');</script>
 </head>
 <body>
 
@@ -2800,6 +2802,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=fix-syntax-20260609"></script>
+  <script>document.write('<scr' + 'ipt src="script.js?v=' + window.LEXI_BUST + '"><\/scr' + 'ipt>');</script>
 </body>
 </html>

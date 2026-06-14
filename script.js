@@ -1313,9 +1313,71 @@ function customerLocalKey(q = {}) {
   ].map(value => String(value || '').trim().toLowerCase()).join('|');
 }
 
+// True when a quote carries "rich" identifying detail (email/phone/surname),
+// as opposed to a thin first-name-only record.
+function _customerIsRich(q = {}) {
+  return !!(String(q.custEmail || '').trim() ||
+            normalisePhone(q.custPhone) ||
+            String(q.custLastName || '').trim());
+}
+
+// Find an existing local customer that is the same person as `q`, even when only
+// partial info was saved earlier (e.g. first name only, then full details later).
+function findMatchingCustomerIdx(q = {}) {
+  const email = String(q.custEmail || '').trim().toLowerCase();
+  const phone = normalisePhone(q.custPhone);
+  const first = String(q.custFirstName || '').trim().toLowerCase();
+  const last  = String(q.custLastName  || '').trim().toLowerCase();
+
+  // 1. Same email — strongest signal
+  if (email) {
+    const i = state.customers.findIndex(c => String(c.quote?.custEmail || '').trim().toLowerCase() === email);
+    if (i > -1) return i;
+  }
+  // 2. Same phone
+  if (phone) {
+    const i = state.customers.findIndex(c => normalisePhone(c.quote?.custPhone) === phone);
+    if (i > -1) return i;
+  }
+  // 3. Same first + last name
+  if (first && last) {
+    const i = state.customers.findIndex(c =>
+      String(c.quote?.custFirstName || '').trim().toLowerCase() === first &&
+      String(c.quote?.custLastName  || '').trim().toLowerCase() === last);
+    if (i > -1) return i;
+  }
+  // 4. Same first name where one side has no surname yet and nothing contradicts
+  //    (merges a thin "Carmen" with a fuller "Carmen Carter").
+  if (first) {
+    const i = state.customers.findIndex(c => {
+      const cFirst = String(c.quote?.custFirstName || '').trim().toLowerCase();
+      const cLast  = String(c.quote?.custLastName  || '').trim().toLowerCase();
+      const cEmail = String(c.quote?.custEmail     || '').trim().toLowerCase();
+      const cPhone = normalisePhone(c.quote?.custPhone);
+      if (cFirst !== first) return false;
+      if (cLast && last && cLast !== last) return false;     // different surnames -> different people
+      if (cEmail && email && cEmail !== email) return false; // different emails -> different people
+      if (cPhone && phone && cPhone !== phone) return false; // different phones -> different people
+      return !cLast || !last;                                // at least one side has no surname yet
+    });
+    if (i > -1) return i;
+  }
+  return -1;
+}
+
+// Merge two customer quotes: incoming wins where it has a value, otherwise keep
+// what we already had — so a thin update never wipes richer existing data.
+function mergeCustomerQuotes(existing = {}, incoming = {}) {
+  const merged = { ...existing };
+  ['custTitle','custFirstName','custLastName','custAddr','custPostcode','custPhone','custEmail'].forEach(k => {
+    if (String(incoming[k] || '').trim()) merged[k] = incoming[k];
+  });
+  return merged;
+}
+
 function upsertLocalCustomer(q = {}, saveAfter = true) {
   if (!customerHasUsefulData(q)) return null;
-  const quote = {
+  const incoming = {
     custTitle:     q.custTitle || '',
     custFirstName: q.custFirstName || '',
     custLastName:  q.custLastName || '',
@@ -1324,24 +1386,29 @@ function upsertLocalCustomer(q = {}, saveAfter = true) {
     custPhone:     q.custPhone || '',
     custEmail:     q.custEmail || ''
   };
-  const key = customerLocalKey(quote);
-  const name = buildCustName(quote) || 'Customer';
-  let existingIdx = state.customers.findIndex(customer => customer.key === key);
-  // Fallback: if key changed (e.g. email added later), find by name to avoid duplicating
-  if (existingIdx === -1 && name && name !== 'Customer') {
-    existingIdx = state.customers.findIndex(customer =>
-      (customer.name || '').toLowerCase() === name.toLowerCase()
-    );
+  const existingIdx = findMatchingCustomerIdx(incoming);
+  const prev = existingIdx > -1 ? state.customers[existingIdx] : null;
+  const quote = prev ? mergeCustomerQuotes(prev.quote || {}, incoming) : incoming;
+  const incomingId = q.supabaseId || q.id || '';
+  // Keep the Supabase id of whichever record is richer, so future saves update
+  // the row that survives the ghost-cleanup rather than an orphan.
+  let supabaseId;
+  if (prev) {
+    supabaseId = _customerIsRich(prev.quote) ? (prev.supabaseId || incomingId)
+               : _customerIsRich(incoming)   ? (incomingId || prev.supabaseId)
+               : (prev.supabaseId || incomingId);
+  } else {
+    supabaseId = incomingId;
   }
   const row = {
-    id: existingIdx > -1 ? state.customers[existingIdx].id : uid(),
-    supabaseId: q.supabaseId || q.id || (existingIdx > -1 ? state.customers[existingIdx].supabaseId : '') || '',
-    key,
-    name,
+    id: prev ? prev.id : uid(),
+    supabaseId: supabaseId || '',
+    key: customerLocalKey(quote),
+    name: buildCustName(quote) || 'Customer',
     quote,
     updatedAt: new Date().toISOString()
   };
-  if (existingIdx > -1) state.customers[existingIdx] = { ...state.customers[existingIdx], ...row };
+  if (prev) state.customers[existingIdx] = { ...prev, ...row };
   else state.customers.unshift(row);
   if (saveAfter) save();
   return row;
@@ -1363,6 +1430,25 @@ async function loadCustomersFromSupabase() {
   if (Array.isArray(data) && data.length) {
     data.forEach(row => upsertLocalCustomer(customerRowToQuote(row), false));
     save();
+
+    // Clean up ghost rows: a "thin" row (first name only, no email/phone/surname)
+    // that duplicates a richer row for the same person. Order-independent + safe.
+    const norm = s => String(s || '').trim().toLowerCase();
+    const isThin = r => !norm(r.email) && !normalisePhone(r.phone) && !norm(r.last_name);
+    const orphanIds = [];
+    data.forEach(thin => {
+      if (!isThin(thin) || !norm(thin.first_name)) return;
+      const rich = data.find(r => r.id !== thin.id &&
+        norm(r.first_name) === norm(thin.first_name) &&
+        (norm(r.email) || normalisePhone(r.phone) || norm(r.last_name)));
+      if (rich) orphanIds.push(thin.id);
+    });
+    if (orphanIds.length) {
+      lexiSupabase.from('customers').delete()
+        .in('id', orphanIds)
+        .eq('user_id', lexiAuthSession.user.id)
+        .then(({ error: delErr }) => { if (delErr) console.warn('Ghost customer cleanup failed:', delErr); });
+    }
     return true;
   }
   return false;
