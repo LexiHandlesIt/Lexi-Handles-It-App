@@ -12020,8 +12020,8 @@ function sendLexiNotification(title, body, tag = 'lexi') {
     const n = new Notification(title, {
       body,
       tag,
-      icon: 'photos/1 Lexi Handles It Transparent.png',
-      badge: 'photos/1 Lexi Handles It Transparent.png',
+      icon: '1 Lexi Handles It Transparent.png',
+      badge: '1 Lexi Handles It Transparent.png',
     });
     setTimeout(() => n.close(), 8000);
   } catch(e) { console.warn('Notification failed:', e); }
