@@ -1034,6 +1034,20 @@ function _isTimeoutError(err) {
   const m = String(err?.message || err?.error_description || err?.code || err || '');
   return /statement timeout|canceling statement|\b57014\b|timeout/i.test(m);
 }
+// Pull a short, human-readable reason out of a Supabase/Postgres error so the
+// real cause shows up in the toast instead of a generic "needs another try".
+// True when Postgres/PostgREST rejects a write because a column is missing from
+// the deployed schema (PGRST204 schema-cache miss, or 42703 undefined column).
+function _isMissingColumnError(err) {
+  const m = String(err?.message || '') + ' ' + String(err?.code || '');
+  return /PGRST204|42703|could not find the .* column|column .* does not exist/i.test(m);
+}
+function _syncErrText(err) {
+  if (!err) return 'unknown error';
+  const code = err.code ? ` [${err.code}]` : '';
+  const msg = err.message || err.error_description || err.hint || err.details || String(err);
+  return (msg + code).slice(0, 140);
+}
 async function withSyncRetry(fn, attempts = 3) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
@@ -1198,13 +1212,16 @@ async function _doSavePriceListToSupabase() {
   if (deleteResult.error) throw deleteResult.error;
   if (!rows.length) return;
 
-  const insertResult = await lexiSupabase.from('price_items').insert(rows);
-  if (insertResult.error && String(insertResult.error.message || '').includes('local_id')) {
-    const fallbackRows = rows.map(({ local_id, ...row }) => row);
-    const fallbackResult = await lexiSupabase.from('price_items').insert(fallbackRows);
-    if (fallbackResult.error) throw fallbackResult.error;
-    console.warn('Price list synced without local_id. Add local_id to price_items for stronger cross-device matching.');
-    return;
+  let insertResult = await lexiSupabase.from('price_items').insert(rows);
+  // If a column is missing in the deployed schema, strip the optional ones and
+  // retry so the core data (name/price/unit) still syncs rather than failing.
+  if (insertResult.error && _isMissingColumnError(insertResult.error)) {
+    const slimRows = rows.map(({ local_id, cost_price, category, ...row }) => row);
+    insertResult = await lexiSupabase.from('price_items').insert(slimRows);
+    if (!insertResult.error) {
+      console.warn('Price list synced without optional columns (local_id/cost_price/category). Add them in Supabase for full fidelity.');
+      return;
+    }
   }
   if (insertResult.error) throw insertResult.error;
 }
@@ -1215,7 +1232,7 @@ function queuePriceListSync(showError = false) {
   priceListSyncTimer = setTimeout(() => {
     savePriceListToSupabase().catch(error => {
       console.warn('Price list saved locally but did not sync to Supabase:', error);
-      if (showError) toast('Price list saved here. Supabase sync needs another try.', 'error');
+      if (showError) toast('Sync failed: ' + _syncErrText(error), 'error');
     });
   }, 250);
 }
@@ -3274,7 +3291,7 @@ function saveBusinessDetails(showToast = true) {
   save();
   saveBusinessToSupabase().catch(error => {
     console.warn('Business details saved locally but did not sync to Supabase:', error);
-    if (showToast) toast('Saved on this device. Supabase sync needs another try.', 'error');
+    if (showToast) toast('Sync failed: ' + _syncErrText(error), 'error');
   });
   updateColourPreview();
   personaliseText();
