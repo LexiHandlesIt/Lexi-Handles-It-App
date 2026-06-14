@@ -25,7 +25,7 @@
         <img src="photos/2 So you dont have to transparent.png" alt="So you don't have to" class="auth-strap-img" onerror="this.style.display='none'">
       </div>
       <h1 id="authTitle">Welcome</h1>
-      <p class="auth-sub">Hi. I'm Lexi. I'm an avatar built to help you handle the business side of trade.</p>
+      <p class="auth-sub">Hi, I'm Lexi, I'm an avatar built to help you handle the business side of trade.</p>
       <p class="auth-trial"><strong>Start with 3 months free. No card needed.</strong></p>
 
       <div class="auth-tabs" role="tablist" aria-label="Choose sign up or log in">
@@ -113,11 +113,8 @@
         <img src="photos/2 So you dont have to transparent.png" alt="So you don't have to" class="ob-strap-img" onerror="this.style.display='none'">
       </div>
 
-      <p class="ob-intro" id="onboardingTitle">Hi, I'm Lexi, your AI business mate.</p>
-      <div class="trial-promise" role="note">
-        <strong>Start with 3 months free.</strong>
-        <span>No card needed today. Try Lexi properly, then choose a plan when you're ready.</span>
-      </div>
+      <p class="ob-intro" id="onboardingTitle">Hi, I'm Lexi, I'm an avatar built to help you handle the business side of trade.</p>
+
     </div>
 
     <div class="ob-middle">
@@ -129,21 +126,18 @@
           <span class="ob-num">1</span>
           <div class="ob-step-text">
             <strong>Set up your business</strong>
-            <span>Your name, logo and details. Real simple.</span>
           </div>
         </div>
         <div class="ob-step">
           <span class="ob-num">2</span>
           <div class="ob-step-text">
-            <strong>Add your rates and services</strong>
-            <span>You'll only do this once.</span>
+            <strong>Create and send estimates, quotes, invoices and receipts</strong>
           </div>
         </div>
         <div class="ob-step">
           <span class="ob-num">3</span>
           <div class="ob-step-text">
-            <strong>Create your estimate or quote</strong>
-            <span>Pick your customer, tap your jobs, send it off.</span>
+            <strong>Manage your customers</strong>
           </div>
         </div>
       </div>
@@ -453,7 +447,13 @@
           </div>
         </div>
 
-        <button type="button" id="aboutYouMoreBtn" class="show-more-link"><svg id="aboutYouChevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg> Show more</button>
+        <label class="ss-toggle-wrap" style="margin: 8px 0;">
+          <span class="ss-toggle-label" id="aboutYouToggleLabel">Show more details</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="aboutYouMoreBtn">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </label>
 
         <div id="aboutYouExtra" style="display:none">
           <div class="form-grid-2">
@@ -516,38 +516,42 @@
             </div>
           </div>
 
-          <div class="social-links-mini">
-            <button type="button" class="social-link-toggle" data-social="facebook" aria-expanded="false" aria-controls="socialFacebookField">
-              <span class="social-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false"><path d="M14.5 8.2V6.7c0-.7.5-.9 1-.9h1.8V2.7L14.8 2.7c-2.8 0-4.3 1.7-4.3 4.5v1H7.8v3.5h2.7V22h4V11.7h2.8l.5-3.5h-3.3z"/></svg>
-              </span>
-              <span>acebook</span>
-            </button>
-            <button type="button" class="social-link-toggle" data-social="instagram" aria-expanded="false" aria-controls="socialInstagramField">
-              <span class="social-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="4" width="16" height="16" rx="5" ry="5"/><circle cx="12" cy="12" r="3.4"/><circle cx="16.8" cy="7.2" r="1"/></svg>
-              </span>
-              <span>Instagram</span>
-            </button>
-            <button type="button" class="social-link-toggle" data-social="twitter" aria-expanded="false" aria-controls="socialTwitterField">
-              <span class="social-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false"><path d="M3.5 3h4.7l4.4 6.1L17.8 3H21l-6.8 7.9L22 21h-4.7l-5.1-6.8L6.3 21H3l7.5-8.7L3.5 3zm3.7 2.1 11.1 13.8h1.2L8.4 5.1H7.2z"/></svg>
-              </span>
-              <span>/ Twitter</span>
-            </button>
-          </div>
-          <div class="social-link-fields">
-            <div class="form-group social-link-field" id="socialFacebookField" hidden>
-              <label for="p1Facebook">Facebook link or handle</label>
-              <input type="text" id="p1Facebook" inputmode="url" autocomplete="url" placeholder="facebook.com/yourbusiness">
+          <div class="social-links-grid">
+            <div class="social-col">
+              <button type="button" class="social-link-toggle" data-social="facebook" aria-expanded="false" aria-controls="socialFacebookField">
+                <span class="social-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M14.5 8.2V6.7c0-.7.5-.9 1-.9h1.8V2.7L14.8 2.7c-2.8 0-4.3 1.7-4.3 4.5v1H7.8v3.5h2.7V22h4V11.7h2.8l.5-3.5h-3.3z"/></svg>
+                </span>
+                <span>Facebook</span>
+              </button>
+              <div class="form-group social-link-field" id="socialFacebookField" hidden>
+                <label for="p1Facebook">Facebook link or handle</label>
+                <input type="text" id="p1Facebook" inputmode="url" autocomplete="url">
+              </div>
             </div>
-            <div class="form-group social-link-field" id="socialInstagramField" hidden>
-              <label for="p1Instagram">Instagram link or handle</label>
-              <input type="text" id="p1Instagram" inputmode="url" autocomplete="url" placeholder="@yourbusiness">
+            <div class="social-col">
+              <button type="button" class="social-link-toggle" data-social="instagram" aria-expanded="false" aria-controls="socialInstagramField">
+                <span class="social-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="4" width="16" height="16" rx="5" ry="5"/><circle cx="12" cy="12" r="3.4"/><circle cx="16.8" cy="7.2" r="1"/></svg>
+                </span>
+                <span>Instagram</span>
+              </button>
+              <div class="form-group social-link-field" id="socialInstagramField" hidden>
+                <label for="p1Instagram">Instagram link or handle</label>
+                <input type="text" id="p1Instagram" inputmode="url" autocomplete="url">
+              </div>
             </div>
-            <div class="form-group social-link-field" id="socialTwitterField" hidden>
-              <label for="p1Twitter">X / Twitter link or handle</label>
-              <input type="text" id="p1Twitter" inputmode="url" autocomplete="url" placeholder="@yourbusiness">
+            <div class="social-col">
+              <button type="button" class="social-link-toggle" data-social="twitter" aria-expanded="false" aria-controls="socialTwitterField">
+                <span class="social-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M3.5 3h4.7l4.4 6.1L17.8 3H21l-6.8 7.9L22 21h-4.7l-5.1-6.8L6.3 21H3l7.5-8.7L3.5 3zm3.7 2.1 11.1 13.8h1.2L8.4 5.1H7.2z"/></svg>
+                </span>
+                <span>X / Twitter</span>
+              </button>
+              <div class="form-group social-link-field" id="socialTwitterField" hidden>
+                <label for="p1Twitter">X / Twitter link or handle</label>
+                <input type="text" id="p1Twitter" inputmode="url" autocomplete="url">
+              </div>
             </div>
           </div>
 
@@ -977,7 +981,7 @@
         <div class="price-list-toolbar">
           <input type="text" id="priceListSearch" placeholder="Search..." class="search-input">
           <select id="priceListSort" class="pl-sort-select">
-            <option value="default">Sort: Default</option>
+            <option value="default">A → Z (Default)</option>
             <option value="alpha-asc">A → Z</option>
             <option value="alpha-desc">Z → A</option>
             <option value="price-asc">Price: Low → High</option>
@@ -1054,10 +1058,13 @@
         </div>
 
         <!-- Expandable extra fields -->
-        <button type="button" class="cust-more-toggle" id="custMoreToggle" aria-expanded="false">
-          <svg id="custMoreChevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-          <span id="custMoreLabel">Add more details</span>
-        </button>
+        <label class="ss-toggle-wrap" style="margin: 8px 0;">
+          <span class="ss-toggle-label" id="custMoreLabel">Add more details</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="custMoreToggle">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </label>
         <div class="cust-extra-fields" id="custExtraFields" style="display:none">
           <div class="form-grid-cust-name" style="margin-top:4px">
             <div class="form-group">
@@ -1119,56 +1126,60 @@
         <div id="myRatesBtns"></div>
       </div>
 
-      <!-- SECTION 2: MY SERVICES -->
+      <!-- SECTION 2 & 3: SERVICES / MATERIALS TABS -->
       <div class="card pj-section">
-        <h2 class="card-title pj-section-title">My Services</h2>
-        <div class="picker-search-row">
-          <input type="text" id="jobPickerSearch" placeholder="Search your services..." class="search-input">
-          <button type="button" class="btn-mic" id="voiceBtn" title="Speak a job">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0 0 20 11h-2a6 6 0 0 1-12 0H4a8.001 8.001 0 0 0 7 7.93z"/></svg>
-          </button>
-        </div>
-        <div id="voiceBox" class="voice-box hidden"></div>
-        <div id="jobPickerList" class="picker-list"></div>
-
-        <!-- One-off service -->
-        <p class="pj-section-hint" style="margin:12px 0 6px">Add one-off service not in your price list</p>
-        <div class="oneoff-inline-row">
-          <input type="text" id="customServiceName" placeholder="Description" class="oneoff-desc-input">
-          <div class="input-pfx oneoff-price-wrap">
-            <span class="pfx-symbol">£</span>
-            <input type="number" id="customServicePrice" placeholder="0" min="0" step="any" class="oneoff-price-input">
+        <div class="obo-tab-bar" id="pjCatSelector">
+          <div class="obo-tabs-inner">
+            <button type="button" class="obo-tab active" data-pjtab="service">My Services</button>
+            <button type="button" class="obo-tab" data-pjtab="materials">Materials</button>
           </div>
-          <button type="button" class="btn btn-outline btn-sm oneoff-add-btn" id="addCustomServiceBtn">Add Service</button>
         </div>
-      </div>
 
-      <!-- SECTION 3: MATERIALS -->
-      <div class="card pj-section">
-        <h2 class="card-title pj-section-title">Materials</h2>
-
-        <!-- Materials from price list (only shown if any exist) -->
-        <div id="materialsPickerWrap" style="display:none">
+        <!-- Services panel -->
+        <div id="pjServicePanel">
           <div class="picker-search-row">
-            <input type="text" id="materialsPickerSearch" placeholder="Search your materials..." class="search-input">
-            <button type="button" class="btn-mic" id="voiceBtnMaterials" title="Speak a material">
+            <input type="text" id="jobPickerSearch" placeholder="Search your services..." class="search-input">
+            <button type="button" class="btn-mic" id="voiceBtn" title="Speak a job">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0 0 20 11h-2a6 6 0 0 1-12 0H4a8.001 8.001 0 0 0 7 7.93z"/></svg>
             </button>
           </div>
-          <div id="voiceBoxMaterials" class="voice-box hidden"></div>
-          <div id="materialsPickerList" class="picker-list"></div>
-          <div class="picker-section-divider"></div>
+          <div id="voiceBox" class="voice-box hidden"></div>
+          <div id="jobPickerList" class="picker-list"></div>
+
+          <p class="pj-section-hint" style="margin:12px 0 6px">Add one-off service not in your price list</p>
+          <div class="oneoff-inline-row">
+            <input type="text" id="customServiceName" placeholder="Description" class="oneoff-desc-input">
+            <div class="input-pfx oneoff-price-wrap">
+              <span class="pfx-symbol">£</span>
+              <input type="number" id="customServicePrice" placeholder="0" min="0" step="any" class="oneoff-price-input">
+            </div>
+            <button type="button" class="btn btn-outline btn-sm oneoff-add-btn" id="addCustomServiceBtn">Add Service</button>
+          </div>
         </div>
 
-        <!-- One-off material -->
-        <p class="pj-section-hint" style="margin-bottom:6px">Add one-off material(s) not in your price list</p>
-        <div class="oneoff-inline-row">
-          <input type="text" id="customItemName" placeholder="Description" class="oneoff-desc-input">
-          <div class="input-pfx oneoff-price-wrap">
-            <span class="pfx-symbol">£</span>
-            <input type="number" id="customItemPrice" placeholder="0" min="0" step="any" class="oneoff-price-input">
+        <!-- Materials panel -->
+        <div id="pjMaterialsPanel" style="display:none">
+          <div id="materialsPickerWrap">
+            <div class="picker-search-row">
+              <input type="text" id="materialsPickerSearch" placeholder="Search your materials..." class="search-input">
+              <button type="button" class="btn-mic" id="voiceBtnMaterials" title="Speak a material">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 17.93V21H9v2h6v-2h-2v-2.07A8.001 8.001 0 0 0 20 11h-2a6 6 0 0 1-12 0H4a8.001 8.001 0 0 0 7 7.93z"/></svg>
+              </button>
+            </div>
+            <div id="voiceBoxMaterials" class="voice-box hidden"></div>
+            <div id="materialsPickerList" class="picker-list"></div>
+            <div class="picker-section-divider"></div>
           </div>
-          <button type="button" class="btn btn-outline btn-sm oneoff-add-btn" id="addCustomItemBtn">Add Material</button>
+
+          <p class="pj-section-hint" style="margin-bottom:6px">Add one-off material(s) not in your price list</p>
+          <div class="oneoff-inline-row">
+            <input type="text" id="customItemName" placeholder="Description" class="oneoff-desc-input">
+            <div class="input-pfx oneoff-price-wrap">
+              <span class="pfx-symbol">£</span>
+              <input type="number" id="customItemPrice" placeholder="0" min="0" step="any" class="oneoff-price-input">
+            </div>
+            <button type="button" class="btn btn-outline btn-sm oneoff-add-btn" id="addCustomItemBtn">Add Material</button>
+          </div>
         </div>
       </div>
 
@@ -1182,7 +1193,19 @@
         </div>
 
         <div class="form-group" style="margin-top:16px">
-          <label for="quoteNotes">Description of Work</label>
+          <div class="label-with-help">
+            <label for="quoteNotes">Description of Work</label>
+            <button type="button" class="help-trigger" id="descOfWorkHelpBtn" aria-label="Why this matters">?</button>
+          </div>
+          <div class="help-panel" id="descOfWorkHelp" hidden>
+            <p class="help-panel-intro"><strong>Write as much detail as possible — it protects you and your customer.</strong></p>
+            <p>Be clear about exactly what you will do, and equally important, what is <em>not</em> included. This removes any room for misunderstanding and gives you solid ground if a dispute ever arises.</p>
+            <p class="help-panel-example-label">Example:</p>
+            <div class="help-panel-example">
+              <p><strong>✔ Will do:</strong> Remove existing toilet and soil pipe connector. Supply and fit new close-coupled toilet (customer to choose model). Reconnect soil pipe and water supply. Test flush and check for leaks. Make good any minor floor damage around the base.</p>
+              <p><strong>✘ Not included:</strong> Disposal of old toilet unit. Any tiling, flooring, or redecoration. Supply of toilet (unless agreed separately in writing).</p>
+            </div>
+          </div>
           <textarea id="quoteNotes" rows="4"></textarea>
         </div>
 
@@ -1277,7 +1300,6 @@
           <div class="terms-options">
             <label class="checkbox-label compact"><input type="checkbox" name="terms" value="payment30"> Payment due within 30 days of invoice date.</label>
             <label class="checkbox-label compact"><input type="checkbox" name="terms" value="depositRequired"> A 50% deposit is required before work commences.</label>
-            <label class="checkbox-label compact"><input type="checkbox" name="terms" value="quotationValid"> This quotation is valid for 30 days from the date shown.</label>
             <label class="checkbox-label compact"><input type="checkbox" name="terms" value="materialsExtra"> Materials are not included unless stated above.</label>
             <label class="checkbox-label compact"><input type="checkbox" name="terms" value="cancellation"> Cancellation within 48 hours of scheduled start date may incur a charge.</label>
           </div>
@@ -1289,14 +1311,24 @@
 
         <input type="hidden" id="authSig">
         <div class="form-group" style="margin-top:24px">
-          <label for="custSigText">Authorised Signature Preview <button type="button" class="field-info-btn" data-title="Authorised Signature Preview" data-body="To change this signature, delete and type your preferred name. Leave it blank if you would rather print and sign by hand.">?</button></label>
-          <input type="text" id="custSigText" class="sig-text-input" placeholder="">
+          <div class="label-with-help" style="justify-content:space-between">
+            <label for="custSigText" style="margin-bottom:0">Authorised Signature Preview <button type="button" class="field-info-btn" data-title="Authorised Signature Preview" data-body="Toggle on to auto-generate a signature from your name. Toggle off to type it yourself, or leave blank to sign by hand.">?</button></label>
+            <label class="ss-toggle-wrap" style="margin:0; gap:6px">
+              <span class="ss-toggle-label" id="sigAutoLabel" style="font-size:0.78rem; color:var(--muted)">Auto</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="sigAutoToggle">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </label>
+          </div>
+          <input type="text" id="custSigText" class="sig-text-input" placeholder="Type your signature here">
         </div>
       </div>
 
       <div class="pj-footer-btns">
         <button type="button" class="btn btn-outline btn-lg" id="backToWorkBtn">Back</button>
-        <button type="button" class="btn btn-primary btn-lg" id="saveTermsGoToPreviewBtn">Save</button>
+        <button type="button" class="btn btn-outline btn-lg" id="saveTermsToListBtn">Save to My Jobs</button>
+        <button type="button" class="btn btn-primary btn-lg" id="saveTermsGoToPreviewBtn">Save &amp; Preview</button>
       </div>
     </section>
 

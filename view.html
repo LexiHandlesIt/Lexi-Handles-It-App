@@ -3,31 +3,103 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Document Viewer</title>
+  <title>Your Document</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Mulish:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px 0; font-family: Arial, sans-serif; }
+    body { background: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px 0 120px; font-family: 'Mulish', Arial, sans-serif; }
     #loading { color: #555; font-size: 1rem; margin-top: 60px; }
     #error { color: #c0392b; font-size: 1rem; margin-top: 60px; text-align: center; padding: 20px; line-height: 1.6; }
     #docFrame { width: 100%; max-width: 780px; border: none; background: #fff; min-height: 100vh; }
+
+    /* Accept / Decline bar */
+    #acceptBar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+      background: #fff; border-top: 1px solid #d8d2c8;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.10);
+      padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+      display: none;
+    }
+    #acceptBar .inner { max-width: 780px; margin: 0 auto; }
+    #acceptBar .ab-title { font-size: 0.92rem; font-weight: 700; color: #2c2c2c; text-align: center; margin-bottom: 10px; }
+    .ab-btns { display: flex; gap: 10px; }
+    .ab-btn { flex: 1; padding: 13px 8px; border-radius: 10px; font-size: 0.95rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .ab-accept  { background: #4a5d3a; color: #fff; border: none; }
+    .ab-decline { background: #fff; color: #C4553A; border: 1.5px solid #C4553A; }
+    .ab-entry { display: none; }
+    .ab-entry input {
+      width: 100%; box-sizing: border-box; padding: 12px 14px; margin-bottom: 10px;
+      border: 1.5px solid #ccc; border-radius: 10px; font-size: 1rem; font-family: inherit; outline: none;
+    }
+    .ab-entry .ab-hint { font-size: 0.82rem; color: #777; margin-bottom: 8px; text-align: center; }
+    .ab-confirm { width: 100%; padding: 13px; border-radius: 10px; border: none; background: #4a5d3a; color: #fff; font-size: 0.98rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .ab-back { display: block; width: 100%; padding: 9px; margin-top: 4px; border: none; background: transparent; color: #aaa; font-size: 0.88rem; cursor: pointer; font-family: inherit; }
+    .ab-result { text-align: center; padding: 6px 0; }
+    .ab-result .ab-emoji { font-size: 1.8rem; margin-bottom: 6px; }
+    .ab-result .ab-msg { font-size: 0.95rem; font-weight: 700; color: #2c2c2c; }
+    .ab-result.declined .ab-msg { color: #C4553A; }
+    .ab-sig-preview { font-family: 'Dancing Script', cursive; font-size: 1.5rem; color: #1a1a1a; }
   </style>
 </head>
 <body>
   <div id="loading">Loading your document...</div>
   <div id="error" style="display:none"></div>
   <iframe id="docFrame" style="display:none" title="Document"></iframe>
-  <script>
-    var SUPABASE_URL    = 'https://dwiqqtutsjainpvdizgt.supabase.co';
-    var BUCKET          = 'Documents';
 
-    var params   = new URLSearchParams(window.location.search);
-    var path     = params.get('path');   // short form: userId/filename.html
-    var fullUrl  = params.get('url');    // legacy long form (fallback)
+  <!-- Accept / Decline bar -->
+  <div id="acceptBar">
+    <div class="inner">
+      <!-- Buttons state -->
+      <div id="abButtons">
+        <div class="ab-title" id="abTitle">Ready to go ahead?</div>
+        <div class="ab-btns">
+          <button class="ab-btn ab-accept"  id="abAccept">✔ Accept</button>
+          <button class="ab-btn ab-decline" id="abDecline">✘ Decline</button>
+        </div>
+      </div>
+      <!-- Name-entry state -->
+      <div class="ab-entry" id="abEntry">
+        <div class="ab-hint">Type your full name to sign and accept.</div>
+        <input id="abName" type="text" placeholder="Your full name" autocomplete="name">
+        <button class="ab-confirm" id="abConfirm">Confirm &amp; Accept</button>
+        <button class="ab-back" id="abBack">← Back</button>
+      </div>
+      <!-- Result state -->
+      <div class="ab-result" id="abResult" style="display:none">
+        <div class="ab-emoji" id="abEmoji">✅</div>
+        <div class="ab-sig-preview" id="abSig" style="display:none"></div>
+        <div class="ab-msg" id="abResultMsg"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var SUPABASE_URL = 'https://dwiqqtutsjainpvdizgt.supabase.co';
+    var SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_c0HS04ZbqIBPrbXvzNdPXw_IpeKBzHN';
+    var BUCKET = 'Documents';
+
+    var vSupabase = window.supabase
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+      : null;
+
+    var params  = new URLSearchParams(window.location.search);
+    var path    = params.get('path');
+    var fullUrl = params.get('url');
+    var token   = params.get('token');
+    var bizName = params.get('biz') || 'your tradesperson';
+    var docType = (params.get('type') || 'quote').toLowerCase();
+    var docLabel = docType === 'estimate' ? 'estimate' : 'quote';
+
+    // Show the sender's business name as the page/tab title (not "Document Viewer")
+    if (params.get('biz')) document.title = params.get('biz');
 
     var storageUrl = fullUrl || (path
       ? SUPABASE_URL + '/storage/v1/object/public/' + BUCKET + '/' + path
       : null);
 
+    // ── 1. Load and render the document ──────────────────────────────
     if (!storageUrl) {
       document.getElementById('loading').style.display = 'none';
       document.getElementById('error').textContent = 'No document specified.';
@@ -50,6 +122,8 @@
           };
           var blob = new Blob([html], { type: 'text/html' });
           frame.src = URL.createObjectURL(blob);
+          // Once the doc is visible, set up the accept bar
+          initAcceptBar();
         })
         .catch(function(e) {
           document.getElementById('loading').style.display = 'none';
@@ -58,6 +132,126 @@
             '<small style="color:#999">' + (e.message || '') + '</small>';
           document.getElementById('error').style.display = '';
         });
+    }
+
+    // ── 2. Accept / Decline ──────────────────────────────────────────
+    function fmtSig(name) {
+      var parts = String(name || '').trim().split(/\s+/);
+      if (parts.length < 2) return name;
+      return parts[0].charAt(0).toUpperCase() + '.' + parts[parts.length - 1].charAt(0).toUpperCase() + parts[parts.length - 1].slice(1);
+    }
+
+    function showResult(status, name) {
+      document.getElementById('abButtons').style.display = 'none';
+      document.getElementById('abEntry').style.display = 'none';
+      var result = document.getElementById('abResult');
+      result.style.display = 'block';
+      if (status === 'accepted') {
+        result.className = 'ab-result';
+        document.getElementById('abEmoji').textContent = '✅';
+        if (name) {
+          var sig = document.getElementById('abSig');
+          sig.textContent = fmtSig(name);
+          sig.style.display = 'block';
+        }
+        document.getElementById('abResultMsg').textContent =
+          'Accepted — thank you! ' + bizName + ' will be in touch to confirm.';
+      } else {
+        result.className = 'ab-result declined';
+        document.getElementById('abEmoji').textContent = '👋';
+        document.getElementById('abResultMsg').textContent =
+          'Response recorded. Get back in touch with ' + bizName + ' anytime.';
+      }
+    }
+
+    async function loadStatus() {
+      if (!vSupabase || !token) return null;
+      try {
+        var rpc = await vSupabase.rpc('get_quote_acceptance', { p_token: token });
+        if (!rpc.error) return Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+        var q = await vSupabase.from('quote_acceptances').select('*').eq('token', token).maybeSingle();
+        return q.data;
+      } catch (e) { return null; }
+    }
+
+    async function respond(status, name) {
+      if (!vSupabase || !token) throw new Error('No connection.');
+      var rpc = await vSupabase.rpc('respond_to_quote_acceptance', {
+        p_token: token, p_status: status, p_name: name || ''
+      });
+      if (!rpc.error) return Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+      // Fallback: direct table update
+      var update = {
+        status: status,
+        accepted_by: name || '',
+        accepted_at: status === 'accepted' ? new Date().toISOString() : null,
+        declined_at: status === 'declined' ? new Date().toISOString() : null
+      };
+      var res = await vSupabase.from('quote_acceptances').update(update).eq('token', token).select().maybeSingle();
+      if (res.error) throw res.error;
+      return res.data;
+    }
+
+    async function initAcceptBar() {
+      // No token → read-only view (e.g. invoices/receipts), no accept bar
+      if (!token) return;
+
+      var bar = document.getElementById('acceptBar');
+      document.getElementById('abTitle').textContent = 'Ready to go ahead with this ' + docLabel + '?';
+
+      // If already responded, show that state straight away
+      var existing = await loadStatus();
+      bar.style.display = 'block';
+      if (existing && (existing.status === 'accepted' || existing.status === 'declined')) {
+        showResult(existing.status, existing.accepted_by);
+        return;
+      }
+
+      var accept  = document.getElementById('abAccept');
+      var decline = document.getElementById('abDecline');
+      var entry   = document.getElementById('abEntry');
+      var buttons = document.getElementById('abButtons');
+      var nameIn  = document.getElementById('abName');
+      var confirm = document.getElementById('abConfirm');
+      var back    = document.getElementById('abBack');
+
+      accept.addEventListener('click', function() {
+        buttons.style.display = 'none';
+        entry.style.display = 'block';
+        nameIn.focus();
+      });
+      back.addEventListener('click', function() {
+        entry.style.display = 'none';
+        buttons.style.display = 'block';
+      });
+      nameIn.addEventListener('input', function() { nameIn.style.borderColor = '#ccc'; });
+
+      confirm.addEventListener('click', async function() {
+        var name = nameIn.value.trim();
+        if (!name) { nameIn.style.borderColor = '#C4553A'; nameIn.focus(); return; }
+        confirm.disabled = true;
+        confirm.textContent = 'Recording...';
+        try {
+          await respond('accepted', name);
+          showResult('accepted', name);
+        } catch (e) {
+          confirm.disabled = false;
+          confirm.textContent = 'Confirm & Accept';
+          alert('Sorry, we could not record that just now. Please try again, or contact ' + bizName + ' directly.');
+        }
+      });
+
+      decline.addEventListener('click', async function() {
+        if (!window.confirm('Decline this ' + docLabel + '?')) return;
+        decline.disabled = true;
+        try {
+          await respond('declined', '');
+          showResult('declined', '');
+        } catch (e) {
+          decline.disabled = false;
+          alert('Sorry, we could not record that just now. Please try again, or contact ' + bizName + ' directly.');
+        }
+      });
     }
   </script>
 </body>

@@ -601,12 +601,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const aboutYouMoreBtn = document.getElementById('aboutYouMoreBtn');
   const aboutYouExtra   = document.getElementById('aboutYouExtra');
   if (aboutYouMoreBtn && aboutYouExtra) {
-    aboutYouMoreBtn.addEventListener('click', () => {
-      const open = aboutYouExtra.style.display !== 'none';
-      aboutYouExtra.style.display = open ? 'none' : 'block';
-      const chevron = document.getElementById('aboutYouChevron');
-      if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
-      aboutYouMoreBtn.childNodes[1].textContent = open ? ' Show more' : ' Show less';
+    aboutYouMoreBtn.addEventListener('change', () => {
+      const open = aboutYouMoreBtn.checked;
+      aboutYouExtra.style.display = open ? 'block' : 'none';
+      const lbl = document.getElementById('aboutYouToggleLabel');
+      if (lbl) lbl.textContent = open ? 'Hide extra details' : 'Show more details';
     });
   }
 
@@ -1026,6 +1025,29 @@ function companyToBusinessRow(company) {
   };
 }
 
+// ── Sync resilience helpers ──────────────────────────────────────
+// Supabase free-tier can briefly stall ("canceling statement due to statement
+// timeout", Postgres code 57014), especially on a cold connection or when two
+// syncs overlap. These helpers auto-retry transient timeouts and stop the same
+// sync from running twice at once (which made delete+insert calls deadlock).
+function _isTimeoutError(err) {
+  const m = String(err?.message || err?.error_description || err?.code || err || '');
+  return /statement timeout|canceling statement|\b57014\b|timeout/i.test(m);
+}
+async function withSyncRetry(fn, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch (err) {
+      lastErr = err;
+      if (!_isTimeoutError(err) || i === attempts - 1) throw err;
+      await new Promise(r => setTimeout(r, 700 * (i + 1))); // 0.7s, 1.4s back-off
+    }
+  }
+  throw lastErr;
+}
+let _businessSyncInFlight = false;
+
 async function loadBusinessFromSupabase() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
   const { data, error } = await lexiSupabase
@@ -1049,6 +1071,17 @@ async function loadBusinessFromSupabase() {
 
 async function saveBusinessToSupabase() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  // Coalesce overlapping saves and auto-retry transient timeouts.
+  if (_businessSyncInFlight) return;
+  _businessSyncInFlight = true;
+  try {
+    return await withSyncRetry(_doSaveBusinessToSupabase);
+  } finally {
+    _businessSyncInFlight = false;
+  }
+}
+
+async function _doSaveBusinessToSupabase() {
   const payload = companyToBusinessRow(state.company);
   const { data: existing, error: existingError } = await lexiSupabase
     .from('businesses')
@@ -1131,8 +1164,27 @@ async function loadPriceListFromSupabase() {
   return false;
 }
 
+let _priceListSyncInFlight = false;
+let _priceListSyncPending = false;
+
 async function savePriceListToSupabase() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  // Never let two price-list syncs run at once — concurrent delete+insert on the
+  // same user_id rows was deadlocking and tripping the statement timeout. If a
+  // change lands mid-sync, flag it and re-run once with the latest data.
+  if (_priceListSyncInFlight) { _priceListSyncPending = true; return; }
+  _priceListSyncInFlight = true;
+  try {
+    do {
+      _priceListSyncPending = false;
+      await withSyncRetry(_doSavePriceListToSupabase);
+    } while (_priceListSyncPending);
+  } finally {
+    _priceListSyncInFlight = false;
+  }
+}
+
+async function _doSavePriceListToSupabase() {
   const userId = lexiAuthSession.user.id;
   const rows = state.priceList.map(job => ({
     ...jobToPriceItemRow(job),
@@ -1883,6 +1935,91 @@ async function saveJobSummariesToSupabase(userId, docsWithCustomers = []) {
   }
 }
 
+// Sync ONE document instead of re-uploading the whole library every save.
+// The full saveSavedDocsToSupabase() loops over every saved doc, which is what
+// was hitting "canceling statement due to statement timeout" once a tradesman
+// had a few jobs. This touches a single row, so it stays well under the limit.
+async function syncSingleDocToSupabase(doc) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id || !doc?.id) return;
+  const userId = lexiAuthSession.user.id;
+  _clearCustIdCache();
+  try {
+    const customerId = await getSupabaseCustomerId(doc.quote || {});
+    await upsertSingleDocToSupabase(userId, doc, customerId);
+    // Best-effort single job-summary upsert (no orphan cleanup — that would
+    // wrongly delete every other job since we only know about this one doc).
+    try {
+      const candidates = jobSummaryInsertCandidates(userId, doc, customerId);
+      if (candidates.length) {
+        await lexiSupabase.from('jobs')
+          .upsert(candidates[0], { onConflict: 'user_id,local_id', ignoreDuplicates: false });
+      }
+    } catch (e) { /* job summary is non-essential */ }
+  } finally {
+    _clearCustIdCache();
+  }
+}
+
+// Persist the current quote-builder form (Customer/Work/Terms) as a saved job.
+// Returns the saved doc so the caller can preview it or jump to the list.
+function persistCurrentQuoteFromTerms() {
+  const q = collectQuoteState();
+  q.items = [...state.quote.items];
+  if (!q.custLastName && !q.custFirstName) {
+    toast('Please add a customer name.', 'error');
+    showPage('page3');
+    document.getElementById('custFirstName')?.focus();
+    return null;
+  }
+
+  let doc;
+  if (activeDocId) {
+    // Update the existing saved job in place (no duplicate)
+    doc = state.saved.find(d => d.id === activeDocId);
+    if (doc) {
+      doc.quote = q;
+      doc.company = { ...state.company };
+      doc.custName = buildCustName(q);
+      doc.total = calcTotal(q);
+      doc.type = q.type;
+      doc.date = q.date;
+      doc.ref = q.ref || doc.ref;
+      doc.updatedAt = new Date().toISOString();
+    }
+  }
+  if (!doc) {
+    const newId = uid();
+    doc = {
+      id: newId,
+      quote: q,
+      company: { ...state.company },
+      custName: buildCustName(q),
+      total: calcTotal(q),
+      type: q.type,
+      date: q.date,
+      ref: q.ref || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      invoiceSent: false, paid: false, paidAmount: 0, paidDate: '', payments: []
+    };
+    state.saved.unshift(doc);
+    activeDocId = newId;
+  }
+
+  save();
+  upsertLocalCustomer(q);
+  updateSavedBadge();
+  refreshSavedDocs();
+  if (savedDocsSyncReady && lexiSupabase && lexiAuthSession?.user?.id) {
+    syncSingleDocToSupabase(doc).catch(err => {
+      console.warn('Single-doc sync failed:', err);
+      localStorage.setItem('lexi_last_documents_sync_error', err?.message || String(err));
+      toast(`Saved here, but cloud sync failed: ${err?.message || 'check connection'}`, 'error', 7000);
+    });
+  }
+  return doc;
+}
+
 function queueSavedDocsSync(showError = false) {
   if (!savedDocsSyncReady || !lexiSupabase || !lexiAuthSession?.user?.id) return;
   clearTimeout(savedDocsSyncTimer);
@@ -2232,14 +2369,23 @@ function showPage(pageId) {
   if (pageId === 'page-completion') {
     const authSig = document.getElementById('authSig');
     const custSigText = document.getElementById('custSigText');
-    if (authSig && custSigText && !custSigText.value && !custSigText.dataset.userEdited) {
-      custSigText.value = formatSigFromName(authSig.value) || defaultAuthSig();
+    const sigAutoToggle = document.getElementById('sigAutoToggle');
+    const isAuto = sigAutoToggle ? sigAutoToggle.checked : false;
+    const sigAutoLabel = document.getElementById('sigAutoLabel');
+    if (sigAutoLabel) sigAutoLabel.textContent = isAuto ? 'Auto' : 'Manual';
+    if (custSigText) {
+      custSigText.readOnly = isAuto;
+      if (isAuto) {
+        custSigText.value = formatSigFromName(authSig?.value) || defaultAuthSig();
+      } else if (!custSigText.value) {
+        custSigText.value = '';
+      }
     }
     // Personalise the intro text with the customer's first name
     const introEl = document.getElementById('completionIntroText');
     if (introEl) {
       const first = (state.quote.custFirstName || '').trim();
-      introEl.textContent = `${first ? first + ', ' : ''}is this an estimate or a quote?`;
+      introEl.textContent = first ? `${first}, is this an estimate or a quote?` : 'Is this an estimate or a quote?';
     }
     // Close tooltip if it was left open
     const tooltip = document.getElementById('estQuoteTooltip');
@@ -2972,9 +3118,9 @@ function populatePage1Fields() {
     const btn   = document.getElementById('aboutYouMoreBtn');
     if (extra) extra.style.display = 'block';
     if (btn) {
-      btn.childNodes[1].textContent = ' Show less';
-      const chevron = document.getElementById('aboutYouChevron');
-      if (chevron) chevron.style.transform = 'rotate(180deg)';
+      btn.checked = true;
+      const lbl = document.getElementById('aboutYouToggleLabel');
+      if (lbl) lbl.textContent = 'Hide extra details';
     }
   }
   ['facebook', 'instagram', 'twitter'].forEach(name => {
@@ -3397,29 +3543,55 @@ function extractLogoColours() {
       return;
     }
 
-    // Tally colours -quantize RGB to 32 levels per channel
+    // Helper: RGB → HSL hue (0-360) and saturation (0-1)
+    const rgbToHsl = (r, g, b) => {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      if (max === min) return { h: 0, s: 0, l };
+      const d = max - min;
+      const s = d / (1 - Math.abs(2 * l - 1));
+      let h = 0;
+      if (max === r) h = ((g - b) / d + 6) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      return { h: h * 60, s, l };
+    };
+
+    // Tally colours — quantize RGB to 32 levels per channel.
+    // Score = frequency × saturation² so vivid brand colours beat washed-out
+    // grey edge-blends even when they appear in fewer pixels.
     const tally = {};
     for (let i = 0; i < data.length; i += 4) {
       if (data[i + 3] < 128) continue;                         // skip transparent
       const r = data[i], g = data[i + 1], b = data[i + 2];
       if (r > 230 && g > 230 && b > 230) continue;             // skip near-white
-      if (r < 20  && g < 20  && b < 20)  continue;             // skip near-black
+      if (r < 50  && g < 50  && b < 50)  continue;             // skip dark/shadow pixels
+
+      const { s } = rgbToHsl(r, g, b);
       const key = `${r >> 3},${g >> 3},${b >> 3}`;
-      tally[key] = (tally[key] || 0) + 1;
+      // Weight each pixel by sat² so grey pixels contribute almost nothing
+      tally[key] = (tally[key] || 0) + 1 + s * s * 8;
     }
 
     const sorted = Object.entries(tally).sort((a, b) => b[1] - a[1]);
 
-    // Pick up to 3 visually distinct colours from the most frequent
+    // Pick up to 3 visually distinct colours — use hue distance so that
+    // blue and green (very different hues) are always treated as distinct
+    // even if their RGB values happen to be close in Manhattan distance.
     const picked = [];
     for (const [key] of sorted) {
       if (picked.length >= 3) break;
       const [rq, gq, bq] = key.split(',').map(Number);
       const r = (rq << 3) + 4, g = (gq << 3) + 4, b = (bq << 3) + 4;
-      const isDistinct = picked.every(p =>
-        Math.abs(p.r - r) + Math.abs(p.g - g) + Math.abs(p.b - b) > 60
-      );
-      if (picked.length === 0 || isDistinct) picked.push({ r, g, b });
+      const { h: hue, s: sat } = rgbToHsl(r, g, b);
+      const isDistinct = picked.every(p => {
+        const hueDiff = Math.min(Math.abs(p.hue - hue), 360 - Math.abs(p.hue - hue));
+        const rgbDiff = Math.abs(p.r - r) + Math.abs(p.g - g) + Math.abs(p.b - b);
+        // Distinct if hues are >30° apart OR colours differ enough in RGB
+        return hueDiff > 30 || rgbDiff > 80;
+      });
+      if (picked.length === 0 || isDistinct) picked.push({ r, g, b, hue, sat });
     }
 
     if (!picked.length) {
@@ -4061,7 +4233,7 @@ function refreshPriceList() {
   });
 
   const sort = document.getElementById('priceListSort')?.value || 'default';
-  if (sort === 'alpha-asc')   filtered.sort((a, b) => a.name.localeCompare(b.name));
+  if (sort === 'default' || sort === 'alpha-asc') filtered.sort((a, b) => a.name.localeCompare(b.name));
   else if (sort === 'alpha-desc')  filtered.sort((a, b) => b.name.localeCompare(a.name));
   else if (sort === 'price-asc')   filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
   else if (sort === 'price-desc')  filtered.sort((a, b) => (b.price || 0) - (a.price || 0));
@@ -4211,38 +4383,43 @@ function syncOboStateWithPriceList() {
 /* ===== PAGE 3 -CUSTOMER DETAILS ===== */
 function setupPage3() {
   // Expand/collapse extra customer fields
-  document.getElementById('custMoreToggle')?.addEventListener('click', () => {
-    const extra   = document.getElementById('custExtraFields');
-    const toggle  = document.getElementById('custMoreToggle');
-    const chevron = document.getElementById('custMoreChevron');
-    const label   = document.getElementById('custMoreLabel');
-    const isOpen  = extra.style.display !== 'none';
-    extra.style.display = isOpen ? 'none' : 'block';
-    toggle.setAttribute('aria-expanded', String(!isOpen));
-    if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
-    if (label)   label.textContent = isOpen ? 'Add more details' : 'Show less';
+  document.getElementById('custMoreToggle')?.addEventListener('change', (e) => {
+    const extra = document.getElementById('custExtraFields');
+    const label = document.getElementById('custMoreLabel');
+    const open  = e.target.checked;
+    if (extra) extra.style.display = open ? 'block' : 'none';
+    if (label) label.textContent = open ? 'Hide extra details' : 'Add more details';
   });
 }
 
 // Expand extra fields if any hidden values are already populated (e.g. when editing)
 function syncCustMoreToggle() {
-  const extra   = document.getElementById('custExtraFields');
-  const toggle  = document.getElementById('custMoreToggle');
-  const chevron = document.getElementById('custMoreChevron');
-  const label   = document.getElementById('custMoreLabel');
+  const extra  = document.getElementById('custExtraFields');
+  const toggle = document.getElementById('custMoreToggle');
+  const label  = document.getElementById('custMoreLabel');
   if (!extra) return;
   const hasExtra = ['custTitle','custAddr','custPostcode','custEmail'].some(id => {
     const el = document.getElementById(id);
     return el && el.value && el.value.trim() !== '';
   });
   extra.style.display = hasExtra ? 'block' : 'none';
-  if (toggle)  toggle.setAttribute('aria-expanded', String(hasExtra));
-  if (chevron) chevron.style.transform = hasExtra ? 'rotate(180deg)' : '';
-  if (label)   label.textContent = hasExtra ? 'Show less' : 'Add more details';
+  if (toggle) toggle.checked = hasExtra;
+  if (label)  label.textContent = hasExtra ? 'Hide extra details' : 'Add more details';
 }
 
 /* ===== PAGE JOBS -ADD JOBS ===== */
 function setupPageJobs() {
+  // Services / Materials tab switching
+  document.querySelectorAll('#pjCatSelector .obo-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#pjCatSelector .obo-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const isMat = btn.dataset.pjtab === 'materials';
+      document.getElementById('pjServicePanel').style.display  = isMat ? 'none' : '';
+      document.getElementById('pjMaterialsPanel').style.display = isMat ? '' : 'none';
+    });
+  });
+
   // Services picker search
   document.getElementById('jobPickerSearch').addEventListener('input', () => updateServicesPicker());
 
@@ -4255,6 +4432,12 @@ function setupPageJobs() {
   // Mic / voice button
   document.getElementById('voiceBtn')?.addEventListener('click', toggleVoice);
   document.getElementById('voiceBtnMaterials')?.addEventListener('click', toggleVoiceMaterials);
+
+  // Description of Work help toggle
+  document.getElementById('descOfWorkHelpBtn')?.addEventListener('click', () => {
+    const panel = document.getElementById('descOfWorkHelp');
+    if (panel) panel.hidden = !panel.hidden;
+  });
 
   // Back to customer details
   document.getElementById('backToCustomerBtn')?.addEventListener('click', () => {
@@ -4274,14 +4457,47 @@ function setupPageCompletion() {
   document.getElementById('backToWorkBtn')?.addEventListener('click', () => showPage('page-jobs'));
 
   // Save → save quote then open preview
+  // Save & Preview: persist the job to My Jobs, then open the preview so they
+  // can send it. Because it's saved, closing the preview no longer loops back.
   document.getElementById('saveTermsGoToPreviewBtn')?.addEventListener('click', () => {
     recalcTotals();
-    if (typeof openQuoteModalFromCurrentForm === 'function') openQuoteModalFromCurrentForm();
+    const doc = persistCurrentQuoteFromTerms();
+    if (!doc) return;
+    populateQuoteSendModal(doc, { show: false }); // prime send fields silently
+    quotePreviewed = true;
+    openPreview(buildDocHtml(doc, 'quote'), 'quote', doc.id);
+  });
+
+  // Save to My Jobs: persist and go straight to the jobs list (not ready to send yet)
+  document.getElementById('saveTermsToListBtn')?.addEventListener('click', () => {
+    recalcTotals();
+    const doc = persistCurrentQuoteFromTerms();
+    if (!doc) return;
+    clearDraftQuote();
+    showSavedPopup("Done. I've got it.");
+    showPage('page4');
   });
 
   // Doc type radio checkboxes
   document.getElementById('dtEstimate').addEventListener('change', () => setDocType('Estimate'));
   document.getElementById('dtQuote').addEventListener('change',    () => setDocType('Quote'));
+
+  // Signature auto/manual toggle
+  document.getElementById('sigAutoToggle')?.addEventListener('change', e => {
+    const auto = e.target.checked;
+    const label = document.getElementById('sigAutoLabel');
+    const sigText = document.getElementById('custSigText');
+    if (label) label.textContent = auto ? 'Auto' : 'Manual';
+    if (auto) {
+      sigText.value = formatSigFromName(document.getElementById('authSig')?.value) || defaultAuthSig();
+      sigText.readOnly = true;
+      sigText.style.color = '';
+    } else {
+      sigText.value = '';
+      sigText.readOnly = false;
+      sigText.focus();
+    }
+  });
 
   // Estimate vs Quote tooltip
   document.getElementById('estQuoteTooltipBtn').addEventListener('click', () => {
@@ -4441,12 +4657,18 @@ function populateQuoteForm() {
   setVal('customTerms',   q.customTerms || '');
   const sigName = q.authSig || defaultAuthName();
   setVal('authSig', sigName);
-  // Signature preview: saved value, or auto-format from the name as F.Last
-  const sigPreview = q.custSigText || (q.authSig ? formatSigFromName(q.authSig) : defaultAuthSig());
+  // Signature preview: only pre-fill if the toggle is set to Auto.
+  // Manual mode always starts blank so the tradesman types their own signature.
+  const sigAutoOn = document.getElementById('sigAutoToggle')?.checked;
+  const sigPreview = sigAutoOn
+    ? (q.custSigText || (q.authSig ? formatSigFromName(q.authSig) : defaultAuthSig()))
+    : '';
   setVal('custSigText', sigPreview);
-  // Reset user-edited flag so authSig changes still sync
   const sigEl = document.getElementById('custSigText');
-  if (sigEl) delete sigEl.dataset.userEdited;
+  if (sigEl) {
+    sigEl.readOnly = !!sigAutoOn;
+    delete sigEl.dataset.userEdited;
+  }
   // Set discount select (backwards-compat: old docs stored any number, new ones use preset or 'custom')
   const savedDisc = String(q.discount || '0');
   const discPresets = ['0', '5', '10', '20'];
@@ -5488,10 +5710,9 @@ function setupPage4() {
     const toggle  = document.getElementById('custMoreToggle');
     const chevron = document.getElementById('custMoreChevron');
     const label   = document.getElementById('custMoreLabel');
-    if (extra)   extra.style.display = 'none';
-    if (toggle)  toggle.setAttribute('aria-expanded', 'false');
-    if (chevron) chevron.style.transform = '';
-    if (label)   label.textContent = 'Add more details';
+    if (extra)  extra.style.display = 'none';
+    if (toggle) toggle.checked = false;
+    if (label)  label.textContent = 'Add more details';
   });
 
 
@@ -6368,7 +6589,7 @@ function openCustomerDeleteChoice(group) {
     // Also remove from Supabase if connected
     if (lexiSupabase && lexiAuthSession?.user?.id) {
       docIds.forEach(id => {
-        lexiSupabase.from('saved_documents').delete().eq('local_document_id', id).eq('user_id', lexiAuthSession.user.id)
+        lexiSupabase.from('documents').delete().eq('local_id', id).eq('user_id', lexiAuthSession.user.id)
           .then(() => {}).catch(() => {});
       });
     }
@@ -6720,6 +6941,9 @@ function setupModals() {
       save();  // writes to localStorage (now slim -should always succeed)
       upsertLocalCustomer(q);
       sendDocRef = newId;
+      // Bind this form to the new doc so a second Send updates it instead of
+      // creating a duplicate entry (was producing LEXI-106 AND LEXI-107).
+      activeDocId = newId;
       updateSavedBadge();
       refreshSavedDocs();
       // Sync immediately to Supabase -do NOT rely on the debounced queue
@@ -6740,7 +6964,7 @@ function setupModals() {
       const custEmail = savedDoc.quote?.custEmail || savedDoc.custEmail || '';
       const custPhone = savedDoc.quote?.custPhone || '';
       const docTypeStr = savedDoc.quote?.type || savedDoc.type || 'Estimate';
-      sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || savedDoc.ref || 'quote'), shareMessage, custEmail, custPhone, docTypeStr);
+      sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || savedDoc.ref || 'quote'), shareMessage, custEmail, custPhone, docTypeStr, savedDoc.acceptToken || '');
     } else {
       sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), quoteData.quoteNotes || '');
     }
@@ -9972,15 +10196,32 @@ function buildDocHtml(doc, docType, extra = {}) {
     else if (q.validFor)              validForText = `${q.validFor} days`;
   }
 
-  // ── Line items ───────────────────────────────────────────────────
-  const itemsHtml = (q.items||[]).map(item => `
+  // ── Line items (grouped by Rates / Services / Materials) ────────
+  const allItems = q.items || [];
+  const grpRates     = allItems.filter(i => i.category === 'rate');
+  const grpServices  = allItems.filter(i => !i.category || i.category === 'service' || i.category === 'labour');
+  const grpMaterials = allItems.filter(i => i.category === 'materials');
+  const multiGroup   = [grpRates, grpServices, grpMaterials].filter(g => g.length > 0).length > 1;
+
+  const itemRow = item => `
     <tr>
       <td>${esc(item.name)}${item.unit ? `<span class="item-unit">${esc(item.unit)}</span>` : ''}</td>
       <td class="r">${item.qty}</td>
       <td class="r">${fmtPrice(item.unitPrice)}</td>
       <td class="r">${fmtPrice(item.unitPrice * item.qty)}</td>
-    </tr>`).join('') ||
-    `<tr><td colspan="4" style="text-align:center;color:#aaa;padding:14px;font-style:italic">No items added. Go back and add jobs in Step 2.</td></tr>`;
+    </tr>`;
+  const groupHeader = label => `
+    <tr class="doc-group-header">
+      <td colspan="4" style="padding:6px 10px 3px;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;border-bottom:1px solid #e0d9cf;">${label}</td>
+    </tr>`;
+  const renderGroup = (label, items) => {
+    if (!items.length) return '';
+    return (multiGroup ? groupHeader(label) : '') + items.map(itemRow).join('');
+  };
+
+  const itemsHtml = allItems.length
+    ? renderGroup('Rates', grpRates) + renderGroup('Services', grpServices) + renderGroup('Materials', grpMaterials)
+    : `<tr><td colspan="4" style="text-align:center;color:#aaa;padding:14px;font-style:italic">No items added. Go back and add jobs in Step 2.</td></tr>`;
 
   // ── Totals -label in col 3 (right-aligned), amount in col 4 (right-aligned) ──
   const tCell = (label, value, bold = false) =>
@@ -10072,7 +10313,11 @@ function buildDocHtml(doc, docType, extra = {}) {
       <div class="doc-accept" style="background:${bgCol};-webkit-print-color-adjust:exact;print-color-adjust:exact">
         <div class="doc-accept-body">
           <div class="doc-accept-heading">Acceptance</div>
-          <p>Please let me know if this meets your needs. To accept this ${(q.type||'quote').toLowerCase()} please sign below or reply confirming your acceptance.</p>
+          <p>Please let me know if this meets your needs. To accept this ${(q.type||'quote').toLowerCase()}, click the button below to sign.</p>
+          <div style="display:flex;gap:12px;margin:18px 0">
+            <div style="flex:1;padding:13px;border-radius:10px;background:#4a5d3a;color:#fff;text-align:center;font-weight:700;font-size:1rem">✔ Accept</div>
+            <div style="flex:1;padding:13px;border-radius:10px;background:#fff;color:#C4553A;border:1.5px solid #C4553A;text-align:center;font-weight:700;font-size:1rem">✘ Decline</div>
+          </div>
           <div class="doc-sig-grid">
             <div class="doc-sig-box">
               ${sigContent}
@@ -10361,7 +10606,7 @@ function printRaw(inner) {
 }
 
 /* ── Upload a document to Supabase Storage and return its public URL ── */
-async function uploadDocToStorage(htmlStr, filename) {
+async function uploadDocToStorage(htmlStr, filename, acceptToken = '', docType = '') {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) {
     console.warn('Document storage skipped: not logged in or Supabase not ready');
     toast('Document link skipped: not signed in to Lexi', 'error', 8000);
@@ -10384,9 +10629,21 @@ async function uploadDocToStorage(htmlStr, filename) {
       return null;
     }
     // Use a short view URL — just pass the storage path so the link stays short
-    // enough for email clients (Outlook etc.) to auto-hyperlink it
-    const appBase = window.location.origin;
-    const viewUrl = `${appBase}/view.html?path=${encodeURIComponent(path)}`;
+    // enough for email clients (Outlook etc.) to auto-hyperlink it.
+    // ALWAYS point at the live app: this link is opened by the customer on
+    // their own device, and the doc itself lives in Supabase cloud storage,
+    // so a localhost/file:// origin would produce a dead link.
+    const appBase = LIVE_APP_URL.replace(/\/$/, '');
+    let viewUrl = `${appBase}/view.html?path=${encodeURIComponent(path)}`;
+    // Carry the acceptance token + business name + doc type so the single
+    // customer link can both SHOW the document and let them accept/decline it.
+    if (acceptToken) {
+      const biz  = (state.company?.businessName || [state.company?.firstName, state.company?.lastName].filter(Boolean).join(' ') || '').trim();
+      const type = (docType || 'quote').toLowerCase();
+      viewUrl += `&token=${encodeURIComponent(acceptToken)}`;
+      if (biz)  viewUrl += `&biz=${encodeURIComponent(biz)}`;
+      if (type) viewUrl += `&type=${encodeURIComponent(type)}`;
+    }
     console.log('View URL:', viewUrl);
     toast('Document link generated successfully.', 'success', 3000);
     return viewUrl;
@@ -10397,40 +10654,93 @@ async function uploadDocToStorage(htmlStr, filename) {
   }
 }
 
-async function sendDoc(html, filename, message = '', custEmail = '', custPhone = '', passedDocType = '') {
+async function sendDoc(html, filename, message = '', custEmail = '', custPhone = '', passedDocType = '', acceptToken = '') {
   const htmlStr = wrapDoc(html);
 
   // Upload to Supabase Storage for a permanent shareable link
-  const docUrl = await uploadDocToStorage(htmlStr, filename);
+  const docUrl = await uploadDocToStorage(htmlStr, filename, acceptToken, passedDocType);
 
   sendDocRaw(htmlStr, filename, message, custEmail, docUrl, custPhone, passedDocType);
 }
 
-function showSendMethodPicker(onEmail, onWhatsApp, onCopy) {
+function showSendMethodPicker(onEmail, onWhatsApp, onCopy, hasEmail = false, hasPhone = false) {
   const W = '#7D5730';
   const SVG_EMAIL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:7px;flex-shrink:0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
   const SVG_WA    = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:7px;flex-shrink:0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
   const SVG_COPY  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:7px;flex-shrink:0"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
   const fillBtn   = `display:flex;align-items:center;justify-content:center;width:100%;padding:14px;margin-bottom:10px;border-radius:10px;border:none;background:${W};color:#fff;font-size:1rem;font-weight:600;cursor:pointer`;
   const outBtn    = `display:flex;align-items:center;justify-content:center;width:100%;padding:12px;margin-bottom:10px;border-radius:10px;border:1.5px solid ${W};background:#fff;color:${W};font-size:0.95rem;font-weight:600;cursor:pointer`;
+  const inputStyle = `width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;margin-bottom:8px;outline:none`;
+  const saveBtn   = `display:flex;align-items:center;justify-content:center;width:100%;padding:11px;border-radius:10px;border:none;background:${W};color:#fff;font-size:0.95rem;font-weight:600;cursor:pointer;margin-bottom:6px`;
+
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
-      <div style="font-size:1.3rem;font-weight:700;margin-bottom:6px;color:#333">How would you like to send?</div>
-      <div style="color:#777;font-size:0.9rem;margin-bottom:22px">Choose how to share this document with your customer</div>
-      ${onEmail    ? `<button id="_smpEmail" style="${fillBtn}">${SVG_EMAIL}Send via Email</button>` : ''}
-      ${onWhatsApp ? `<button id="_smpWA"    style="${fillBtn}">${SVG_WA}Send via WhatsApp</button>` : ''}
-      <button id="_smpCopy"   style="${outBtn}">${SVG_COPY}Copy Message</button>
-      <button id="_smpCancel" style="display:block;width:100%;padding:10px;border-radius:10px;border:1.5px solid #ddd;background:#fff;color:#888;font-size:0.9rem;cursor:pointer">Cancel</button>
-    </div>`;
+
+  const render = () => {
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+        <div style="font-size:1.3rem;font-weight:700;margin-bottom:6px;color:#333">How would you like to send?</div>
+        <div style="color:#777;font-size:0.9rem;margin-bottom:22px">Choose how to share this document with your customer</div>
+        <button id="_smpCopy"  style="${outBtn}">${SVG_COPY}Copy Message</button>
+        <button id="_smpWA"    style="${hasPhone ? fillBtn : outBtn}">${SVG_WA}WhatsApp</button>
+        <button id="_smpEmail" style="${hasEmail ? fillBtn : outBtn}">${SVG_EMAIL}Email</button>
+        <button id="_smpCancel" style="display:block;width:100%;padding:10px;border-radius:10px;border:none;background:transparent;color:#aaa;font-size:0.88rem;cursor:pointer;margin-top:4px">Cancel</button>
+      </div>`;
+
+    const close = () => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+
+    const showCapture = (type) => {
+      const isPhone = type === 'phone';
+      const label   = isPhone ? 'Add a WhatsApp number for this customer' : 'Add an email address for this customer';
+      const ph      = isPhone ? 'Phone number' : 'Email address';
+      const inputId = isPhone ? '_smpPhoneIn' : '_smpEmailIn';
+      overlay.querySelector('div > div').innerHTML = `
+        <div style="font-size:1.1rem;font-weight:700;margin-bottom:8px;color:#333">${label}</div>
+        <input id="${inputId}" type="${isPhone ? 'tel' : 'email'}" placeholder="${ph}" style="${inputStyle}">
+        <button id="_smpSaveDetail" style="${saveBtn}">Save &amp; Send</button>
+        <button id="_smpBackPicker" style="display:block;width:100%;padding:8px;border:none;background:transparent;color:#aaa;font-size:0.88rem;cursor:pointer">← Back</button>`;
+
+      overlay.querySelector('#_smpSaveDetail').addEventListener('click', () => {
+        const val = overlay.querySelector(`#${inputId}`).value.trim();
+        if (!val) { overlay.querySelector(`#${inputId}`).style.borderColor = '#C4553A'; return; }
+        // Build the customer data from the document being sent, not just the
+        // (possibly empty) live form, so the detail lands on the right customer.
+        const activeDoc = activeDocId ? state.saved.find(d => d.id === activeDocId) : null;
+        const baseQuote = { ...(activeDoc?.quote || {}), ...state.quote };
+        const merged = isPhone
+          ? { ...baseQuote, custPhone: val }
+          : { ...baseQuote, custEmail: val };
+
+        if (isPhone) state.quote.custPhone = val; else state.quote.custEmail = val;
+
+        // Mirror onto the saved document so it shows next time too
+        if (activeDoc) {
+          activeDoc.quote = activeDoc.quote || {};
+          if (isPhone) activeDoc.quote.custPhone = val; else activeDoc.quote.custEmail = val;
+        }
+
+        // Persist to the customer dashboard (find-or-create) and sync to cloud.
+        // Runs unconditionally so it works even when no prior customer record exists.
+        upsertLocalCustomer(merged);   // calls save() internally
+        save();
+        queueCustomerSync(merged);
+        if (typeof refreshSavedDocs === 'function') refreshSavedDocs();
+
+        close();
+        if (isPhone) onWhatsApp(val); else onEmail(val);
+      });
+      overlay.querySelector('#_smpBackPicker').addEventListener('click', render);
+    };
+
+    overlay.querySelector('#_smpCopy').addEventListener('click',   () => { close(); onCopy(); });
+    overlay.querySelector('#_smpCancel').addEventListener('click', close);
+    overlay.querySelector('#_smpWA').addEventListener('click',    () => { if (hasPhone) { close(); onWhatsApp(); } else { showCapture('phone'); } });
+    overlay.querySelector('#_smpEmail').addEventListener('click', () => { if (hasEmail) { close(); onEmail(); }   else { showCapture('email'); } });
+  };
+
+  render();
   document.body.appendChild(overlay);
-  const close = () => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
-  overlay.querySelector('#_smpEmail')?.addEventListener('click',  () => { close(); onEmail(); });
-  overlay.querySelector('#_smpWA')?.addEventListener('click',     () => { close(); onWhatsApp(); });
-  overlay.querySelector('#_smpCopy').addEventListener('click',    () => { close(); onCopy(); });
-  overlay.querySelector('#_smpCancel').addEventListener('click',  close);
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.addEventListener('click', e => { if (e.target === overlay) { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); } });
 }
 
 async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUrl = null, custPhone = '', passedDocType = '') {
@@ -10451,20 +10761,24 @@ async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUr
     }
   }
 
-  const waPhone = custPhone ? formatWhatsAppNumber(custPhone) : '';
-
-  // showPicker is defined first so doEmail can reference it for the Back button
-  const showPicker = () => showSendMethodPicker(
-    custEmail ? doEmail : null,
-    waPhone   ? doWhatsApp : null,
-    doCopy
-  );
   const stampSentVia = (via) => {
     const doc = activeDocId ? state.saved.find(d => d.id === activeDocId) : null;
     if (doc && doc.sentVia !== via) { doc.sentVia = via; save(); }
   };
-  const doEmail    = () => { stampSentVia('email');    openEmailCompose(custEmail, subject, fullMsg, false, showPicker); };
-  const doWhatsApp = () => { stampSentVia('whatsapp'); window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(fullMsg)}`, '_blank'); };
+  // doEmail / doWhatsApp accept an optional override value for when the user
+  // just supplied the missing detail via the capture form in the picker
+  const doEmail = (emailOverride) => {
+    const email = emailOverride || custEmail;
+    stampSentVia('email');
+    openEmailCompose(email, subject, fullMsg, false, showPicker);
+  };
+  const doWhatsApp = (phoneOverride) => {
+    const phone = formatWhatsAppNumber(phoneOverride || custPhone);
+    stampSentVia('whatsapp');
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`, '_blank');
+  };
+
+  const showPicker = () => showSendMethodPicker(doEmail, doWhatsApp, doCopy, !!custEmail, !!custPhone);
   const doCopy = async () => {
     if (fullMsg && navigator.clipboard) {
       try { await navigator.clipboard.writeText(fullMsg); toast('Message copied -paste it into WhatsApp or email.', '', 6000); }
@@ -11470,10 +11784,9 @@ function prepareAcceptTokenForSend(docId) {
 }
 
 function getAcceptUrl(token) {
-  const currentPathBase = window.location.pathname.replace(/index\.html$/,'').replace(/\/$/, '');
-  const base = window.location.protocol === 'file:'
-    ? LIVE_APP_URL.replace(/\/$/, '')
-    : `${window.location.origin}${currentPathBase}`.replace(/\/$/, '');
+  // ALWAYS point at the live app — this link is opened by the customer on
+  // their own device, so a localhost/file:// origin would produce a dead link.
+  const base = LIVE_APP_URL.replace(/\/$/, '');
   const doc  = (state.saved || []).find(d => d.acceptToken === token);
   const ref  = doc?.ref || doc?.quote?.ref || '';
   const biz  = (state.company?.businessName || [state.company?.firstName, state.company?.lastName].filter(Boolean).join(' ') || '').trim();
@@ -11483,8 +11796,9 @@ function getAcceptUrl(token) {
 
 function buildAcceptanceMessage(doc, baseMessage) {
   const q = doc.quote || {};
-  const token = prepareAcceptTokenForSend(doc.id);
-  const acceptUrl = getAcceptUrl(token);
+  // Prepare the acceptance token (also stamps doc.acceptToken, used to build
+  // the single view+accept link in uploadDocToStorage).
+  prepareAcceptTokenForSend(doc.id);
   const customerName = getCustomerFirstName(doc) || 'there';
   const rawDocType = String(q.type || doc.type || 'quote').toLowerCase();
   const docType = ['estimate','invoice','receipt'].includes(rawDocType) ? rawDocType : 'quote';
@@ -11500,11 +11814,8 @@ Thank you for allowing me to provide you with ${article} ${docType} to carry out
 
 Please feel free to consider it and talk it over with whoever you need to. I am happy to answer any queries, so feel free to message me back.
 
-You can view your ${docType} by clicking the link below:
+You can view your ${docType} and accept or decline it by clicking the link below:
 {VIEW_LINK}
-
-When you are ready, if you would like to accept the ${docType}, please click the secure acceptance link below:
-${acceptUrl}
 
 Kind regards
 ${signoff}`;

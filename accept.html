@@ -161,6 +161,7 @@
   const bizName  = params.get('biz') || '';
   const docType  = (params.get('type') || 'quote').toLowerCase();
   const docLabel = docType === 'estimate' ? 'Estimate' : 'Quote';
+  if (bizName) document.title = `Accept Your ${docLabel} — ${bizName}`;
   const KEY      = 'lexi_accept_' + token;
 
   // Show trader's business name (logo is not available on this page — use text)
