@@ -6119,6 +6119,7 @@ let _ssCols     = null;  // active column config
 let _ssSortKey  = 'ref';
 let _ssSortDir  = 'asc';
 let _ssFilter   = 'all';
+let _ssRotateHintHandler = null;
 
 function getSsCols() {
   if (_ssCols) return _ssCols;
@@ -6418,7 +6419,14 @@ function openSpreadsheetView() {
   buildSsRows();
 
   const hint = document.getElementById('ssRotateHint');
-  if (hint) hint.style.display = window.innerHeight > window.innerWidth ? 'flex' : 'none';
+  const updateRotateHint = () => {
+    if (hint) hint.style.display = window.innerHeight > window.innerWidth ? 'flex' : 'none';
+  };
+  updateRotateHint();
+  // Re-check when the device actually rotates so the hint clears in landscape
+  window.removeEventListener('resize', _ssRotateHintHandler);
+  _ssRotateHintHandler = updateRotateHint;
+  window.addEventListener('resize', _ssRotateHintHandler);
 
   document.getElementById('closeSpreadsheetBtn').onclick = closeSpreadsheetView;
   document.getElementById('ssColsBtn')?.addEventListener('click', openSsColPanel);
@@ -6433,6 +6441,10 @@ function closeSpreadsheetView() {
   if (modal) modal.style.display = 'none';
   document.body.style.overflow = '';
   document.getElementById('ssColPanel')?.remove();
+  if (_ssRotateHintHandler) {
+    window.removeEventListener('resize', _ssRotateHintHandler);
+    _ssRotateHintHandler = null;
+  }
   // Reset toggle
   const tog = document.getElementById('jobsSpreadsheetToggle');
   const lbl = document.getElementById('ssToggleLabel');
