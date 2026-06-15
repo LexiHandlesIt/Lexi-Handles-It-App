@@ -6687,6 +6687,19 @@ input[type="text"].sig-text-input:focus {
   background: #fff;
   overflow: hidden;
 }
+/* Force the spreadsheet into landscape on a portrait phone, so the wide table
+   is readable without relying on the OS rotation lock. Sized to the viewport
+   with axes swapped, then rotated 90deg about the top-left corner. */
+.spreadsheet-shell.ss-force-landscape {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vh;
+  height: 100vw;
+  transform: rotate(90deg) translateY(-100%);
+  transform-origin: top left;
+  z-index: 1;
+}
 .spreadsheet-topbar {
   display: flex;
   align-items: center;

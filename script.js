@@ -6418,15 +6418,24 @@ function openSpreadsheetView() {
   buildSsHead();
   buildSsRows();
 
-  const hint = document.getElementById('ssRotateHint');
+  const hint  = document.getElementById('ssRotateHint');
+  const shell = document.getElementById('spreadsheetShell');
+  // When the phone is held in portrait, force the spreadsheet into landscape
+  // via CSS so the wide table is readable. When the device is physically in
+  // landscape, show it normally. Works on iOS + Android regardless of the
+  // OS rotation lock or whether the app is installed (manifest is portrait).
   const updateRotateHint = () => {
-    if (hint) hint.style.display = window.innerHeight > window.innerWidth ? 'flex' : 'none';
+    const portrait = window.innerHeight > window.innerWidth;
+    if (shell) shell.classList.toggle('ss-force-landscape', portrait);
+    if (hint)  hint.style.display = portrait ? 'flex' : 'none';
   };
   updateRotateHint();
-  // Re-check when the device actually rotates so the hint clears in landscape
+  // Re-check when the device actually rotates
   window.removeEventListener('resize', _ssRotateHintHandler);
+  window.removeEventListener('orientationchange', _ssRotateHintHandler);
   _ssRotateHintHandler = updateRotateHint;
   window.addEventListener('resize', _ssRotateHintHandler);
+  window.addEventListener('orientationchange', _ssRotateHintHandler);
 
   document.getElementById('closeSpreadsheetBtn').onclick = closeSpreadsheetView;
   document.getElementById('ssColsBtn')?.addEventListener('click', openSsColPanel);
@@ -6441,8 +6450,10 @@ function closeSpreadsheetView() {
   if (modal) modal.style.display = 'none';
   document.body.style.overflow = '';
   document.getElementById('ssColPanel')?.remove();
+  document.getElementById('spreadsheetShell')?.classList.remove('ss-force-landscape');
   if (_ssRotateHintHandler) {
     window.removeEventListener('resize', _ssRotateHintHandler);
+    window.removeEventListener('orientationchange', _ssRotateHintHandler);
     _ssRotateHintHandler = null;
   }
   // Reset toggle
