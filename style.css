@@ -5798,15 +5798,45 @@ input[type="text"].sig-text-input:focus {
 .cal-template-btn:hover, .cal-template-btn.selected { border-color: var(--walnut); background: var(--walnut-tint); }
 .cal-template-btn-title { font-size: 0.82rem; font-weight: 700; color: var(--charcoal); }
 .cal-template-btn-desc { font-size: 0.72rem; color: #888; margin-top: 2px; }
+.cal-stage-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  background: var(--cream);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-bottom: 8px;
+}
+.cal-stage-btn:last-child { margin-bottom: 0; }
+.cal-stage-btn:hover { border-color: var(--walnut); background: var(--walnut-tint); }
+.cal-stage-btn-title { font-size: 0.88rem; font-weight: 700; color: var(--charcoal); }
+.cal-stage-btn-desc  { font-size: 0.72rem; color: #888; margin-top: 2px; }
+.cal-back-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--walnut);
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0 0 10px 0;
+}
+.cal-back-btn:hover { text-decoration: underline; }
 .cal-template-group-title {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 700;
   color: var(--walnut);
-  margin: 14px 0 4px;
+  margin: 0 0 8px;
 }
-.cal-template-group-title:first-child { margin-top: 0; }
 .cal-email-preview {
   display: block;
   width: 100%;

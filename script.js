@@ -11476,6 +11476,7 @@ function buildCalDayPanel(dateStr, evs) {
 // ---- Email / WhatsApp composer ----
 let calEmailDocId = null;
 let calEmailSelectedTemplate = null;
+let calEmailTemplates = [];
 let calEmailAddr = '';
 let calEmailChannel = 'email';   // 'email' | 'whatsapp'
 let calEmailPhone = '';
@@ -11654,6 +11655,7 @@ ${traderName}`,
   };
   const defaultId = defaultMap[eventType] || 'follow_up';
   calEmailSelectedTemplate = templates.find(t => t.id === defaultId) || templates[0];
+  calEmailTemplates = templates;
 
   // Update modal title and send button based on channel
   const titleEl = document.getElementById('calEmailModalTitle');
@@ -11673,38 +11675,57 @@ ${traderName}`,
     if (descEl) descEl.textContent = `To: ${custName}${calEmailAddr ? ' (' + calEmailAddr + ')' : '. No email address saved.'}`;
   }
 
-  const listEl = document.getElementById('calTemplateList');
-  if (listEl) {
-    const btnHtml = t => `
-      <button type="button" class="cal-template-btn${calEmailSelectedTemplate?.id === t.id ? ' selected' : ''}"
-        onclick="calSelectTemplate('${t.id}')"
-        data-tmpl-id="${t.id}"
-        data-subj="${encodeURIComponent(t.subject)}"
-        data-body="${encodeURIComponent(t.body)}">
-        <div class="cal-template-btn-title">${t.title}</div>
-        <div class="cal-template-btn-desc">${t.desc}</div>
-      </button>`;
-    const groups = [
-      { id: 'before',   label: 'Before Acceptance' },
-      { id: 'after',    label: 'After Acceptance' },
-      { id: 'complete', label: 'After Job Completion' },
-    ];
-    listEl.innerHTML = groups.map(g => {
-      const items = templates.filter(t => t.group === g.id);
-      if (!items.length) return '';
-      return `<div class="cal-template-group-title">${g.label}</div>` + items.map(btnHtml).join('');
-    }).join('') + `
-      <div class="cal-template-group-title">Your Own Words</div>
-      <button type="button" class="cal-template-btn${calEmailSelectedTemplate?.id === 'custom' ? ' selected' : ''}"
-        onclick="calSelectTemplate('custom')"
-        data-tmpl-id="custom" data-subj="" data-body="">
-        <div class="cal-template-btn-title">Write Your Own</div>
-        <div class="cal-template-btn-desc">Opens your ${calEmailChannel === 'whatsapp' ? 'WhatsApp' : 'email'} app with a blank message</div>
-      </button>`;
-  }
-
-  updateCalEmailPreview();
+  renderCalGroupButtons();
+  const previewEl = document.getElementById('calEmailPreview');
+  if (previewEl) { previewEl.style.display = 'none'; previewEl.value = ''; }
   document.getElementById('calEmailModal').style.display = 'flex';
+}
+
+// Render the top-level 4 group-stage buttons
+function renderCalGroupButtons() {
+  const listEl = document.getElementById('calTemplateList');
+  if (!listEl) return;
+  const channel = calEmailChannel === 'whatsapp' ? 'WhatsApp' : 'email';
+  listEl.innerHTML = `
+    <button type="button" class="cal-stage-btn" onclick="calSelectGroup('before')">
+      <div class="cal-stage-btn-title">Before Acceptance</div>
+      <div class="cal-stage-btn-desc">Quote and estimate follow-ups</div>
+    </button>
+    <button type="button" class="cal-stage-btn" onclick="calSelectGroup('after')">
+      <div class="cal-stage-btn-title">After Acceptance</div>
+      <div class="cal-stage-btn-desc">Holding, book in, booking reminder</div>
+    </button>
+    <button type="button" class="cal-stage-btn" onclick="calSelectGroup('complete')">
+      <div class="cal-stage-btn-title">After Job Completion</div>
+      <div class="cal-stage-btn-desc">Invoice reminder, receipt, payment thanks</div>
+    </button>
+    <button type="button" class="cal-stage-btn" onclick="calSelectTemplate('custom')">
+      <div class="cal-stage-btn-title">Your Own Words</div>
+      <div class="cal-stage-btn-desc">Opens your ${channel} app with a blank message</div>
+    </button>`;
+}
+
+// Drill into a group — show back button + templates for that stage
+function calSelectGroup(groupId) {
+  const listEl = document.getElementById('calTemplateList');
+  if (!listEl) return;
+  const groupLabels = { before: 'Before Acceptance', after: 'After Acceptance', complete: 'After Job Completion' };
+  const items = calEmailTemplates.filter(t => t.group === groupId);
+  const btnHtml = t => `
+    <button type="button" class="cal-template-btn"
+      onclick="calSelectTemplate('${t.id}')"
+      data-tmpl-id="${t.id}"
+      data-subj="${encodeURIComponent(t.subject)}"
+      data-body="${encodeURIComponent(t.body)}">
+      <div class="cal-template-btn-title">${t.title}</div>
+      <div class="cal-template-btn-desc">${t.desc}</div>
+    </button>`;
+  listEl.innerHTML = `
+    <button type="button" class="cal-back-btn" onclick="renderCalGroupButtons(); document.getElementById('calEmailPreview').style.display='none';">
+      ← Back
+    </button>
+    <div class="cal-template-group-title">${groupLabels[groupId] || ''}</div>
+    ${items.map(btnHtml).join('')}`;
 }
 
 function calSelectTemplate(templateId) {
