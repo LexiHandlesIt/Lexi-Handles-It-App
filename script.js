@@ -14,6 +14,7 @@ const lexiSupabase = (
 let authMode = 'login';
 let lexiAuthSession = null;
 let priceListSyncTimer = null;
+let lexiEntitlement = null;
 
 // ── PWA INSTALL PROMPT ────────────────────────────────────────
 let _pwaInstallPrompt = null;
@@ -78,6 +79,298 @@ const KEY_TRIAL_END    = 'lexi_trial_end';
 const KEY_AUTH_REMEMBER_EMAIL = 'lexi_auth_remember_email';
 const TRIAL_DAYS       = 90;
 
+/* ===== SUBSCRIPTION ENTITLEMENTS ===== */
+function normaliseEntitlementRpcRow(data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return {
+    planCode: row.plan_code || 'trial',
+    planName: row.plan_name || 'Full Trial',
+    subscriptionStatus: row.subscription_status || 'trialing',
+    earlyAdopter: !!row.early_adopter,
+    trialStartedAt: row.trial_started_at || null,
+    trialEndsAt: row.trial_ends_at || null,
+    periodStart: row.period_start || null,
+    periodEnd: row.period_end || null,
+    monthlyJobLimit: row.monthly_job_limit == null ? null : Number(row.monthly_job_limit),
+    jobsUsed: Number(row.jobs_used || 0),
+    jobsRemaining: row.jobs_remaining == null ? null : Number(row.jobs_remaining),
+    quietSeasonActive: !!row.quiet_season_active,
+    cancelAtPeriodEnd: !!row.cancel_at_period_end,
+    features: row.entitlements && typeof row.entitlements === 'object'
+      ? row.entitlements
+      : {}
+  };
+}
+
+async function loadLexiEntitlement() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return null;
+  const { data, error } = await lexiSupabase.rpc('get_my_entitlement');
+  if (error) {
+    // The migration can be deployed independently of this client release.
+    // Until it is present, the existing trial behaviour remains unchanged.
+    console.warn('Could not load subscription entitlements:', error);
+    return null;
+  }
+  lexiEntitlement = normaliseEntitlementRpcRow(data);
+  applyLexiEntitlementRestrictions();
+  return lexiEntitlement;
+}
+
+async function handleStripeCheckoutReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const stripeResult = params.get('stripe');
+  if (!stripeResult) return;
+
+  params.delete('stripe');
+  params.delete('session_id');
+  const nextUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}${window.location.hash || ''}`;
+  window.history.replaceState({}, document.title, nextUrl);
+
+  if (stripeResult === 'success') {
+    toast('Payment received. Lexi is updating your plan now.', 'success', 5000);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await loadLexiEntitlement();
+      if (lexiEntitlement?.planName) {
+        toast(`Your plan is now ${lexiEntitlement.planName}.`, 'success', 5000);
+      }
+    } catch (error) {
+      console.warn('Could not refresh entitlement after Stripe return:', error);
+    }
+  } else if (stripeResult === 'cancelled') {
+    toast('No payment was taken. You can choose a plan whenever you are ready.', 'info', 5000);
+  }
+}
+
+async function startStripeCheckout(planCode, options = {}) {
+  if (planCode !== 'tradesman' && planCode !== 'master') return;
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) {
+    toast('Sign in before choosing a plan.', 'error', 5000);
+    return;
+  }
+
+  const founderCode = String(options.founderCode || '').replace(/\s+/g, '').trim().toUpperCase();
+  const founderMsg = document.getElementById('founderTesterMsg');
+  if (options.founder && !founderCode) {
+    if (founderMsg) founderMsg.textContent = 'Enter your founder tester code first.';
+    toast('Enter your founder tester code first.', 'error', 5000);
+    return;
+  }
+
+  const buttonIds = ['trialChooseTradesmanBtn', 'trialChooseMasterBtn', 'founderTesterBtn'];
+  const buttons = buttonIds.map(id => document.getElementById(id)).filter(Boolean);
+  const clicked = options.founder
+    ? document.getElementById('founderTesterBtn')
+    : document.getElementById(planCode === 'master' ? 'trialChooseMasterBtn' : 'trialChooseTradesmanBtn');
+  const originalText = clicked?.textContent || '';
+  buttons.forEach(btn => { btn.disabled = true; });
+  if (clicked) clicked.textContent = 'Opening secure checkout...';
+  if (founderMsg && options.founder) {
+    founderMsg.textContent = 'Checking your founder tester code...';
+  }
+
+  try {
+    const { data, error } = await lexiSupabase.functions.invoke('create-checkout-session', {
+      body: {
+        planCode,
+        ...(options.founder ? { founderCode } : {})
+      },
+    });
+    if (error) throw error;
+    if (!data?.url) throw new Error('Stripe Checkout did not return a payment link.');
+    window.location.href = data.url;
+  } catch (error) {
+    console.warn('Could not start Stripe Checkout:', error);
+    const message = error?.message || 'Could not open checkout. Please try again.';
+    if (founderMsg && options.founder) founderMsg.textContent = message;
+    toast(message, 'error', 7000);
+    buttons.forEach(btn => { btn.disabled = false; });
+    if (clicked) clicked.textContent = originalText;
+  }
+}
+
+function getLexiFeatureEntitlement(featureKey) {
+  if (!featureKey) return false;
+  if (!lexiEntitlement) {
+    // Do not lock an authenticated customer out because entitlement state
+    // could not be fetched while offline.
+    return true;
+  }
+  return lexiEntitlement.features?.[featureKey] ?? false;
+}
+
+function hasLexiFeature(featureKey, minimumLevel = 'basic') {
+  const value = getLexiFeatureEntitlement(featureKey);
+  if (value === true) return true;
+  if (value === false || value == null) return false;
+  const levels = { none: 0, view: 1, basic: 2, full: 3, advanced: 3 };
+  const actual = levels[String(value).toLowerCase()] ?? 0;
+  const required = levels[String(minimumLevel).toLowerCase()] ?? levels.basic;
+  return actual >= required;
+}
+
+function getLexiJobAllowance() {
+  if (!lexiEntitlement) return null;
+  return {
+    planCode: lexiEntitlement.planCode,
+    used: lexiEntitlement.jobsUsed,
+    limit: lexiEntitlement.monthlyJobLimit,
+    remaining: lexiEntitlement.jobsRemaining,
+    periodEndsAt: lexiEntitlement.periodEnd,
+    quietSeasonActive: lexiEntitlement.quietSeasonActive
+  };
+}
+
+async function claimLexiJobSlot(jobId) {
+  if (!jobId) throw new Error('A stable job ID is required before counting usage.');
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) {
+    return { allowed: false, counted: false, reason: 'connection_required' };
+  }
+
+  const { data, error } = await lexiSupabase.rpc('claim_new_job', { p_job_id: jobId });
+  if (error) throw error;
+  const result = Array.isArray(data) ? data[0] : data;
+  if (result) {
+    await loadLexiEntitlement();
+  }
+  return result || { allowed: false, counted: false, reason: 'empty_response' };
+}
+
+const LEXI_FEATURE_LABELS = {
+  custom_brand_colours: 'Custom document colours',
+  trade_autofill: 'Trade-based autofill',
+  bulk_price_import: 'Bulk price-list import',
+  voice_item_entry: 'Voice entry',
+  job_photos: 'Before-and-after photographs',
+  digital_quote_acceptance: 'Digital quote acceptance',
+  job_pipeline: 'Job-stage pipeline',
+  customer_dashboard: 'Full customer dashboard',
+  advanced_job_spreadsheet: 'Advanced spreadsheet view',
+  part_payments: 'Deposits and part-payments',
+  payment_due_tracking: 'Payment due and overdue tracking',
+  payment_chasing: 'Payment chasing',
+  in_app_calendar: 'In-app calendar',
+  external_calendar_export: 'External calendar export',
+  message_templates: 'Message templates',
+  auto_holding_preference: 'Automatic holding-message preference',
+  attention_centre: 'Needs Attention',
+  quote_followup_nudges: 'Quote follow-up nudges',
+  recurring_visit_reminders: 'Recurring-visit reminders',
+  push_notifications: 'Push notifications',
+  monthly_job_limit: 'New job allowance',
+  earnings_level: 'Earnings overview',
+  earnings_export: 'Earnings report download',
+  advanced_job_export: 'Advanced job export',
+  quiet_season: 'Quiet Season'
+};
+
+const LEXI_FEATURE_CONTROLS = [
+  { selector: '#useLogoColours,#colourHeader,#colourAccent,#colourBg,#resetColourMenu,#resetColourDropdown [data-reset]', feature: 'custom_brand_colours', level: 'full' },
+  { selector: '#autoFillRatesBtn,#autoFillServicesBtn,#autoFillMaterialsBtn,#changeTradeBtnRates,#changeTradeBtnSvc,#changeTradeBtnMat', feature: 'trade_autofill', level: 'full' },
+  { selector: '#bulkChooseService,#bulkChooseMaterials,#csvUploadZone,#csvFile,#bulkPaste,#parseBulkBtn', feature: 'bulk_price_import', level: 'full' },
+  { selector: '#voiceBtn,#voiceBtnMaterials', feature: 'voice_item_entry', level: 'full' },
+  { selector: '#beforePhotosInput,#afterPhotosInput,#quoteIncludePhotos,#qbpIncludePhotos', feature: 'job_photos', level: 'full' },
+  { selector: '#jobsSpreadsheetToggle', feature: 'advanced_job_spreadsheet', level: 'full' },
+  { selector: '#menuCalendar', feature: 'in_app_calendar', level: 'full' },
+  { selector: '#downloadIcsBtn', feature: 'external_calendar_export', level: 'full' },
+  { selector: '#menuChasePayments', feature: 'payment_chasing', level: 'full' },
+  { selector: '#menuQuietSeason', feature: 'quiet_season', level: 'full' },
+  { selector: '#menuEarnings', feature: 'earnings_level', level: 'basic' },
+  { selector: '#prefAutoHolding', feature: 'auto_holding_preference', level: 'full' },
+  { selector: '#notifToggleBtn', feature: 'push_notifications', level: 'full' },
+  { selector: '.cdv-recurring-select', feature: 'recurring_visit_reminders', level: 'full' }
+];
+
+function getLexiRequiredPlan(featureKey) {
+  if (['advanced_job_spreadsheet', 'attention_centre', 'quote_followup_nudges',
+       'recurring_visit_reminders', 'push_notifications', 'earnings_export',
+       'advanced_job_export'].includes(featureKey)) return 'Master';
+  if (featureKey === 'earnings_level') return 'Tradesman';
+  return 'Tradesman';
+}
+
+function showLexiFeatureLocked(featureKey, reason = '') {
+  const label = LEXI_FEATURE_LABELS[featureKey] || 'This feature';
+  const requiredPlan = getLexiRequiredPlan(featureKey);
+  const title = document.getElementById('trialStatusTitle');
+  const copy = document.getElementById('trialStatusCopy');
+  const modalTitle = document.getElementById('trialPlansTitle');
+  if (modalTitle) modalTitle.textContent = 'Upgrade Lexi';
+  if (title) title.textContent = reason || `${label} is available on ${requiredPlan}.`;
+  if (copy) copy.textContent = `Your existing jobs and customer records are still safe and accessible. Upgrade when you are ready to use ${label.toLowerCase()}.`;
+  const modal = document.getElementById('trialPlansModal');
+  if (modal) modal.style.display = 'flex';
+  else toast(`${label} requires ${requiredPlan}.`, 'error', 6000);
+}
+
+function applyLexiEntitlementRestrictions() {
+  if (!lexiEntitlement || !document?.querySelectorAll) return;
+  LEXI_FEATURE_CONTROLS.forEach(({ selector, feature, level }) => {
+    const allowed = hasLexiFeature(feature, level);
+    document.querySelectorAll(selector).forEach(el => {
+      el.dataset.lexiFeature = feature;
+      el.dataset.lexiLevel = level;
+      el.classList.toggle('lexi-feature-locked', !allowed);
+      el.setAttribute('aria-disabled', allowed ? 'false' : 'true');
+      if (!allowed) {
+        el.title = `${LEXI_FEATURE_LABELS[feature] || 'This feature'} requires ${getLexiRequiredPlan(feature)}.`;
+      } else if (el.title?.includes('requires ')) {
+        el.removeAttribute('title');
+      }
+    });
+  });
+}
+
+function setupLexiEntitlementGuards() {
+  document.addEventListener('click', event => {
+    const target = event.target.closest?.('[data-lexi-feature]');
+    if (!target) return;
+    const feature = target.dataset.lexiFeature;
+    const level = target.dataset.lexiLevel || 'basic';
+    if (hasLexiFeature(feature, level)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if ('checked' in target) target.checked = false;
+    showLexiFeatureLocked(feature);
+  }, true);
+
+  document.addEventListener('change', event => {
+    const target = event.target.closest?.('[data-lexi-feature]');
+    if (!target || hasLexiFeature(target.dataset.lexiFeature, target.dataset.lexiLevel || 'basic')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if ('checked' in target) target.checked = false;
+    showLexiFeatureLocked(target.dataset.lexiFeature);
+  }, true);
+}
+
+async function authoriseNewLexiJob(jobId) {
+  try {
+    const result = await claimLexiJobSlot(jobId);
+    if (result?.allowed) return true;
+
+    if (result?.reason === 'job_limit_reached') {
+      const limit = Number(result.monthly_job_limit || lexiEntitlement?.monthlyJobLimit || 0);
+      showLexiFeatureLocked(
+        'monthly_job_limit',
+        `You have used all ${limit} new jobs included in your ${lexiEntitlement?.planName || 'current'} plan this month.`
+      );
+    } else if (result?.reason === 'quiet_season') {
+      showLexiFeatureLocked('quiet_season', 'New jobs are paused while your account is in Quiet Season.');
+    } else if (result?.reason === 'subscription_inactive') {
+      showLexiFeatureLocked('monthly_job_limit', 'Your paid subscription is not currently active.');
+    } else {
+      toast('Lexi could not confirm your job allowance. Check your connection and try again.', 'error', 7000);
+    }
+    return false;
+  } catch (error) {
+    console.warn('Could not reserve a new job allowance:', error);
+    toast('Lexi could not confirm your job allowance. Check your connection and try again.', 'error', 7000);
+    return false;
+  }
+}
+
 function custKey(name) { return (name || '').trim().toLowerCase(); }
 function getCustData(name)           { const d = lsGet(KEY_CUST_DATA) || {}; return d[custKey(name)] || {}; }
 function saveCustData(name, updates) {
@@ -102,10 +395,27 @@ function ensureTrialStarted() {
   return { start: new Date(start), end: new Date(end) };
 }
 
+// The authoritative trial start is the account's creation date (same on every
+// device). The localStorage value is only set on a device's first launch, so it
+// can't be trusted across devices — use it only as an offline fallback.
+function getTrialStartDate() {
+  const created = (typeof lexiAuthSession !== 'undefined' && lexiAuthSession?.user?.created_at) || null;
+  if (created) {
+    const d = new Date(created);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return ensureTrialStarted().start;
+}
+
 function getTrialDaysRemaining() {
-  const { end } = ensureTrialStarted();
-  const ms = end.getTime() - Date.now();
-  return Math.max(0, Math.ceil(ms / 86400000));
+  // Count by calendar day (ignore time-of-day) so the number ticks down at
+  // midnight, matching how "Member since" reads. Signup day shows the full 90.
+  const start = getTrialStartDate();
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + TRIAL_DAYS);
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const ms = end.getTime() - todayMidnight.getTime();
+  return Math.max(0, Math.round(ms / 86400000));
 }
 
 /* ===== DEFAULT COLOURS ===== */
@@ -470,6 +780,11 @@ function traderFirstName() {
   return (state.company.preferredName || state.company.firstName || '').trim() || 'there';
 }
 
+// Formal first name for anything sent to a customer (never the nickname)
+function traderFormalFirstName() {
+  return (state.company.firstName || state.company.preferredName || '').trim();
+}
+
 function hasRequiredSetup() {
   return (state.company.firstName || '').trim() !== '' &&
          (state.company.lastName  || '').trim() !== '';
@@ -614,6 +929,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!canOpenApp) return;
 
   loadFromStorage();
+  try {
+    await loadLexiEntitlement();
+    await handleStripeCheckoutReturn();
+  } catch (error) {
+    console.warn('Entitlement load during startup failed:', error);
+  }
 
   // New device / fresh login: pull the business record from Supabase BEFORE
   // deciding onboarding, so a returning user isn't wrongly asked to set up again.
@@ -649,6 +970,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupJobSearch();
   setupReviewModal();
   setupEarnings();
+  setupLexiEntitlementGuards();
+  applyLexiEntitlementRestrictions();
   updateSavedBadge();
   populatePage1Fields();
   updateQrMenuLabel();
@@ -843,9 +1166,9 @@ async function handleEmailAuth() {
   } else {
     localStorage.removeItem(KEY_AUTH_REMEMBER_EMAIL);
   }
-  if (authMode === 'signup' && password.length < 8) {
-    setAuthMessage('Use at least 8 characters.', 'error');
-    return;
+  if (authMode === 'signup') {
+    const pwError = validatePasswordStrength(password);
+    if (pwError) { setAuthMessage(pwError, 'error'); return; }
   }
   submitBtn.disabled = true;
   submitBtn.textContent = authMode === 'signup' ? 'Creating account...' : 'Logging in...';
@@ -932,21 +1255,13 @@ async function ensureSupabaseProfile(user) {
     trial_ends_at: trialEnd.toISOString()
   }, { onConflict: 'id', ignoreDuplicates: true });
 
-  const { data: existingSub } = await lexiSupabase
-    .from('subscriptions')
-    .select('id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle();
-  if (!existingSub) {
-    await lexiSupabase.from('subscriptions').insert({
-      user_id: user.id,
-      plan_name: 'trial',
-      status: 'trialing',
-      trial_started_at: now.toISOString(),
-      trial_ends_at: trialEnd.toISOString()
-    });
+  const { error: entitlementError } = await lexiSupabase.rpc('ensure_my_entitlement');
+  if (entitlementError) {
+    console.warn('Entitlement foundation is not available yet:', entitlementError);
+  } else {
+    await loadLexiEntitlement();
   }
+
   if (!localStorage.getItem(KEY_TRIAL_START)) {
     localStorage.setItem(KEY_TRIAL_START, now.toISOString());
     localStorage.setItem(KEY_TRIAL_END, trialEnd.toISOString());
@@ -1223,18 +1538,30 @@ async function _doSavePriceListToSupabase() {
   if (deleteResult.error) throw deleteResult.error;
   if (!rows.length) return;
 
-  let insertResult = await lexiSupabase.from('price_items').insert(rows);
-  // If a column is missing in the deployed schema, strip the optional ones and
-  // retry so the core data (name/price/unit) still syncs rather than failing.
-  if (insertResult.error && _isMissingColumnError(insertResult.error)) {
-    const slimRows = rows.map(({ local_id, cost_price, category, ...row }) => row);
-    insertResult = await lexiSupabase.from('price_items').insert(slimRows);
+  // Insert, but if the deployed schema is missing an optional column, drop ONLY
+  // that column and retry. Blanket-stripping all optional columns would discard
+  // real data (e.g. a missing local_id would needlessly wipe category/cost_price).
+  const OPTIONAL_COLS = ['local_id', 'cost_price', 'category'];
+  let working = rows;
+  const dropped = [];
+  for (let attempt = 0; attempt <= OPTIONAL_COLS.length; attempt++) {
+    const insertResult = await lexiSupabase.from('price_items').insert(working);
     if (!insertResult.error) {
-      console.warn('Price list synced without optional columns (local_id/cost_price/category). Add them in Supabase for full fidelity.');
+      if (dropped.length) {
+        console.warn('Price list synced without missing column(s): ' + dropped.join(', ') + '. Add them in Supabase for full fidelity.');
+      }
       return;
     }
+    if (!_isMissingColumnError(insertResult.error)) throw insertResult.error;
+    // Identify the specific missing column from the error; fall back to the next
+    // untried optional column if the message doesn't name one.
+    const errMsg = String(insertResult.error?.message || '');
+    const toDrop = OPTIONAL_COLS.find(c => !dropped.includes(c) && errMsg.includes(c))
+                || OPTIONAL_COLS.find(c => !dropped.includes(c));
+    if (!toDrop) throw insertResult.error;
+    dropped.push(toDrop);
+    working = working.map(({ [toDrop]: _omit, ...rest }) => rest);
   }
-  if (insertResult.error) throw insertResult.error;
 }
 
 function queuePriceListSync(showError = false) {
@@ -2094,7 +2421,7 @@ async function syncSingleDocToSupabase(doc) {
 
 // Persist the current quote-builder form (Customer/Work/Terms) as a saved job.
 // Returns the saved doc so the caller can preview it or jump to the list.
-function persistCurrentQuoteFromTerms() {
+async function persistCurrentQuoteFromTerms() {
   const q = collectQuoteState();
   q.items = [...state.quote.items];
   if (!q.custLastName && !q.custFirstName) {
@@ -2121,6 +2448,7 @@ function persistCurrentQuoteFromTerms() {
   }
   if (!doc) {
     const newId = uid();
+    if (!await authoriseNewLexiJob(newId)) return null;
     doc = {
       id: newId,
       quote: q,
@@ -2417,6 +2745,46 @@ function initQuoteBuilderTabs() {
   }
 }
 
+/* ===== BUSINESS SETUP TABS (mirror of the quote-builder tabs) ===== */
+const BIZ_PAGES = ['page1', 'page-biz-rates', 'page2', 'page-biz-prefs'];
+
+function _updateBizTabs(activePageId) {
+  document.querySelectorAll('.biz-tab').forEach(btn => {
+    const tab = btn.dataset.biztab;
+    btn.classList.toggle('active', tab === activePageId);
+    const idx = BIZ_PAGES.indexOf(tab);
+    const activeIdx = BIZ_PAGES.indexOf(activePageId);
+    btn.classList.toggle('done', idx < activeIdx && activeIdx !== -1);
+  });
+}
+
+// Persist quietly when leaving a business-setup tab. Leaving "About You" forward
+// requires a valid first/last name (saveBusinessDetails enforces + flags it).
+function _bizSaveBeforeLeaving(current, target) {
+  const goingForward = BIZ_PAGES.indexOf(target) > BIZ_PAGES.indexOf(current);
+  if (current === 'page1' && goingForward) {
+    return saveBusinessDetails(false);
+  }
+  // Non-blocking: only persist if the required name is present (avoid error flash)
+  if ((getVal('p1FirstName') || '').trim() && (getVal('p1LastName') || '').trim()) {
+    saveBusinessDetails(false);
+  }
+  return true;
+}
+
+// Navigate between business-setup tabs (used by tab bar + Back/Next footers)
+function bizGoTo(target) {
+  const current = document.querySelector('.page.active')?.id;
+  if (!_bizSaveBeforeLeaving(current, target)) return;
+  showPage(target);
+}
+
+function initBusinessSetupTabs() {
+  document.querySelectorAll('.biz-tab').forEach(btn => {
+    btn.addEventListener('click', () => bizGoTo(btn.dataset.biztab));
+  });
+}
+
 function showPage(pageId) {
   if (pageId !== 'page1' && !canUseMainApp()) {
     requireSetupGuard();
@@ -2435,6 +2803,13 @@ function showPage(pageId) {
   if (tabBar) tabBar.style.display = inQB ? 'block' : 'none';
   document.body.classList.toggle('qb-mode', inQB);
   if (inQB) _updateQBTabs(pageId);
+
+  // Show/hide business setup tab bar
+  const bizBar = document.getElementById('businessSetupTabs');
+  const inBiz = BIZ_PAGES.includes(pageId);
+  if (bizBar) bizBar.style.display = inBiz ? 'block' : 'none';
+  document.body.classList.toggle('biz-mode', inBiz);
+  if (inBiz) _updateBizTabs(pageId);
   // Hide loading overlay once the correct page is shown
   const overlay = document.getElementById('appLoadingOverlay');
   if (overlay) overlay.style.display = 'none';
@@ -2467,6 +2842,11 @@ function showPage(pageId) {
   // Update page1 footer button based on whether price list exists
   if (pageId === 'page1') {
     updatePriceListBtn();
+  }
+
+  // Restore the trade pill on the Rates tab so it persists across navigation
+  if (pageId === 'page-biz-rates') {
+    updateRatesTradeLabel();
   }
 
   // Update page2 header based on whether price list already has content
@@ -2538,9 +2918,9 @@ function updatePriceListBtn() {
 function updatePage2Header() {
   const title = document.getElementById('page2Title');
   const sub   = document.getElementById('page2Sub');
-  if (title) title.textContent = 'My Rates, Services & Materials';
+  if (title) title.textContent = 'My Services & Materials';
   if (sub) {
-    sub.textContent = `Your jobs, your prices. Make sure you're charging what you're worth.`;
+    sub.textContent = `Add the jobs and materials you use most - they'll be ready to drop into any quote.`;
     sub.style.display = '';
   }
 }
@@ -2722,6 +3102,7 @@ function setupNavigation() {
     if (e.target === e.currentTarget) closeAccountInfoModal();
   });
   document.getElementById('accountManagePlanBtn')?.addEventListener('click', () => {
+    _plansFromAccount = true;
     closeAccountInfoModal();
     openTrialPlansModal();
   });
@@ -2733,6 +3114,17 @@ function setupNavigation() {
   });
   document.getElementById('closeTrialPlansBtn')?.addEventListener('click', closeTrialPlansModal);
   document.getElementById('trialKeepGoingBtn')?.addEventListener('click', closeTrialPlansModal);
+  document.getElementById('trialChooseTradesmanBtn')?.addEventListener('click', () => startStripeCheckout('tradesman'));
+  document.getElementById('trialChooseMasterBtn')?.addEventListener('click', () => startStripeCheckout('master'));
+  document.getElementById('founderTesterBtn')?.addEventListener('click', () => {
+    const founderCode = document.getElementById('founderTesterCode')?.value || '';
+    startStripeCheckout('master', { founder: true, founderCode });
+  });
+  document.getElementById('founderTesterCode')?.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    document.getElementById('founderTesterBtn')?.click();
+  });
   document.getElementById('trialPlansModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) closeTrialPlansModal();
   });
@@ -2805,12 +3197,16 @@ function setupNavigation() {
     window.location.reload();
   });
 
-  // Page footer nav buttons
-  document.getElementById('goToPriceListBtn').addEventListener('click', () => {
-    if (!saveBusinessDetails(false)) return;
-    showPage('page2');
-  });
-  document.getElementById('goToQuoteBtn').addEventListener('click', () => {
+  // Business setup tab footers (Back / Next / Save & Finish)
+  initBusinessSetupTabs();
+  document.getElementById('bizNextFromAbout')?.addEventListener('click', () => bizGoTo('page-biz-rates'));
+  document.getElementById('bizBackToAbout')?.addEventListener('click', () => bizGoTo('page1'));
+  document.getElementById('bizNextFromRates')?.addEventListener('click', () => bizGoTo('page2'));
+  document.getElementById('bizBackToRates')?.addEventListener('click', () => bizGoTo('page-biz-rates'));
+  document.getElementById('bizNextFromServices')?.addEventListener('click', () => bizGoTo('page-biz-prefs'));
+  document.getElementById('bizBackToServices')?.addEventListener('click', () => bizGoTo('page2'));
+  document.getElementById('bizSaveFinishBtn')?.addEventListener('click', () => {
+    if (!saveBusinessDetails(true)) return;
     if (state.priceList.length === 0) {
       showSavedPopup("Add at least one job to your price list first, then we're good to go.");
       return;
@@ -2834,7 +3230,6 @@ function setupNavigation() {
     renderQuoteItems();
     setTimeout(() => document.getElementById('jobPickerSearch')?.focus(), 300);
   });
-  document.getElementById('backToSetupBtn').addEventListener('click', () => showPage('page1'));
   document.getElementById('createFirstQuoteBtn')?.addEventListener('click', () => {
     prepareNewQuote();
     showPage('page3');
@@ -2868,10 +3263,52 @@ function setupOnboarding() {
   });
 }
 
+// Tracks whether the Trial Plans modal was opened from the Account Info modal,
+// so closing it returns there instead of revealing the page underneath.
+let _plansFromAccount = false;
+
+// Password rule shared by signup and change-password. Mirrors the Supabase Auth
+// password policy (uppercase + lowercase + number, min 8) so the client never
+// lets through a password the server would reject.
+function validatePasswordStrength(pw) {
+  if ((pw || '').length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(pw)) return 'Include at least one uppercase letter.';
+  if (!/[a-z]/.test(pw)) return 'Include at least one lowercase letter.';
+  if (!/[0-9]/.test(pw)) return 'Include at least one number.';
+  return null;
+}
+
+function showChangePassword() {
+  const main = document.getElementById('accountInfoMain');
+  const pw = document.getElementById('accountPwSection');
+  const title = document.getElementById('accountInfoTitle');
+  if (main) main.style.display = 'none';
+  if (pw) pw.style.display = 'block';
+  if (title) title.textContent = 'Change Password';
+  document.getElementById('accountNewPw')?.focus();
+}
+
+function hideChangePassword() {
+  const main = document.getElementById('accountInfoMain');
+  const pw = document.getElementById('accountPwSection');
+  const title = document.getElementById('accountInfoTitle');
+  const newPw = document.getElementById('accountNewPw');
+  const confirmPw = document.getElementById('accountConfirmPw');
+  const msg = document.getElementById('accountPwMsg');
+  if (main) main.style.display = 'block';
+  if (pw) pw.style.display = 'none';
+  if (title) title.textContent = 'Account Information';
+  if (newPw) newPw.value = '';
+  if (confirmPw) confirmPw.value = '';
+  if (msg) { msg.textContent = ''; msg.className = 'auth-message'; }
+}
+
 function openTrialPlansModal() {
   const days = getTrialDaysRemaining();
+  const modalTitle = document.getElementById('trialPlansTitle');
   const title = document.getElementById('trialStatusTitle');
   const copy = document.getElementById('trialStatusCopy');
+  if (modalTitle) modalTitle.textContent = 'Your Lexi trial';
   if (title && copy) {
     if (days > 0) {
       title.textContent = `${days} day${days === 1 ? '' : 's'} left in your free trial.`;
@@ -2888,10 +3325,19 @@ function openTrialPlansModal() {
 function closeTrialPlansModal() {
   const modal = document.getElementById('trialPlansModal');
   if (modal) modal.style.display = 'none';
+  // If we arrived here via "Manage Plan" inside Account Info, go back there
+  if (_plansFromAccount) {
+    _plansFromAccount = false;
+    openAccountInfoModal();
+  }
 }
 
 /* ── Account Information modal ── */
 function closeAccountInfoModal() {
+  // If we're in the change-password sub-view, X goes back one step to the
+  // main info view rather than closing the whole modal.
+  const pw = document.getElementById('accountPwSection');
+  if (pw && pw.style.display !== 'none') { hideChangePassword(); return; }
   const modal = document.getElementById('accountInfoModal');
   if (modal) modal.style.display = 'none';
 }
@@ -2932,30 +3378,28 @@ async function openAccountInfoModal() {
     planEl.textContent = days > 0 ? `Free trial — ${days} day${days === 1 ? '' : 's'} left` : 'Trial ended';
     if (lexiSupabase && user?.id) {
       try {
-        const { data } = await lexiSupabase
-          .from('subscriptions')
-          .select('plan_name, status')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const plan = (data?.plan_name || '').toLowerCase();
-        const status = (data?.status || '').toLowerCase();
-        if (data && plan && plan !== 'trial' && status !== 'trialing') {
-          const nice = data.plan_name.charAt(0).toUpperCase() + data.plan_name.slice(1);
-          planEl.textContent = `Plan: ${nice}${status && status !== 'active' ? ' (' + status + ')' : ''}`;
+        const entitlement = lexiEntitlement || await loadLexiEntitlement();
+        if (entitlement?.planCode === 'trial') {
+          const end = entitlement.trialEndsAt ? new Date(entitlement.trialEndsAt) : null;
+          const remaining = end && !isNaN(end.getTime())
+            ? Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000))
+            : days;
+          planEl.textContent = `Free trial - ${remaining} day${remaining === 1 ? '' : 's'} left`;
+        } else if (entitlement?.planCode === 'apprentice') {
+          planEl.textContent = 'Plan: Apprentice (Free)';
+        } else if (entitlement) {
+          const status = (entitlement.subscriptionStatus || '').toLowerCase();
+          const statusNote = status && status !== 'active'
+            ? ` (${status.replaceAll('_', ' ')})`
+            : '';
+          planEl.textContent = `Plan: ${entitlement.planName}${statusNote}`;
         }
       } catch (e) { console.warn('Could not load plan:', e); }
     }
   }
 
-  // Reset password fields
-  const newPw = document.getElementById('accountNewPw');
-  const confirmPw = document.getElementById('accountConfirmPw');
-  const msg = document.getElementById('accountPwMsg');
-  if (newPw) newPw.value = '';
-  if (confirmPw) confirmPw.value = '';
-  if (msg) { msg.textContent = ''; msg.className = 'auth-message'; }
+  // Always open on the main info view (hide the change-password sub-view)
+  hideChangePassword();
 
   const modal = document.getElementById('accountInfoModal');
   if (modal) modal.style.display = 'flex';
@@ -2972,7 +3416,8 @@ async function saveNewPassword() {
   };
 
   if (!lexiSupabase || !lexiAuthSession?.user) { setMsg('You are not signed in.', 'error'); return; }
-  if (newPw.length < 8) { setMsg('Password must be at least 8 characters.', 'error'); return; }
+  const pwError = validatePasswordStrength(newPw);
+  if (pwError) { setMsg(pwError, 'error'); return; }
   if (newPw !== confirmPw) { setMsg('Passwords do not match.', 'error'); return; }
 
   const btn = document.getElementById('accountSavePwBtn');
@@ -3146,8 +3591,8 @@ function setupPage1() {
     }
   });
 
-  // Save button
-  document.getElementById('saveBusinessBtn').addEventListener('click', () => saveBusinessDetails(true));
+  // Save button (removed from the tabbed layout; guard in case markup changes)
+  document.getElementById('saveBusinessBtn')?.addEventListener('click', () => saveBusinessDetails(true));
 
   // Backup/restore modal (from menu)
   document.getElementById('exportDataBtn2').addEventListener('click', exportData);
@@ -4231,6 +4676,10 @@ function setupPage2() {
 }
 
 function readCSV(file, category = 'service') {
+  if (!hasLexiFeature('bulk_price_import', 'full')) {
+    showLexiFeatureLocked('bulk_price_import');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = e => {
     const { added, skipped } = parseJobLines(e.target.result, category);
@@ -4336,6 +4785,10 @@ function addIndividualJob() {
 /* ===== TRADE AUTO-FILL FUNCTIONS ===== */
 
 function forceOpenTradePicker(callback, singleSelect = false, persistTrade = false) {
+  if (!hasLexiFeature('trade_autofill', 'full')) {
+    showLexiFeatureLocked('trade_autofill');
+    return;
+  }
   const modal = document.getElementById('tradePickerModal');
   if (!modal) return;
   modal.style.display = 'flex';
@@ -4351,6 +4804,10 @@ function forceOpenTradePicker(callback, singleSelect = false, persistTrade = fal
 // Used by Services/Materials. Inherits the Rates trade if one is set; otherwise asks.
 // Never persists the chosen trade as the company trade (so it can't change the Rates pill).
 function openTradePickerForAutoFill(callback) {
+  if (!hasLexiFeature('trade_autofill', 'full')) {
+    showLexiFeatureLocked('trade_autofill');
+    return;
+  }
   const modal = document.getElementById('tradePickerModal');
   if (!modal) return;
   modal.style.display = 'flex';
@@ -4374,6 +4831,10 @@ function closeTradePickerModal() {
 }
 
 function autoFillRates(trades) {
+  if (!hasLexiFeature('trade_autofill', 'full')) {
+    showLexiFeatureLocked('trade_autofill');
+    return;
+  }
   const tradeList = Array.isArray(trades) ? trades : [trades];
   const data = TRADE_DATA[tradeList[0]];
   if (!data) return;
@@ -4394,12 +4855,29 @@ function autoFillRates(trades) {
   const manual = document.getElementById('ratesManualSection');
   if (prompt) prompt.style.display = 'none';
   if (manual) manual.style.display = '';
-  const tradeLabel = document.getElementById('ratesTradeLabel');
-  if (tradeLabel) { tradeLabel.textContent = `${tradeList[0]} Rates`; tradeLabel.style.display = 'inline-block'; }
+  updateRatesTradeLabel();
   showSavedPopup(`Average ${tradeList[0]} rates filled in. Adjust anything that doesn't fit your area.`);
 }
 
+// Restore the gold trade pill on the Rates tab from the saved company trade so it
+// persists every time the user returns, until they change their trade.
+function updateRatesTradeLabel() {
+  const tradeLabel = document.getElementById('ratesTradeLabel');
+  if (!tradeLabel) return;
+  const trade = ((state.company && state.company.trade) || '').trim();
+  if (trade && trade !== 'Other') {
+    tradeLabel.textContent = `${trade} Rates`;
+    tradeLabel.style.display = 'inline-block';
+  } else {
+    tradeLabel.style.display = 'none';
+  }
+}
+
 function autoFillServices(trades) {
+  if (!hasLexiFeature('trade_autofill', 'full')) {
+    showLexiFeatureLocked('trade_autofill');
+    return;
+  }
   const tradeList = Array.isArray(trades) ? trades : [trades];
   let added = 0;
   tradeList.forEach(trade => {
@@ -4423,6 +4901,10 @@ function autoFillServices(trades) {
 }
 
 function autoFillMaterials(trades) {
+  if (!hasLexiFeature('trade_autofill', 'full')) {
+    showLexiFeatureLocked('trade_autofill');
+    return;
+  }
   const tradeList = Array.isArray(trades) ? trades : [trades];
   let added = 0;
   tradeList.forEach(trade => {
@@ -4714,9 +5196,9 @@ function setupPageCompletion() {
   // Save → save quote then open preview
   // Save & Preview: persist the job to My Jobs, then open the preview so they
   // can send it. Because it's saved, closing the preview no longer loops back.
-  document.getElementById('saveTermsGoToPreviewBtn')?.addEventListener('click', () => {
+  document.getElementById('saveTermsGoToPreviewBtn')?.addEventListener('click', async () => {
     recalcTotals();
-    const doc = persistCurrentQuoteFromTerms();
+    const doc = await persistCurrentQuoteFromTerms();
     if (!doc) return;
     populateQuoteSendModal(doc, { show: false }); // prime send fields silently
     quotePreviewed = true;
@@ -4724,9 +5206,9 @@ function setupPageCompletion() {
   });
 
   // Save to My Jobs: persist and go straight to the jobs list (not ready to send yet)
-  document.getElementById('saveTermsToListBtn')?.addEventListener('click', () => {
+  document.getElementById('saveTermsToListBtn')?.addEventListener('click', async () => {
     recalcTotals();
-    const doc = persistCurrentQuoteFromTerms();
+    const doc = await persistCurrentQuoteFromTerms();
     if (!doc) return;
     clearDraftQuote();
     showSavedPopup("Done. I've got it.");
@@ -4839,6 +5321,11 @@ function restoreDraftQuote() {
 }
 
 function prepareNewQuote() {
+  // Default the dashboard "Exit" affordance off; loadQuoteIntoBuilder re-enables
+  // it when the builder was opened from the customer dashboard.
+  _builderReturnDocId = null;
+  const _exitBtn = document.getElementById('page3ExitBtn');
+  if (_exitBtn) _exitBtn.style.display = 'none';
   if (state.editingDocId) {
     const doc = state.saved.find(d => d.id === state.editingDocId);
     if (doc) {
@@ -5385,7 +5872,7 @@ function docTypeGuard() {
   return true;
 }
 
-function saveQuote() {
+async function saveQuote() {
   if (!docTypeGuard()) return;
   const q = collectQuoteState();
   // Always use the live items array directly from state
@@ -5424,8 +5911,10 @@ function saveQuote() {
     const saveBtn = document.getElementById('saveQuoteBtn');
     if (saveBtn) saveBtn.textContent = '✓ Save';
   } else {
+    const newId = uid();
+    if (!await authoriseNewLexiJob(newId)) return;
     state.saved.unshift({
-      id: uid(),
+      id: newId,
       quote: q,
       company: { ...state.company },
       custName: buildCustName(q),
@@ -5631,6 +6120,10 @@ function getCanvasDataURL() {
 
 /* ===== VOICE RECOGNITION ===== */
 function toggleVoice() {
+  if (!hasLexiFeature('voice_item_entry', 'full')) {
+    showLexiFeatureLocked('voice_item_entry');
+    return;
+  }
   const isSR = ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
   if (!isSR) {
     toast('Voice input needs Chrome or Edge.', 'error');
@@ -5729,6 +6222,10 @@ function matchVoiceToJob(transcript) {
 }
 
 function toggleVoiceMaterials() {
+  if (!hasLexiFeature('voice_item_entry', 'full')) {
+    showLexiFeatureLocked('voice_item_entry');
+    return;
+  }
   const isSR = ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
   if (!isSR) { toast('Voice input needs Chrome or Edge.', 'error'); return; }
   if (voiceRecording) { voiceRecogniser && voiceRecogniser.stop(); stopVoiceMaterialsUI(); return; }
@@ -5990,6 +6487,10 @@ function setupPage4() {
 function renderAttentionWidget() {
   const wrap = document.getElementById('attentionWidget');
   if (!wrap) return;
+  if (!hasLexiFeature('attention_centre', 'full')) {
+    wrap.innerHTML = '';
+    return;
+  }
   const today = todayStr();
   const items = [];
 
@@ -6388,6 +6889,11 @@ function ssCsvDownload() {
 }
 
 function openSpreadsheetView() {
+  if (!hasLexiFeature('advanced_job_spreadsheet', 'full')) {
+    showLexiFeatureLocked('advanced_job_spreadsheet');
+    closeSpreadsheetView();
+    return;
+  }
   const modal = document.getElementById('spreadsheetModal');
   if (!modal) return;
 
@@ -6461,6 +6967,76 @@ function closeSpreadsheetView() {
   const lbl = document.getElementById('ssToggleLabel');
   if (tog) tog.checked = false;
   if (lbl) lbl.textContent = 'View Spreadsheet';
+}
+
+// The current lifecycle status of a job — shared by the job card, the customer
+// dashboard and (conceptually) the spreadsheet so the wording never disagrees.
+function getJobStatus(doc) {
+  const q = doc.quote || {};
+  const isAccepted = doc.acceptStatus === 'accepted' || doc.jobAccepted;
+  const isOverdue  = !doc.paid && doc.invoiceSent && doc.invoiceDueDate && todayStr() > doc.invoiceDueDate;
+  if (doc.paid)                          return { cls: 'paid',     label: 'Paid' };
+  if (isOverdue)                         return { cls: 'overdue',  label: 'Overdue' };
+  if (doc.invoiceSent)                   return { cls: 'invoiced', label: 'Invoiced' };
+  if (doc.jobCompleted)                  return { cls: 'complete', label: 'Completed' };
+  if (isAccepted && doc.jobStartDate)    return { cls: 'booked',   label: 'Booked' };
+  if (isAccepted)                        return { cls: 'accepted', label: 'Accepted' };
+  const t = (q.type || doc.type || 'Estimate');
+  return { cls: t.toLowerCase(), label: t };
+}
+
+// The single logical "next step" for a job, shared by the job card and the
+// customer dashboard so they never disagree. Action maps to existing modals.
+function getNextStep(doc) {
+  const q = doc.quote || {};
+  const isAccepted = doc.acceptStatus === 'accepted' || doc.jobAccepted;
+  if (doc.paid)                       return { label: 'Send Receipt',  action: 'receipt'  };
+  if (doc.invoiceSent)                return { label: 'Chase Payment', action: 'chase'    };
+  if (doc.jobCompleted)               return { label: 'Send Invoice',  action: 'invoice'  };
+  if (isAccepted && doc.jobStartDate) return { label: 'Send Reminder', action: 'reminder' };
+  if (isAccepted)                     return { label: 'Book In',       action: 'bookin'   };
+  return { label: (q.type || doc.type || 'Estimate').toLowerCase() === 'quote' ? 'Send Quote' : 'Send Estimate', action: 'send' };
+}
+
+// Run the next-step action for a doc (used by the card's single CTA)
+function runNextStep(doc) {
+  const { action } = getNextStep(doc);
+  switch (action) {
+    case 'receipt':  handleReceiptRequest(doc.id); break;
+    case 'chase':    openChaseForDoc(doc.id);      break;
+    case 'invoice':  previewInvoice(doc.id);       break;
+    case 'reminder': openChannelChooserForTemplate(doc.id, 'booking_reminder', 'Send reminder via…'); break;
+    case 'bookin':   openChannelChooserForTemplate(doc.id, 'book_in', 'Book in via…'); break;
+    default:         openQuoteModal(doc.id);       break; // 'send'
+  }
+}
+
+// Ask WhatsApp or Email, then open the composer pre-loaded with one template
+function openChannelChooserForTemplate(docId, templateId, title) {
+  const doc = (state.saved || []).find(d => d.id === docId);
+  if (!doc) return;
+  const q = doc.quote || {};
+  const phone = (q.custPhone || '').trim();
+  const email = (q.custEmail || '').trim();
+  const W = '#7D5730';
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const row = (id, label, enabled) => `
+    <button id="${id}" ${enabled ? '' : 'disabled'} style="display:flex;align-items:center;justify-content:center;width:100%;padding:14px;margin-bottom:10px;border-radius:10px;border:none;background:${enabled ? W : '#ccc'};color:#fff;font-size:1rem;font-weight:600;cursor:${enabled ? 'pointer' : 'not-allowed'};opacity:${enabled ? '1' : '0.6'}">${label}</button>`;
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+      <div style="font-size:1.2rem;font-weight:700;margin-bottom:6px;color:#333">${title}</div>
+      <div style="color:#777;font-size:0.88rem;margin-bottom:22px">How would you like to send it?</div>
+      ${row('_chWhatsapp', 'WhatsApp', !!phone)}
+      ${row('_chEmail', 'Email', !!email)}
+      <button id="_chCancel" style="display:block;width:100%;padding:10px;border-radius:10px;border:1.5px solid #ddd;background:#fff;color:#888;font-size:0.9rem;cursor:pointer">Cancel</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+  if (phone) ov.querySelector('#_chWhatsapp').addEventListener('click', () => { close(); openCalEmailComposer(docId, 'dashboard', 'whatsapp', templateId); });
+  if (email) ov.querySelector('#_chEmail').addEventListener('click', () => { close(); openCalEmailComposer(docId, 'dashboard', 'email', templateId); });
+  ov.querySelector('#_chCancel').addEventListener('click', close);
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
 }
 
 function refreshSavedDocs() {
@@ -6608,14 +7184,16 @@ function refreshSavedDocs() {
 
   docs.forEach(doc => {
     const card = document.createElement('div');
+    const nextStep = getNextStep(doc);
     const docType = doc.type || (doc.quote && doc.quote.type) || 'Estimate';
     const displayRef = doc.ref || doc.quote?.ref || '';
     const displayDate = doc.date || doc.quote?.date || '';
-    const isOverdue = !doc.paid && doc.invoiceSent && doc.invoiceDueDate && todayStr() > doc.invoiceDueDate;
-    const isAccepted = doc.acceptStatus === 'accepted' || doc.jobAccepted;
-    const statusBadge = doc.paid ? 'paid' : isAccepted ? 'accepted' : isOverdue ? 'overdue' : doc.invoiceSent ? 'invoiced' : docType.toLowerCase();
+    const jobStatus = getJobStatus(doc);
+    const statusBadge = jobStatus.cls;
     card.className = `saved-doc-card status-${statusBadge}`;
-    const statusLabel = doc.paid ? 'Paid' : isAccepted ? 'Accepted' : isOverdue ? `Overdue since ${formatDate(doc.invoiceDueDate)}` : doc.invoiceSent ? 'Invoiced' : docType;
+    const statusLabel = jobStatus.cls === 'overdue' && doc.invoiceDueDate
+      ? `Overdue since ${formatDate(doc.invoiceDueDate)}`
+      : jobStatus.label;
 
     // Payment totals for card status only (history shown in modal, not on card)
     const payments   = getDocPayments(doc);
@@ -6633,15 +7211,8 @@ function refreshSavedDocs() {
       </div>
       <div class="job-card-actions">
         <button type="button" class="jca-open" data-id="${doc.id}">Open</button>
-        ${statusBadge === 'overdue'
-          ? `<button type="button" class="jca-primary jca-chase" data-id="${doc.id}">£ Chase Payment</button>`
-          : statusBadge === 'paid'
-            ? `<button type="button" class="jca-primary jca-paid" data-id="${doc.id}">View Receipt</button>`
-            : (statusBadge === 'invoiced')
-              ? `<button type="button" class="jca-primary jca-invoice" data-id="${doc.id}">Send Invoice</button>`
-              : `<button type="button" class="jca-primary jca-send" data-id="${doc.id}">Send</button>`
-        }
-        <button type="button" class="type-badge ${statusBadge} jca-badge" data-badge-id="${doc.id}" data-badge-status="${statusBadge}">${statusLabel}</button>
+        <button type="button" class="jca-primary jca-next" data-id="${doc.id}">${nextStep.label}</button>
+        <span class="type-badge ${statusBadge} jca-badge">${statusLabel}</span>
       </div>
       <div class="saved-doc-payment-tally">
         <span class="sdpt-payment-info">
@@ -6654,23 +7225,9 @@ function refreshSavedDocs() {
 
     container.appendChild(card);
 
-    // Open → customer dashboard
+    // Open → customer dashboard; single guided next-step action
     card.querySelector('.jca-open')?.addEventListener('click', () => openCustomerDashboardForDoc(doc.id));
-    // Contextual primary actions
-    card.querySelector('.jca-chase')?.addEventListener('click',   () => openChaseForDoc(doc.id));
-    card.querySelector('.jca-send')?.addEventListener('click',    () => openQuoteModal(doc.id));
-    card.querySelector('.jca-invoice')?.addEventListener('click', () => previewInvoice(doc.id));
-    card.querySelector('.jca-paid')?.addEventListener('click',    () => handleReceiptRequest(doc.id));
-
-    card.querySelector('.type-badge')?.addEventListener('click', () => {
-      const status = statusBadge;
-      if      (status === 'accepted')                    showBookingContactModal(doc);
-      else if (status === 'estimate')                    openQuoteModal(doc.id);
-      else if (status === 'quote')                       openQuoteModal(doc.id);
-      else if (status === 'invoiced' || status === 'invoice' || status === 'overdue') previewInvoice(doc.id);
-      else if (status === 'paid')                        handleReceiptRequest(doc.id);
-      else if (status === 'receipt')                     handleReceiptRequest(doc.id);
-    });
+    card.querySelector('.jca-next')?.addEventListener('click', () => runNextStep(doc));
   });
 }
 
@@ -7092,12 +7649,12 @@ function setupModals() {
     printRaw(html);
   });
 
-  document.getElementById('previewSaveBtn').addEventListener('click', () => {
+  document.getElementById('previewSaveBtn').addEventListener('click', async () => {
     const { type, docId } = previewContext;
     if (type === 'quote' && !docId) {
       // Save the current page3 form state as a quote
       closePreview();
-      saveQuote();
+      await saveQuote();
       return;
     }
     // Modal flows: save edits to doc without sending
@@ -7138,12 +7695,12 @@ function setupModals() {
     showSavedPopup("Saved. Another one off your plate.");
   });
 
-  document.getElementById('previewSendBtn').addEventListener('click', () => {
+  document.getElementById('previewSendBtn').addEventListener('click', async () => {
     const { type } = previewContext;
     if (type === 'quote') {
       // Send via the modal function so the cover message is included
       closePreview();
-      sendQuoteFromModal();
+      await sendQuoteFromModal();
     } else if (type === 'invoice') {
       closePreview();
       sendInvoiceFromModal();
@@ -7169,7 +7726,7 @@ function setupModals() {
     document.getElementById('quotePreviewBtn').click();
   });
 
-  function sendQuoteFromModal() {
+  async function sendQuoteFromModal() {
     const doc = getActiveQuoteDoc();
     if (!doc) return;
     const quoteData = collectQuoteSendForm();
@@ -7190,6 +7747,7 @@ function setupModals() {
     if (!sendDocRef) {
       // Draft send (from form) -auto-save first so we have an ID and can token-sign it
       const newId = uid();
+      if (!await authoriseNewLexiJob(newId)) return;
       const q = editedDoc.quote || {};
       const newDoc = {
         id: newId,
@@ -7235,7 +7793,8 @@ function setupModals() {
       const custEmail = savedDoc.quote?.custEmail || savedDoc.custEmail || '';
       const custPhone = savedDoc.quote?.custPhone || '';
       const docTypeStr = savedDoc.quote?.type || savedDoc.type || 'Estimate';
-      sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || savedDoc.ref || 'quote'), shareMessage, custEmail, custPhone, docTypeStr, savedDoc.acceptToken || '');
+      const acceptTokenForSend = hasLexiFeature('digital_quote_acceptance', 'full') ? (savedDoc.acceptToken || '') : '';
+      sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || savedDoc.ref || 'quote'), shareMessage, custEmail, custPhone, docTypeStr, acceptTokenForSend);
     } else {
       sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), quoteData.quoteNotes || '');
     }
@@ -7388,6 +7947,10 @@ function setupModals() {
 
   // Add Payment button inside editPaymentsModal
   document.getElementById('addPaymentBtn')?.addEventListener('click', () => {
+    if (!hasLexiFeature('part_payments', 'full')) {
+      showLexiFeatureLocked('part_payments');
+      return;
+    }
     const doc = state.saved.find(d => d.id === activeDocId);
     if (!doc) return;
     const amount = parseFloat(document.getElementById('epAddAmount').value) || 0;
@@ -7417,6 +7980,14 @@ function setupModals() {
     if (amount <= 0) { toast('Enter an amount received.', 'error'); return; }
     // Migrate legacy single-payment docs
     if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
+    if (!hasLexiFeature('part_payments', 'full')) {
+      const alreadyPaid = doc.payments.reduce((s, p) => s + (p.amount || 0), 0);
+      const remaining = Math.max(0, (doc.total || 0) - alreadyPaid);
+      if (doc.payments.length || Math.abs(amount - remaining) > 0.01) {
+        showLexiFeatureLocked('part_payments', 'Apprentice can mark one full payment. Deposits and part-payments are available on Tradesman.');
+        return;
+      }
+    }
     doc.payments.push({ amount, date, type: paymentType });
     sortPaymentsByDate(doc.payments);
     recalcDocPayments(doc);
@@ -7459,6 +8030,10 @@ function closePreview() {
   modal.style.display = 'none';
   modal.classList.remove('modal-front');
   setShareBackButtons(false);
+  // If this preview was launched from the customer dashboard, go back there
+  const rd = _previewReturnDocId;
+  _previewReturnDocId = null;
+  if (rd) { openCustomerDashboardForDoc(rd); return; }
   if (document.getElementById('page4')?.classList.contains('active')) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -7678,12 +8253,13 @@ function setupQBPreviewPage() {
     document.getElementById('qbpPreviewBtn')?.click();
   });
 
-  document.getElementById('qbpSaveBtn')?.addEventListener('click', () => {
+  document.getElementById('qbpSaveBtn')?.addEventListener('click', async () => {
     const doc = getActiveQuoteDoc();
     if (!doc) return;
     const data = collectQBPreviewForm();
     const editedDoc = applyDocEdits(doc, data);
     const newId = uid();
+    if (!await authoriseNewLexiJob(newId)) return;
     const q = editedDoc.quote || {};
     const newDoc = {
       id: newId,
@@ -7977,6 +8553,10 @@ function openMarkPaid(docId) {
 }
 
 function openEditPayments(docId) {
+  if (!hasLexiFeature('part_payments', 'full')) {
+    showLexiFeatureLocked('part_payments', 'Deposits and part-payments are available on Tradesman.');
+    return;
+  }
   activeDocId = docId;
   const doc = state.saved.find(d => d.id === docId);
   if (!doc) return;
@@ -8234,6 +8814,11 @@ function openPhotosModal(docId) {
 }
 
 function handlePhotoUpload(e, which) {
+  if (!hasLexiFeature('job_photos', 'full')) {
+    e.target.value = '';
+    showLexiFeatureLocked('job_photos');
+    return;
+  }
   const doc = state.saved.find(d => d.id === activePhotoDocId);
   if (!doc) return;
   if (!doc.photos) doc.photos = { before: [], after: [] };
@@ -8275,7 +8860,7 @@ function closePreviewFirstModal() {
   document.getElementById('previewFirstModal').style.display = 'none';
 }
 
-function createNewCustomerFromPicker() {
+async function createNewCustomerFromPicker() {
   const mode = document.getElementById('clientPickerList')?.dataset.mode || 'invoice';
   document.getElementById('clientPickerModal').style.display = 'none';
   const q = {
@@ -8289,8 +8874,10 @@ function createNewCustomerFromPicker() {
     notes: '', privateNotes: '', selectedTerms: [], customTerms: '',
     authSig: '', custSig: '', sigDate: ''
   };
+  const newId = uid();
+  if (!await authoriseNewLexiJob(newId)) return;
   const doc = {
-    id: uid(),
+    id: newId,
     quote: q,
     company: { ...state.company },
     custName: '',
@@ -8836,6 +9423,40 @@ function openCustomerDashboard() {
   document.getElementById('customerDashboardModal').style.display = 'flex';
 }
 
+// Single "Contact" button → small chooser: Call / WhatsApp / Email
+function openContactChooser(docId) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  const q = doc.quote || {};
+  const phone = (q.custPhone || '').trim();
+  const email = (q.custEmail || '').trim();
+  const W = '#7D5730';
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const row = (id, label, enabled) => `
+    <button id="${id}" ${enabled ? '' : 'disabled'} style="display:flex;align-items:center;justify-content:center;width:100%;padding:14px;margin-bottom:10px;border-radius:10px;border:none;background:${enabled ? W : '#ccc'};color:#fff;font-size:1rem;font-weight:600;cursor:${enabled ? 'pointer' : 'not-allowed'};opacity:${enabled ? '1' : '0.6'}">${label}</button>`;
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+      <div style="font-size:1.2rem;font-weight:700;margin-bottom:6px;color:#333">How would you like to get in touch?</div>
+      <div style="color:#777;font-size:0.88rem;margin-bottom:22px">Choose how to reach your customer</div>
+      ${row('_ccCall', 'Call', !!phone)}
+      ${row('_ccWhatsapp', 'WhatsApp', !!phone)}
+      ${row('_ccEmail', 'Email', !!email)}
+      <button id="_ccCancel" style="display:block;width:100%;padding:10px;border-radius:10px;border:1.5px solid #ddd;background:#fff;color:#888;font-size:0.9rem;cursor:pointer">Cancel</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+  if (phone) {
+    ov.querySelector('#_ccCall').addEventListener('click', () => { close(); window.location.href = 'tel:' + phone; });
+    ov.querySelector('#_ccWhatsapp').addEventListener('click', () => { close(); openCalEmailComposer(docId, 'dashboard', 'whatsapp'); });
+  }
+  if (email) {
+    ov.querySelector('#_ccEmail').addEventListener('click', () => { close(); openCalEmailComposer(docId, 'dashboard', 'email'); });
+  }
+  ov.querySelector('#_ccCancel').addEventListener('click', close);
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+}
+
 function getCustomerDisplayName(doc) {
   const q = doc.quote || {};
   const built = buildCustName(q).trim();
@@ -8901,8 +9522,9 @@ function buildCustomerJobSection(d, jobNum = 0) {
   const outstanding = Math.max(0, (d.total || 0) - totalPaid);
   const isOverdue = !d.paid && d.invoiceSent && d.invoiceDueDate && todayStr() > d.invoiceDueDate;
   const isAccepted = d.acceptStatus === 'accepted' || d.jobAccepted;
-  const statusClass = d.paid ? 'paid' : isAccepted ? 'accepted' : isOverdue ? 'overdue' : d.invoiceSent ? 'invoiced' : (q.type || 'estimate').toLowerCase();
-  const statusLabel = d.paid ? 'Paid' : isAccepted ? 'Accepted' : isOverdue ? 'Overdue' : d.invoiceSent ? 'Invoiced' : (q.type || 'Estimate');
+  const _jobStatus = getJobStatus(d);
+  const statusClass = _jobStatus.cls;
+  const statusLabel = _jobStatus.label;
   const ref = d.invoiceRef || d.receiptRef || q.ref || d.ref || '-';
   const docDate = q.date || d.date || '';
   const photos = d.photos || {};
@@ -9093,11 +9715,20 @@ function buildCustomerJobSection(d, jobNum = 0) {
       <span>${d.acceptedBy ? `Signed by ${esc(d.acceptedBy)}` : 'Customer has accepted this quote'}${d.acceptedAt ? ` on ${new Date(d.acceptedAt).toLocaleDateString('en-GB')}` : ''}</span>
     </div>` : '';
 
+  const ns = getNextStep(d);
+  const nextStepBtn = `
+    <button type="button" class="cdv-next-step-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="${ns.action}">
+      <span class="cdv-next-step-hint">Next step</span>${esc(ns.label)}
+    </button>`;
+
+  const JSVG_EDIT    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const JSVG_INVOICE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
+  const JSVG_RECEIPT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
   const jobActionBtns = `
     <div class="cdv-job-actions">
-      <button type="button" class="cdv-action-btn cdv-action-edit" data-prog-doc-id="${esc(d.id)}" data-prog-action="editQuote">✏ Edit Quote</button>
-      <button type="button" class="cdv-action-btn cdv-action-invoice" data-prog-doc-id="${esc(d.id)}" data-prog-action="invoice">Invoice</button>
-      <button type="button" class="cdv-action-btn cdv-action-receipt" data-prog-doc-id="${esc(d.id)}" data-prog-action="receipt">Receipt</button>
+      <button type="button" class="cal-icon-btn cdv-labeled cdv-action-edit" data-prog-doc-id="${esc(d.id)}" data-prog-action="editQuote">${JSVG_EDIT}<span>Edit Quote</span></button>
+      <button type="button" class="cal-icon-btn cdv-labeled cdv-action-invoice" data-prog-doc-id="${esc(d.id)}" data-prog-action="invoice">${JSVG_INVOICE}<span>Invoice</span></button>
+      <button type="button" class="cal-icon-btn cdv-labeled cdv-action-receipt" data-prog-doc-id="${esc(d.id)}" data-prog-action="receipt">${JSVG_RECEIPT}<span>Receipt</span></button>
     </div>`;
 
   return `
@@ -9111,6 +9742,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
           data-prog-doc-id="${esc(d.id)}" data-prog-action="${statusClass === 'paid' ? 'receipt' : statusClass === 'invoiced' || statusClass === 'overdue' ? 'invoice' : 'quote'}"
           title="Open ${statusLabel}">${esc(statusLabel)}</button>
       </div>
+      ${nextStepBtn}
       ${jobActionBtns}
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
@@ -9127,6 +9759,9 @@ function buildCustomerJobSection(d, jobNum = 0) {
 function renderSingleCustomerDashboard(group, groups) {
   activeCustomerGroup = group;
   const body = document.getElementById('customerDashboardBody');
+  const modal = document.getElementById('customerDashboardModal');
+  const hasFullDashboard = hasLexiFeature('customer_dashboard', 'full');
+  if (modal) modal.classList.toggle('lexi-basic-dashboard', !hasFullDashboard);
   const firstDoc = group.docs[0];
   const q = firstDoc.quote || {};
   const totals = getCustomerTotals(group.docs);
@@ -9156,21 +9791,20 @@ function renderSingleCustomerDashboard(group, groups) {
   const DSVG_EDIT   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
   const DSVG_CAMERA = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
   const DSVG_DELETE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+  const DSVG_CONTACT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  const DSVG_MORE    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>`;
   const contactBtns = `
     <div class="cdv-contact-btns">
-      <button type="button" class="cal-icon-btn cal-icon-email cdv-labeled${!dashEmail ? ' cal-btn-disabled' : ''}"
-        ${dashEmail ? `onclick="openCalEmailComposer('${esc(dashDocId)}','dashboard','email')"` : ''}
-        title="${dashEmail ? 'Email ' + esc(group.name) : 'No email address saved'}">${DSVG_EMAIL}<span>Email</span></button>
-      <button type="button" class="cal-icon-btn cal-icon-whatsapp cdv-labeled${!dashPhone ? ' cal-btn-disabled' : ''}"
-        ${dashPhone ? `onclick="openCalEmailComposer('${esc(dashDocId)}','dashboard','whatsapp')"` : ''}
-        title="${dashPhone ? 'WhatsApp ' + esc(group.name) : 'No phone number saved'}">${DSVG_WA}<span>WhatsApp</span></button>
-      ${dashPhone
-        ? `<a href="tel:${esc(dashPhone)}" class="cal-icon-btn cal-icon-phone cdv-labeled" title="Call ${esc(group.name)}">${DSVG_PHONE}<span>Call</span></a>`
-        : `<button type="button" class="cal-icon-btn cal-icon-phone cdv-labeled cal-btn-disabled" title="No phone number saved">${DSVG_PHONE}<span>Call</span></button>`}
+      <button type="button" class="cal-icon-btn cal-icon-email cdv-labeled" onclick="openContactChooser('${esc(dashDocId)}')" title="Contact ${esc(group.name)}">${DSVG_CONTACT}<span>Contact</span></button>
       <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share</span></button>
-      <button type="button" class="cal-icon-btn cal-icon-camera cdv-labeled" id="custDashCameraBtn" title="Add photo">${DSVG_CAMERA}<span>Photo</span></button>
-      <button type="button" class="cal-icon-btn cal-icon-update cdv-labeled" id="custDashEditBtn" title="Update this customer">${DSVG_EDIT}<span>Update</span></button>
-      <button type="button" class="cal-icon-btn cdv-labeled cdv-delete-btn" id="custDashDeleteBtn" title="Delete">${DSVG_DELETE}<span>Delete</span></button>
+      <div class="cdv-more-wrap">
+        <button type="button" class="cal-icon-btn cdv-labeled cdv-more-btn" id="custDashMoreBtn" title="More options">${DSVG_MORE}<span>More</span></button>
+        <div class="cdv-more-menu" id="custDashMoreMenu" style="display:none">
+          <button type="button" class="cdv-more-item" id="custDashCameraBtn">${DSVG_CAMERA}<span>Add photo</span></button>
+          <button type="button" class="cdv-more-item" id="custDashEditBtn">${DSVG_EDIT}<span>Update details</span></button>
+          <button type="button" class="cdv-more-item cdv-more-delete" id="custDashDeleteBtn">${DSVG_DELETE}<span>Delete</span></button>
+        </div>
+      </div>
     </div>`;
 
   // contentHtml = pure dashboard content (used for download -no buttons)
@@ -9206,15 +9840,38 @@ function renderSingleCustomerDashboard(group, groups) {
 
   body.innerHTML = contentHtml;
   wireCustomerExtras(body, group.name);
+  if (!hasFullDashboard) {
+    body.insertAdjacentHTML('afterbegin', `
+      <div class="lexi-basic-dashboard-note">
+        Basic customer view. Upgrade to Tradesman for the full customer dashboard, job journey, totals and payment history.
+      </div>`);
+  }
+  applyLexiEntitlementRestrictions();
 
   // Wire modal-header action buttons
   const firstDocId = group.docs[0]?.id;
-  const modal = document.getElementById('customerDashboardModal');
+
+  // "More" dropdown (Photo / Update / Delete) — toggle + close on outside click
+  const moreBtn  = document.getElementById('custDashMoreBtn');
+  const moreMenu = document.getElementById('custDashMoreMenu');
+  if (moreBtn && moreMenu) {
+    moreBtn.onclick = (e) => {
+      e.stopPropagation();
+      moreMenu.style.display = moreMenu.style.display === 'none' ? 'flex' : 'none';
+    };
+    moreMenu.querySelectorAll('button').forEach(b =>
+      b.addEventListener('click', () => { moreMenu.style.display = 'none'; }));
+    document.addEventListener('click', (e) => {
+      if (moreMenu.style.display !== 'none' && !e.target.closest('.cdv-more-wrap')) {
+        moreMenu.style.display = 'none';
+      }
+    });
+  }
 
   const dashEditBtn = document.getElementById('custDashEditBtn');
   if (dashEditBtn) dashEditBtn.onclick = () => {
     activeEditDocId = group.docs.length === 1 ? firstDocId : null;
-    loadQuoteIntoBuilder(activeEditDocId || firstDocId);
+    loadQuoteIntoBuilder(activeEditDocId || firstDocId, true);
   };
 
   // Camera button - open add photo flow for first doc
@@ -9240,13 +9897,20 @@ function renderSingleCustomerDashboard(group, groups) {
     const docId  = btn.dataset.progDocId;
     const action = btn.dataset.progAction;
     if (action === 'receipt') {
+      _previewReturnDocId = docId;   // X on the preview returns to this dashboard
       handleReceiptRequest(docId);
     } else if (action === 'editQuote') {
-      loadQuoteIntoBuilder(docId);
+      loadQuoteIntoBuilder(docId, true);
+    } else if (action === 'chase') {
+      openChaseForDoc(docId);
+    } else if (action === 'reminder') {
+      openChannelChooserForTemplate(docId, 'booking_reminder', 'Send reminder via…');
+    } else if (action === 'bookin') {
+      openChannelChooserForTemplate(docId, 'book_in', 'Book in via…');
     } else {
       document.getElementById('customerDashboardModal').style.display = 'none';
-      if      (action === 'quote')   openQuoteModal(docId);
-      else if (action === 'invoice') previewInvoice(docId);
+      if      (action === 'quote' || action === 'send') openQuoteModal(docId);
+      else if (action === 'invoice') { _previewReturnDocId = docId; previewInvoice(docId); }
     }
   });
 
@@ -9372,17 +10036,38 @@ function openUpdateFromCal(docId) {
 function openCustomerEditChoice(docId) {
   // Removed the intermediate "What would you like to edit?" modal.
   // Update now goes straight to the QB builder.
-  loadQuoteIntoBuilder(docId || activeEditDocId || activeCustomerGroup?.docs[0]?.id);
+  loadQuoteIntoBuilder(docId || activeEditDocId || activeCustomerGroup?.docs[0]?.id, true);
 }
 
-function loadQuoteIntoBuilder(docId) {
+// When a flow is launched from the customer dashboard, remember which customer
+// to return to so the "X / Exit" goes back there instead of dumping the user out.
+let _builderReturnDocId = null;
+let _previewReturnDocId = null;
+
+function loadQuoteIntoBuilder(docId, fromDashboard = false) {
   const doc = state.saved.find(d => d.id === docId);
   if (!doc) return;
   document.getElementById('customerDashboardModal').style.display = 'none';
   state.editingDocId = docId;
   clearDraftQuote();
-  prepareNewQuote();
+  prepareNewQuote();   // resets the Exit button to hidden by default
   showPage('page3');
+  // If launched from the dashboard, reveal the Exit-back-to-dashboard button
+  _builderReturnDocId = fromDashboard ? docId : null;
+  const exitBtn = document.getElementById('page3ExitBtn');
+  if (exitBtn) exitBtn.style.display = fromDashboard ? '' : 'none';
+}
+
+// Exit the quote builder and go back to the customer dashboard (only shown when
+// Edit Quote was launched from the dashboard)
+function exitQuoteBuilder() {
+  const rd = _builderReturnDocId;
+  _builderReturnDocId = null;
+  state.editingDocId = null;
+  const exitBtn = document.getElementById('page3ExitBtn');
+  if (exitBtn) exitBtn.style.display = 'none';
+  showPage('page4');
+  if (rd) openCustomerDashboardForDoc(rd);
 }
 
 function customerEditPickDoc(editType) {
@@ -11492,7 +12177,7 @@ let calEmailAddr = '';
 let calEmailChannel = 'email';   // 'email' | 'whatsapp'
 let calEmailPhone = '';
 
-function openCalEmailComposer(docId, eventType, channel) {
+function openCalEmailComposer(docId, eventType, channel, presetTemplateId) {
   const doc = (state.saved || []).find(d => d.id === docId);
   if (!doc) return;
 
@@ -11686,9 +12371,18 @@ ${traderName}`,
     if (descEl) descEl.textContent = `To: ${custName}${calEmailAddr ? ' (' + calEmailAddr + ')' : '. No email address saved.'}`;
   }
 
-  renderCalGroupButtons();
   const previewEl = document.getElementById('calEmailPreview');
-  if (previewEl) { previewEl.style.display = 'none'; previewEl.value = ''; }
+  const preset = presetTemplateId ? templates.find(t => t.id === presetTemplateId) : null;
+  if (preset) {
+    // Jump straight to this one template (e.g. "Send Reminder") — no group list
+    calEmailSelectedTemplate = { id: preset.id, subject: preset.subject, body: preset.body };
+    const listEl = document.getElementById('calTemplateList');
+    if (listEl) listEl.innerHTML = `<button type="button" class="cal-back-btn" onclick="renderCalGroupButtons(); document.getElementById('calEmailPreview').style.display='none';">← All templates</button>`;
+    updateCalEmailPreview();
+  } else {
+    renderCalGroupButtons();
+    if (previewEl) { previewEl.style.display = 'none'; previewEl.value = ''; }
+  }
   document.getElementById('calEmailModal').style.display = 'flex';
 }
 
@@ -11854,6 +12548,10 @@ function setupCalendar() {
   const menuCalendar = document.getElementById('menuCalendar');
   if (menuCalendar) {
     menuCalendar.addEventListener('click', () => {
+      if (!hasLexiFeature('in_app_calendar', 'full')) {
+        showLexiFeatureLocked('in_app_calendar');
+        return;
+      }
       // Close the slide-out nav menu
       const hamburger = document.getElementById('hamburgerBtn');
       const navMenu   = document.getElementById('navMenu');
@@ -11885,16 +12583,6 @@ function setupCalendar() {
     if (e.target === e.currentTarget) closeCalEmailModalFn();
   });
 
-  // Calendar sync modal
-  document.getElementById('calSyncBtn')?.addEventListener('click', () => {
-    document.getElementById('calSyncModal').style.display = 'flex';
-  });
-  document.getElementById('closeCalSyncBtn')?.addEventListener('click', () => {
-    document.getElementById('calSyncModal').style.display = 'none';
-  });
-  document.getElementById('calSyncModal')?.addEventListener('click', e => {
-    if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
-  });
   document.getElementById('downloadIcsBtn')?.addEventListener('click', downloadIcsFile);
 }
 
@@ -11905,6 +12593,8 @@ function formatIcsDate(dateStr) {
 }
 
 function downloadIcsFile() {
+  showLexiFeatureLocked('external_calendar_export', 'External calendar export has been removed from Lexi.');
+  return;
   const docs = state.saved || [];
   const co   = state.company || {};
   const lines = [
@@ -12020,7 +12710,7 @@ function updateChasePaymentsBadge() {
 }
 
 function buildChaseMessage(item, channel) {
-  const traderName = state.company?.preferredName || state.company?.firstName || 'your tradesperson';
+  const traderName = traderFormalFirstName() || 'your tradesperson';
   const custFirst = (item.custName || '').split(' ')[0] || item.custName;
 
   if (item.urgency === 'invoice-needed') {
@@ -12062,6 +12752,10 @@ function openChaseForDoc(docId) {
 }
 
 function openChasePaymentsModal() {
+  if (!hasLexiFeature('payment_chasing', 'full')) {
+    showLexiFeatureLocked('payment_chasing');
+    return;
+  }
   const overdue = getOverdueInvoices();
   const body = document.getElementById('chaseModalBody');
   const sub  = document.getElementById('chaseModalSub');
@@ -12223,9 +12917,10 @@ function getAcceptUrl(token) {
 
 function buildAcceptanceMessage(doc, baseMessage) {
   const q = doc.quote || {};
-  // Prepare the acceptance token (also stamps doc.acceptToken, used to build
-  // the single view+accept link in uploadDocToStorage).
-  prepareAcceptTokenForSend(doc.id);
+  const canUseAcceptance = hasLexiFeature('digital_quote_acceptance', 'full');
+  // Prepare the acceptance token only for plans that include digital quote
+  // acceptance. Lower plans still get a normal view link without accept/decline.
+  if (canUseAcceptance) prepareAcceptTokenForSend(doc.id);
   const customerName = getCustomerFirstName(doc) || 'there';
   const rawDocType = String(q.type || doc.type || 'quote').toLowerCase();
   const docType = ['estimate','invoice','receipt'].includes(rawDocType) ? rawDocType : 'quote';
@@ -12234,6 +12929,18 @@ function buildAcceptanceMessage(doc, baseMessage) {
   const traderName = [state.company.firstName, state.company.lastName].filter(Boolean).join(' ').trim();
   const companyName = (state.company.businessName || '').trim();
   const signoff = [traderName, companyName].filter(Boolean).join('\n') || 'Lexi Handles It';
+
+  if (!canUseAcceptance) {
+    return `Hello ${customerName},
+
+Thank you for allowing me to provide you with ${article} ${docType} to carry out the work.
+
+You can view your ${docType} by clicking the link below:
+{VIEW_LINK}
+
+Kind regards
+${signoff}`;
+  }
 
   return `Hello ${customerName},
 
@@ -12630,6 +13337,10 @@ function removeMailchimpQuietSeasonTag() {
 }
 
 function openQuietSeasonIntroModal() {
+  if (!hasLexiFeature('quiet_season', 'full')) {
+    showLexiFeatureLocked('quiet_season');
+    return;
+  }
   const name = state.company?.preferredName || state.company?.firstName || '';
   const titleEl = document.getElementById('qsIntroTitle');
   if (titleEl) titleEl.textContent = name ? `Hi ${name}.` : 'Quiet Season';
@@ -12970,13 +13681,14 @@ function getJobSearchQuery() {
 let _reviewDoc = null;
 
 function maybeAskForReview(doc) {
+  if (!hasLexiFeature('review_requests', 'full')) return;
   // Only ask once per job — if already asked (or dismissed), skip
   if (doc.reviewAsked) return;
 
   const reviewLink = state.company.reviewLink || '';
   const q = doc.quote || {};
   const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'your customer';
-  const traderName = state.company.preferredName || state.company.firstName || '';
+  const traderName = traderFormalFirstName();
   const msg = document.getElementById('reviewRequestMsg');
   if (msg) msg.textContent = `${custName}'s job is paid in full. Want to ask them for a Google review while they're happy?`;
   _reviewDoc = doc;
@@ -13054,7 +13766,7 @@ function copyEmailField(elId) {
 function sendHoldingMessageForDoc(doc) {
   if (!doc) return;
   const q          = doc.quote || {};
-  const traderName = (state.company?.preferredName || state.company?.firstName || '').trim();
+  const traderName = traderFormalFirstName();
   const custFirst  = getCustomerFirstName(doc);
   const phone      = formatWhatsAppNumber(q.custPhone || '');
   const email      = (q.custEmail || '').trim();
@@ -13113,9 +13825,13 @@ function onAcceptedSendBooking(doc) {
 
 /* ── Booking-invite template (WhatsApp / email), pre-filled with the date ── */
 function sendBookingInviteForDoc(doc, date, time) {
+  if (!hasLexiFeature('booking_messages', 'full')) {
+    showLexiFeatureLocked('booking_messages');
+    return;
+  }
   if (!doc) return;
   const q          = doc.quote || {};
-  const traderName = (state.company?.preferredName || state.company?.firstName || '').trim();
+  const traderName = traderFormalFirstName();
   const custFirst  = getCustomerFirstName(doc);
   const phone      = formatWhatsAppNumber(q.custPhone || '');
   const email      = (q.custEmail || '').trim();
@@ -13153,16 +13869,21 @@ function getCustomerFirstName(doc) {
 
 /* ── Contact choice modal after quote acceptance ── */
 function showBookingContactModal(doc) {
+  if (!hasLexiFeature('booking_messages', 'full')) {
+    showLexiFeatureLocked('booking_messages');
+    return;
+  }
   if (!doc) return;
   _quoteAcceptedDoc = null;
   const q = doc.quote || {};
   const traderName = (state.company?.preferredName || state.company?.firstName || '').trim();
+  const signName   = traderFormalFirstName();
   const custFirst  = getCustomerFirstName(doc);
   const phone      = formatWhatsAppNumber(q.custPhone || '');
   const email      = (q.custEmail || '').trim();
   const docType    = (q.type || 'quote').toLowerCase();
-  const bizName    = (state.company?.businessName || traderName || '').trim();
-  const signoff    = [traderName, bizName].filter((v, i, a) => v && a.indexOf(v) === i).join('\n');
+  const bizName    = (state.company?.businessName || signName || '').trim();
+  const signoff    = [signName, bizName].filter((v, i, a) => v && a.indexOf(v) === i).join('\n');
 
   const titleEl = document.getElementById('bookingContactTitle');
   if (titleEl) titleEl.textContent = traderName
@@ -13302,8 +14023,14 @@ function wireCustomerExtras(body, groupName) {
    EARNINGS SUMMARY
    ═══════════════════════════════════════════════════════════ */
 function openEarningsModal() {
+  if (!hasLexiFeature('earnings_level', 'basic')) {
+    showLexiFeatureLocked('earnings_level');
+    return;
+  }
   const body = document.getElementById('earningsModalBody');
   if (!body) return;
+  const hasAdvancedEarnings = hasLexiFeature('earnings_level', 'advanced');
+  const canExportEarnings = hasLexiFeature('earnings_export', 'full');
 
   const docs = state.saved || [];
   const now  = new Date();
@@ -13364,7 +14091,7 @@ function openEarningsModal() {
       </div>
     </div>
 
-    ${months.length ? `
+    ${hasAdvancedEarnings && months.length ? `
     <div class="earn-breakdown">
       <div class="earn-breakdown-title">Month by month</div>
       ${months.map(m => {
@@ -13384,7 +14111,9 @@ function openEarningsModal() {
       These figures are for reference only. Always check with your accountant at tax time.
     </div>
 
-    <button type="button" class="btn btn-outline w-100" id="exportEarningsBtn" style="margin-top:14px">Download as Text</button>`;
+    ${canExportEarnings
+      ? '<button type="button" class="btn btn-outline w-100" id="exportEarningsBtn" style="margin-top:14px">Download as Text</button>'
+      : '<button type="button" class="btn btn-outline w-100 lexi-feature-locked" data-lexi-feature="earnings_export" data-lexi-level="full" style="margin-top:14px">Download report - Master</button>'}`;
 
   // Wire export button
   document.getElementById('exportEarningsBtn')?.addEventListener('click', () => {

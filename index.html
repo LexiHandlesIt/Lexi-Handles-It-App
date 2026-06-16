@@ -329,10 +329,18 @@
           <strong id="trialStatusTitle">3 months free. No card needed.</strong>
           <span id="trialStatusCopy">Use Lexi properly first. When the trial is nearly done, I'll help you choose the plan that fits.</span>
         </div>
-        <p class="trial-plan-copy">Payment comes later through Stripe, once you're ready to keep Lexi working for you. Until then, crack on and build the habit.</p>
         <div class="trial-plan-actions">
           <button type="button" class="btn btn-sage btn-full" id="trialKeepGoingBtn">Keep using Lexi free</button>
-          <a href="YOUR_STRIPE_TRADESMAN_LINK" class="btn btn-outline btn-full" id="trialChoosePlanBtn">Choose a plan later</a>
+          <button type="button" class="btn btn-outline btn-full" id="trialChooseTradesmanBtn">Upgrade to Tradesman</button>
+          <button type="button" class="btn btn-outline btn-full" id="trialChooseMasterBtn">Upgrade to Master</button>
+        </div>
+        <div class="founder-tester-box">
+          <label for="founderTesterCode">Founder tester code</label>
+          <div class="founder-tester-row">
+            <input type="text" id="founderTesterCode" autocomplete="off" placeholder="FOUNDER-01">
+            <button type="button" class="btn btn-outline" id="founderTesterBtn">Use code</button>
+          </div>
+          <p id="founderTesterMsg">For invited testers only. This opens Master with the private 12-month tester offer.</p>
         </div>
       </div>
     </div>
@@ -346,37 +354,44 @@
         <button type="button" class="modal-close" id="closeAccountInfoBtn" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="acc-info-block">
-          <div class="acc-info-label">You are logged in as</div>
-          <div class="acc-info-value" id="accountEmail">—</div>
-        </div>
-        <div class="acc-info-block" id="accountCreatedWrap">
-          <div class="acc-info-label">Member since</div>
-          <div class="acc-info-value" id="accountCreated">—</div>
-        </div>
-        <div class="acc-info-block">
-          <div class="acc-info-label">Plan</div>
-          <div class="acc-info-value" id="accountPlan">—</div>
-          <button type="button" id="accountManagePlanBtn" style="background:none;border:none;color:var(--walnut);font-size:0.82rem;cursor:pointer;padding:4px 0 0;font-family:inherit;text-decoration:underline">Manage plan</button>
-        </div>
-        <div class="acc-info-block" id="accountQuietSeasonWrap" style="display:none">
-          <div class="acc-info-label">Quiet Season</div>
-          <div class="acc-info-value" id="accountQuietSeason">—</div>
+        <div id="accountInfoMain">
+          <div class="acc-info-block">
+            <div class="acc-info-label">You are logged in as</div>
+            <div class="acc-info-value" id="accountEmail">—</div>
+          </div>
+          <div class="acc-info-block" id="accountCreatedWrap">
+            <div class="acc-info-label">Member since</div>
+            <div class="acc-info-value" id="accountCreated">—</div>
+          </div>
+          <div class="acc-info-block">
+            <div class="acc-info-label">Plan</div>
+            <div class="acc-info-value" id="accountPlan">—</div>
+          </div>
+          <div class="acc-info-block" id="accountQuietSeasonWrap" style="display:none">
+            <div class="acc-info-label">Quiet Season</div>
+            <div class="acc-info-value" id="accountQuietSeason">—</div>
+          </div>
+
+          <div class="acc-action-btns">
+            <button type="button" class="btn btn-outline acc-action-btn" id="accountManagePlanBtn">Manage Plan</button>
+            <button type="button" class="btn btn-outline acc-action-btn" id="accountChangePwBtn" onclick="showChangePassword()">Change Password</button>
+          </div>
+
+          <p class="acc-info-sync-note">Your jobs, customers and prices sync automatically to this account — log in on any device to see them.</p>
         </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0 14px">
-
-        <div class="acc-info-label" style="margin-bottom:8px">Change password</div>
-        <div class="form-group">
-          <input type="password" id="accountNewPw" autocomplete="new-password" placeholder="New password (min 8 characters)">
+        <div id="accountPwSection" style="display:none">
+          <div class="acc-info-label" style="margin-bottom:10px">Change password</div>
+          <div class="form-group">
+            <input type="password" id="accountNewPw" autocomplete="new-password" placeholder="New password">
+          </div>
+          <div class="form-group">
+            <input type="password" id="accountConfirmPw" autocomplete="new-password" placeholder="Confirm new password">
+          </div>
+          <p class="acc-pw-hint">At least 8 characters, with an uppercase letter, a lowercase letter and a number.</p>
+          <div class="auth-message" id="accountPwMsg" role="status" aria-live="polite"></div>
+          <button type="button" class="btn btn-sage btn-full" id="accountSavePwBtn">Save new password</button>
         </div>
-        <div class="form-group">
-          <input type="password" id="accountConfirmPw" autocomplete="new-password" placeholder="Confirm new password">
-        </div>
-        <div class="auth-message" id="accountPwMsg" role="status" aria-live="polite"></div>
-        <button type="button" class="btn btn-sage btn-full" id="accountSavePwBtn">Save new password</button>
-
-        <p class="acc-info-sync-note">Your jobs, customers and prices sync automatically to this account — log in on any device to see them.</p>
       </div>
     </div>
   </div>
@@ -735,101 +750,18 @@
         </div>
       </div>
 
-      <!-- Payment Methods -->
-      <div class="card sage-focus">
-        <h2 class="card-title">How Would You Like to Be Paid?</h2>
-        <p class="card-desc" style="margin-bottom:12px">Keeping your options open? Feel free to choose multiple payment methods.</p>
-        <div class="pay-methods">
-          <label class="checkbox-label">
-            <input type="checkbox" id="payBankTransfer" value="bank"> Bank Transfer
-          </label>
-          <div id="bankDetails" class="expand-panel" style="display:none">
-            <div class="form-grid-2">
-              <div class="form-group">
-                <label for="bankAccHolder">Account Holder Name</label>
-                <input type="text" id="bankAccHolder">
-              </div>
-              <div class="form-group">
-                <label for="bankName">Bank Name</label>
-                <input type="text" id="bankName">
-              </div>
-            </div>
-            <div class="form-grid-2">
-              <div class="form-group">
-                <label for="bankSort">Sort Code</label>
-                <input type="text" id="bankSort" maxlength="8" inputmode="numeric">
-                <span class="field-error" id="bankSortError" style="display:none">Sort code must be 6 digits (XX-XX-XX)</span>
-              </div>
-              <div class="form-group">
-                <label for="bankAcc">Account Number</label>
-                <input type="text" id="bankAcc" maxlength="8" inputmode="numeric">
-              </div>
-            </div>
-          </div>
-
-          <label class="checkbox-label">
-            <input type="checkbox" id="payCash" value="cash"> Cash on Completion
-          </label>
-
-          <label class="checkbox-label">
-            <input type="checkbox" id="payPaypal" value="paypal"> PayPal
-          </label>
-          <div id="paypalDetails" class="expand-panel" style="display:none">
-            <div class="form-group">
-              <label for="paypalRef">PayPal Email or Phone</label>
-              <input type="text" id="paypalRef">
-            </div>
-          </div>
-
-          <label class="checkbox-label">
-            <input type="checkbox" id="payOther" value="other"> Other
-          </label>
-          <div id="payOtherDetails" class="expand-panel" style="display:none">
-            <div class="form-group">
-              <label for="payOtherText">Payment Details</label>
-              <textarea id="payOtherText" rows="2" placeholder="e.g. Cheque made payable to..."></textarea>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Preferences -->
-      <div class="card">
-        <h2 class="card-title">Preferences</h2>
-        <div class="toggle-row">
-          <div>
-            <div class="toggle-label">Auto-send holding message <button type="button" class="field-info-btn" data-title="What is a holding message?" data-body="A holding message is a short friendly message sent to your customer as soon as they accept your quote. It lets them know you have received their acceptance and that you will be in touch to confirm the booking.&#10;&#10;Example: &quot;Hi Sarah, thank you for accepting the quote. I am really looking forward to getting the work done for you! I will be in touch shortly to confirm the booking details. Kind regards, James&quot;&#10;&#10;When this is turned on, Lexi sends the holding message using the same method you used to send the original quote. If you sent via WhatsApp, it goes via WhatsApp. If you sent via email, it goes via email.">?</button></div>
-            <div class="toggle-desc">When a quote is accepted, skip straight to the holding message so you can send it in one tap.</div>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="prefAutoHolding">
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          </label>
-        </div>
-        <div class="toggle-row" style="margin-top:12px">
-          <div>
-            <div class="toggle-label">Push notifications</div>
-            <div class="toggle-desc">Get alerted when a quote is accepted, even when the app is closed.</div>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="notifToggleBtn">
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          </label>
-        </div>
-      </div>
-
       <!-- Page Footer -->
       <div class="page-footer">
-        <button type="button" class="btn btn-sage btn-lg" id="saveBusinessBtn">Save My Business</button>
-        <button type="button" class="btn btn-sage btn-lg btn-next" id="goToPriceListBtn">My Rates &amp; Services</button>
+        <button type="button" class="btn btn-sage btn-lg btn-next" id="bizNextFromAbout">Next: My Rates</button>
       </div>
     </section>
 
     <!-- PAGE 2: PRICE LIST -->
-    <section id="page2" class="page" data-page="2">
+    <!-- PAGE: MY RATES -->
+    <section id="page-biz-rates" class="page" data-page="biz-rates">
       <div class="page-header">
-        <h1 class="page-title" id="page2Title">My Rates, Services &amp; Materials</h1>
-        <p class="page-sub" id="page2Sub">Your jobs, your prices - make sure you're charging what you're worth.</p>
+        <h1 class="page-title">My Rates</h1>
+        <p class="page-sub">Your jobs, your prices - make sure you're charging what you're worth.</p>
       </div>
 
       <!-- My Rates -->
@@ -871,6 +803,19 @@
         </div>
       </div>
 
+      <div class="page-footer">
+        <button type="button" class="btn btn-outline btn-lg" id="bizBackToAbout">Back</button>
+        <button type="button" class="btn btn-sage btn-lg btn-next" id="bizNextFromRates">Next: My Services &amp; Materials</button>
+      </div>
+    </section>
+
+    <!-- PAGE: MY SERVICES & MATERIALS -->
+    <section id="page2" class="page" data-page="2">
+      <div class="page-header">
+        <h1 class="page-title" id="page2Title">My Services &amp; Materials</h1>
+        <p class="page-sub" id="page2Sub">Add the jobs and materials you use most - they'll be ready to drop into any quote.</p>
+      </div>
+
       <!-- Add Services & Materials -->
       <div class="card" style="border:2px solid var(--walnut)">
 
@@ -899,14 +844,14 @@
         <!-- Post-autofill state — shown after autofill, before manual section -->
         <div id="oboPostFillServices" style="display:none">
           <div class="autofill-btns">
-            <button type="button" class="btn btn-autofill-no" id="addMoreServicesManuallytBtn">Add more manually</button>
-            <button type="button" class="btn btn-autofill-no" id="changeTradeBtnSvc">Change trade</button>
+            <button type="button" class="btn btn-autofill-no" id="addMoreServicesManuallytBtn">Add Services Manually</button>
+            <button type="button" class="btn btn-autofill-no" id="changeTradeBtnSvc">Change Trade</button>
           </div>
         </div>
         <div id="oboPostFillMaterials" style="display:none">
           <div class="autofill-btns">
-            <button type="button" class="btn btn-autofill-no" id="addMoreMaterialsManuallyBtn">Add more manually</button>
-            <button type="button" class="btn btn-autofill-no" id="changeTradeBtnMat">Change trade</button>
+            <button type="button" class="btn btn-autofill-no" id="addMoreMaterialsManuallyBtn">Add Materials Manually</button>
+            <button type="button" class="btn btn-autofill-no" id="changeTradeBtnMat">Change Trade</button>
           </div>
         </div>
 
@@ -1059,8 +1004,103 @@
       </div>
 
       <div class="page-footer">
-        <button type="button" class="btn btn-outline btn-lg" id="backToSetupBtn">Back</button>
-        <button type="button" class="btn btn-primary btn-lg btn-next" id="goToQuoteBtn">Next</button>
+        <button type="button" class="btn btn-outline btn-lg" id="bizBackToRates">Back</button>
+        <button type="button" class="btn btn-sage btn-lg btn-next" id="bizNextFromServices">Next: My Preferences</button>
+      </div>
+    </section>
+
+    <!-- PAGE: MY PREFERENCES -->
+    <section id="page-biz-prefs" class="page" data-page="biz-prefs">
+      <div class="page-header">
+        <h1 class="page-title">My Preferences</h1>
+        <p class="page-sub">How you'd like to get paid and how Lexi works for you.</p>
+      </div>
+
+      <!-- Payment Methods -->
+      <div class="card sage-focus">
+        <h2 class="card-title">How Would You Like to Be Paid?</h2>
+        <p class="card-desc" style="margin-bottom:12px">Keeping your options open? Feel free to choose multiple payment methods.</p>
+        <div class="pay-methods">
+          <label class="checkbox-label">
+            <input type="checkbox" id="payBankTransfer" value="bank"> Bank Transfer
+          </label>
+          <div id="bankDetails" class="expand-panel" style="display:none">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="bankAccHolder">Account Holder Name</label>
+                <input type="text" id="bankAccHolder">
+              </div>
+              <div class="form-group">
+                <label for="bankName">Bank Name</label>
+                <input type="text" id="bankName">
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="bankSort">Sort Code</label>
+                <input type="text" id="bankSort" maxlength="8" inputmode="numeric">
+                <span class="field-error" id="bankSortError" style="display:none">Sort code must be 6 digits (XX-XX-XX)</span>
+              </div>
+              <div class="form-group">
+                <label for="bankAcc">Account Number</label>
+                <input type="text" id="bankAcc" maxlength="8" inputmode="numeric">
+              </div>
+            </div>
+          </div>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="payCash" value="cash"> Cash on Completion
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="payPaypal" value="paypal"> PayPal
+          </label>
+          <div id="paypalDetails" class="expand-panel" style="display:none">
+            <div class="form-group">
+              <label for="paypalRef">PayPal Email or Phone</label>
+              <input type="text" id="paypalRef">
+            </div>
+          </div>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="payOther" value="other"> Other
+          </label>
+          <div id="payOtherDetails" class="expand-panel" style="display:none">
+            <div class="form-group">
+              <label for="payOtherText">Payment Details</label>
+              <textarea id="payOtherText" rows="2" placeholder="e.g. Cheque made payable to..."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto-send holding message -->
+      <div class="card">
+        <h2 class="card-title">Auto send holding message <button type="button" class="field-info-btn" data-title="What is a holding message?" data-body="A holding message is a short friendly message sent to your customer as soon as they accept your quote. It lets them know you have received their acceptance and that you will be in touch to confirm the booking.&#10;&#10;Example: &quot;Hi Sarah, thank you for accepting the quote. I am really looking forward to getting the work done for you! I will be in touch shortly to confirm the booking details. Kind regards, James&quot;&#10;&#10;When this is turned on, Lexi sends the holding message using the same method you used to send the original quote. If you sent via WhatsApp, it goes via WhatsApp. If you sent via email, it goes via email.">?</button></h2>
+        <div class="toggle-row">
+          <div class="toggle-desc">When a quote is accepted, skip straight to the holding message so you can send it in one tap.</div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="prefAutoHolding">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Push notifications -->
+      <div class="card">
+        <h2 class="card-title">Push notifications?</h2>
+        <div class="toggle-row">
+          <div class="toggle-desc">Get alerted when a quote is accepted, even when the app is closed.</div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notifToggleBtn">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="page-footer">
+        <button type="button" class="btn btn-outline btn-lg" id="bizBackToServices">Back</button>
+        <button type="button" class="btn btn-sage btn-lg" id="bizSaveFinishBtn">Save &amp; Finish</button>
       </div>
     </section>
 
@@ -1074,12 +1114,25 @@
       </div>
     </div>
 
+    <!-- BUSINESS SETUP TAB BAR (shown on page1 / page-biz-rates / page2 / page-biz-prefs) -->
+    <div id="businessSetupTabs">
+      <div class="qb-tabs-inner">
+        <button class="biz-tab" data-biztab="page1">My Business Info</button>
+        <button class="biz-tab" data-biztab="page-biz-rates">My Rates</button>
+        <button class="biz-tab" data-biztab="page2">My Services &amp; Materials</button>
+        <button class="biz-tab" data-biztab="page-biz-prefs">My Preferences</button>
+      </div>
+    </div>
+
     <!-- PAGE 3: NEW QUOTE -->
     <!-- PAGE 3a: CUSTOMER DETAILS -->
     <section id="page3" class="page" data-page="3">
       <div class="page-header">
-        <h1 class="page-title" id="page3Title">Add Customer</h1>
-        <p class="page-sub" id="page3Sub">Who is this for?</p>
+        <div>
+          <h1 class="page-title" id="page3Title">Add Customer</h1>
+          <p class="page-sub" id="page3Sub">Who is this for?</p>
+        </div>
+        <button type="button" id="page3ExitBtn" class="btn btn-outline btn-sm" style="display:none" onclick="exitQuoteBuilder()">✕ Exit</button>
       </div>
 
       <div class="card">
@@ -1440,6 +1493,13 @@
       <div class="page4-sticky-top">
         <div class="page-header">
           <h1 class="page-title" id="savedJobsTitle">My Jobs</h1>
+          <label class="ss-toggle-wrap" title="Toggle spreadsheet view">
+            <span class="ss-toggle-label" id="ssToggleLabel">View Spreadsheet</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="jobsSpreadsheetToggle">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </label>
         </div>
         <!-- Nav hint popup (shown after first save) -->
         <div class="nav-hint-popup" id="navHintPopup" style="display:none" role="dialog" aria-modal="true">
@@ -1474,15 +1534,8 @@
           <button type="button" class="seasonal-banner-close" id="seasonalBannerClose" aria-label="Dismiss">&#x2715;</button>
         </div>
 
-        <!-- Search + Filter toggle on same row -->
+        <!-- Search + Filter on same row -->
         <div class="jobs-search-row">
-          <label class="ss-toggle-wrap" title="Toggle spreadsheet view">
-            <span class="ss-toggle-label" id="ssToggleLabel">View Spreadsheet</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="jobsSpreadsheetToggle">
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            </label>
-          </label>
           <div class="jobs-search-wrap">
             <svg class="jobs-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="search" id="jobSearchInput" class="jobs-search-input" placeholder="Search customers…" autocomplete="off">
@@ -1550,28 +1603,24 @@
     <section id="page-calendar" class="page" data-page="calendar">
       <div class="page-header">
         <h1 class="page-title">View My Calendar</h1>
-        <button type="button" class="btn btn-outline btn-sm cal-sync-btn" id="calSyncBtn" title="Sync with Google / Outlook">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Sync Calendar
-        </button>
       </div>
       <div class="cal-page-wrap" id="calPageWrap">
         <!-- Populated by renderCalendar() -->
       </div>
     </section>
 
-    <!-- CALENDAR SYNC MODAL -->
+    <!-- CALENDAR EXPORT MODAL (removed feature; kept only to avoid broken old links) -->
     <div id="calSyncModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Sync your calendar">
       <div class="modal-card" style="max-width:440px">
         <div class="modal-header">
-          <h2 class="modal-title">Sync with Your Calendar</h2>
+          <h2 class="modal-title">Calendar Export Removed</h2>
           <button type="button" class="modal-close-btn" id="closeCalSyncBtn" aria-label="Close">&#x2715;</button>
         </div>
         <div class="modal-body" style="padding:16px 20px 20px">
-          <p style="margin:0 0 16px;color:#555;font-size:0.9rem">Export your Lexi job dates as a calendar file (.ics) and import it into Google Calendar, Apple Calendar, or Outlook — in seconds.</p>
-          <button type="button" class="btn btn-primary w-100" id="downloadIcsBtn" style="margin-bottom:10px">
+          <p style="margin:0 0 16px;color:#555;font-size:0.9rem">This export is no longer part of Lexi. Your in-app calendar still shows job dates on supported plans.</p>
+          <button type="button" class="btn btn-primary w-100 lexi-feature-locked" id="downloadIcsBtn" style="margin-bottom:10px">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Download lexi-jobs.ics
+            Calendar export removed
           </button>
           <div class="cal-sync-steps">
             <div class="cal-sync-step">

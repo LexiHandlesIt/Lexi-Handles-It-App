@@ -355,7 +355,7 @@ h3 { font-size: 1rem; font-weight: 600; }
 .page-header {
   margin-bottom: 20px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
@@ -1077,6 +1077,45 @@ input[type="text"].sig-text-input:focus {
 }
 
 .modal-card-sm { max-width: 360px; }
+
+.founder-tester-box {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.founder-tester-box label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.founder-tester-row {
+  display: flex;
+  gap: 8px;
+}
+
+.founder-tester-row input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.founder-tester-row .btn {
+  white-space: nowrap;
+}
+
+.founder-tester-box p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
 
 .onboarding-card {
   padding: 32px 24px;
@@ -3103,6 +3142,9 @@ input[type="text"].sig-text-input:focus {
 .saved-doc-card.status-invoiced { border-left-color: var(--walnut); }
 .saved-doc-card.status-paid     { border-left-color: var(--success); }
 .saved-doc-card.status-overdue  { border-left-color: var(--danger); }
+.saved-doc-card.status-booked   { border-left-color: #1a56db; }
+.saved-doc-card.status-started  { border-left-color: #b06d00; }
+.saved-doc-card.status-complete { border-left-color: #0f7a52; }
 
 .saved-doc-header {
   display: flex;
@@ -3147,6 +3189,17 @@ input[type="text"].sig-text-input:focus {
 .type-badge.paid     { background: #dcfce7; color: #166534; border-color: #86efac; }
 .type-badge.accepted { background: #dcfce7; color: #166534; border-color: #86efac; }
 .type-badge.overdue  { background: var(--danger-l); color: var(--danger); border-color: var(--danger); }
+.type-badge.booked   { background: #e8f0fe; color: #1a56db; border-color: #b9d2fb; }
+.type-badge.started  { background: #fff4e0; color: #b06d00; border-color: #f0d49a; }
+.type-badge.complete { background: #e6f7f0; color: #0f7a52; border-color: #a8e0c9; }
+/* On the job card the status is a label, not a button — strip the pill look */
+.type-badge.jca-badge {
+  background: transparent;
+  border-color: transparent;
+  padding: 0;
+  cursor: default;
+}
+.type-badge.jca-badge:hover { opacity: 1; }
 
 /* Journey dropdown — replaces A/B/C buttons on View Jobs cards */
 .journey-select-wrap {
@@ -4034,6 +4087,35 @@ input[type="text"].sig-text-input:focus {
 }
 .cdv-action-invoice { border-color: var(--sage); color: var(--sage); }
 .cdv-action-receipt { border-color: #b08a3e; color: #b08a3e; }
+/* Guided next-step CTA — the one obvious action for this job's stage */
+.cdv-next-step-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: calc(100% - 28px);
+  margin: 12px 14px 0;
+  padding: 12px 14px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 9px;
+  background: var(--sage);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cdv-next-step-btn:hover { background: #4a6338; }
+.cdv-next-step-hint {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+  background: rgba(255,255,255,0.18);
+  padding: 2px 7px;
+  border-radius: 5px;
+}
 .cdv-job-header-right {
   display: flex;
   align-items: center;
@@ -5324,6 +5406,23 @@ input[type="text"].sig-text-input:focus {
   font-weight: 600;
   word-break: break-all;
 }
+.acc-pw-hint {
+  font-size: 0.76rem;
+  color: #888;
+  margin: -4px 0 10px;
+  line-height: 1.4;
+}
+.acc-action-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+.acc-action-btn {
+  flex: 1;
+  font-size: 0.82rem;
+  padding: 10px 8px;
+  text-align: center;
+}
 .acc-info-sync-note {
   font-size: 0.78rem;
   color: #888;
@@ -5754,6 +5853,51 @@ input[type="text"].sig-text-input:focus {
   line-height: 1;
   white-space: nowrap;
 }
+
+/* Customer dashboard: one consistent grid of equal-width labelled tiles */
+.cdv-contact-btns .cal-icon-btn.cdv-labeled,
+.cdv-contact-btns .cdv-more-wrap { flex: 1; }
+.cdv-more-wrap { position: relative; }
+.cdv-more-wrap .cdv-more-btn { width: 100%; }
+.cdv-job-actions .cal-icon-btn.cdv-labeled { flex: 1; }
+/* Accent colours for the per-job action tiles */
+.cal-icon-btn.cdv-action-edit    { border-color: var(--walnut); color: var(--walnut); }
+.cal-icon-btn.cdv-action-invoice { border-color: var(--sage); color: var(--sage); }
+.cal-icon-btn.cdv-action-receipt { border-color: #b08a3e; color: #b08a3e; }
+/* "More" dropdown (Photo / Update / Delete) */
+.cdv-more-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  padding: 4px;
+}
+.cdv-more-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--charcoal);
+  cursor: pointer;
+  border-radius: 7px;
+  text-align: left;
+}
+.cdv-more-item:hover { background: var(--cream); }
+.cdv-more-delete { color: #c0392b; }
+.cdv-more-delete:hover { background: #fdf0ef; }
 
 /* View Customer button in day panel */
 .cal-view-cust-btn {
@@ -6933,7 +7077,9 @@ input[type="text"].sig-text-input:focus {
   transition: all 0.15s;
 }
 .jca-open:hover { border-color: var(--sage); color: var(--sage); background: #eef4ea; }
-.jca-badge { flex-shrink: 0; cursor: pointer; }
+.jca-badge { flex-shrink: 0; cursor: default; }
+.jca-next    { background: var(--sage); color: #fff; }
+.jca-next:hover    { background: #4a6338; }
 .jca-primary {
   flex: 1;
   border: none;
@@ -7422,7 +7568,8 @@ input[type="text"].sig-text-input:focus {
 }
 
 /* ── QUOTE BUILDER TAB BAR — Excel/browser tab style ─────── */
-#quoteBuilderTabs {
+#quoteBuilderTabs,
+#businessSetupTabs {
   position: fixed;
   top: var(--header-h);
   left: 0; right: 0;
@@ -7480,6 +7627,43 @@ body.qb-mode #page-completion {
   padding-top: calc(var(--header-h) + 58px);
 }
 
+/* ── BUSINESS SETUP TABS (single-line labels, 4 across) ── */
+.biz-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--walnut-l);
+  background: var(--cream);
+  border: 2px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  position: relative;
+  bottom: -2px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.biz-tab:hover { background: var(--walnut-tint); color: var(--walnut); }
+.biz-tab.active {
+  background: var(--white);
+  color: var(--walnut);
+  border-color: var(--border);
+  border-bottom: 2px solid var(--white);
+  z-index: 1;
+}
+.biz-tab.done { color: var(--sage); }
+body.biz-mode #page1,
+body.biz-mode #page-biz-rates,
+body.biz-mode #page2,
+body.biz-mode #page-biz-prefs {
+  padding-top: calc(var(--header-h) + 58px);
+}
+
 /* ── SERVICES / MATERIALS TABS (Add Services & Materials card) ── */
 .obo-tab-bar {
   border-bottom: 2px solid var(--border);
@@ -7531,6 +7715,20 @@ body.qb-mode #page-completion {
 .autofill-btns {
   display: flex;
   gap: 8px;
+}
+/* Post-autofill buttons stack vertically under their own tab column:
+   Services on the left, Materials on the right — so they read logically. */
+#oboPostFillServices .autofill-btns,
+#oboPostFillMaterials .autofill-btns {
+  flex-direction: column;
+  gap: 8px;
+}
+#oboPostFillServices .autofill-btns { align-items: flex-start; }
+#oboPostFillMaterials .autofill-btns { align-items: flex-end; }
+#oboPostFillServices .autofill-btns .btn,
+#oboPostFillMaterials .autofill-btns .btn {
+  flex: none;
+  width: calc(50% - 2px);
 }
 .btn-autofill-yes {
   flex: 1;
@@ -7807,3 +8005,36 @@ body.qb-mode #page-completion {
 .qb-tab.active .qb-tab-word { color: var(--walnut); }
 .qb-tab.done .qb-tab-the { opacity: 0.5; }
 .qb-tab.done .qb-tab-word { color: var(--sage); }
+/* Subscription entitlement locks */
+.lexi-feature-locked {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
+.lexi-feature-locked input,
+.lexi-feature-locked button {
+  cursor: not-allowed !important;
+}
+
+.lexi-basic-dashboard-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(125, 87, 48, 0.22);
+  border-radius: 12px;
+  background: #fff8ef;
+  color: #6d4b2b;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.lexi-basic-dashboard .cdv-summary-bar,
+.lexi-basic-dashboard .cdv-tube-map,
+.lexi-basic-dashboard .cdv-job-schedule,
+.lexi-basic-dashboard .cdv-accepted-banner,
+.lexi-basic-dashboard .cdv-payments,
+.lexi-basic-dashboard .cdv-photo-group,
+.lexi-basic-dashboard .cdv-next-step-btn,
+.lexi-basic-dashboard .cdv-action-invoice,
+.lexi-basic-dashboard .cdv-action-receipt {
+  display: none !important;
+}
