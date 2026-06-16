@@ -1360,6 +1360,16 @@ function _isTimeoutError(err) {
   const m = String(err?.message || err?.error_description || err?.code || err || '');
   return /statement timeout|canceling statement|\b57014\b|timeout/i.test(m);
 }
+// True for transient connectivity blips (offline, dropped/cold connection, e.g.
+// right after a phone wakes or reconnects). "TypeError: Failed to fetch" is the
+// classic one — the request never reached the server, so the local data is fine
+// and a quiet retry will succeed. We must NOT alarm the user for these.
+function _isTransientNetworkError(err) {
+  const m = String(err?.message || err || '').toLowerCase();
+  return err?.name === 'TypeError' ||
+    /failed to fetch|networkerror|network request failed|load failed|fetch failed|err_network|err_internet|connection|offline/.test(m) ||
+    _isTimeoutError(err);
+}
 // Pull a short, human-readable reason out of a Supabase/Postgres error so the
 // real cause shows up in the toast instead of a generic "needs another try".
 // True when Postgres/PostgREST rejects a write because a column is missing from
@@ -2473,6 +2483,11 @@ async function persistCurrentQuoteFromTerms() {
   if (savedDocsSyncReady && lexiSupabase && lexiAuthSession?.user?.id) {
     syncSingleDocToSupabase(doc).catch(err => {
       console.warn('Single-doc sync failed:', err);
+      // Transient blip? Stay quiet — the background queue retry will catch it up.
+      if (_isTransientNetworkError(err)) {
+        queueSavedDocsSync(false);
+        return;
+      }
       localStorage.setItem('lexi_last_documents_sync_error', err?.message || String(err));
       toast(`Saved here, but cloud sync failed: ${err?.message || 'check connection'}`, 'error', 7000);
     });
@@ -2487,6 +2502,17 @@ function queueSavedDocsSync(showError = false) {
     saveSavedDocsToSupabase().then(() => {
       localStorage.removeItem('lexi_last_documents_sync_error');
     }).catch(error => {
+      // A momentary network blip (Failed to fetch / offline) is not worth alarming
+      // the user — the data is saved locally. Retry quietly; it'll catch up.
+      if (_isTransientNetworkError(error)) {
+        console.warn('Document sync hit a network blip; retrying quietly:', error);
+        setTimeout(() => {
+          saveSavedDocsToSupabase()
+            .then(() => localStorage.removeItem('lexi_last_documents_sync_error'))
+            .catch(e => console.warn('Document sync still catching up (will retry on next change/load):', e));
+        }, 10000);
+        return;
+      }
       console.warn('Saved jobs saved locally but did not sync to Supabase:', error);
       localStorage.setItem('lexi_last_documents_sync_error', error?.message || String(error || 'Unknown document sync error'));
       toast(`Document sync failed: ${error?.message || 'check Supabase table setup'}`, 'error', 9000);
@@ -2883,8 +2909,6 @@ function showPage(pageId) {
     const custSigText = document.getElementById('custSigText');
     const sigAutoToggle = document.getElementById('sigAutoToggle');
     const isAuto = sigAutoToggle ? sigAutoToggle.checked : false;
-    const sigAutoLabel = document.getElementById('sigAutoLabel');
-    if (sigAutoLabel) sigAutoLabel.textContent = isAuto ? 'Auto' : 'Manual';
     if (custSigText) {
       custSigText.readOnly = isAuto;
       if (isAuto) {
@@ -5222,9 +5246,7 @@ function setupPageCompletion() {
   // Signature auto/manual toggle
   document.getElementById('sigAutoToggle')?.addEventListener('change', e => {
     const auto = e.target.checked;
-    const label = document.getElementById('sigAutoLabel');
     const sigText = document.getElementById('custSigText');
-    if (label) label.textContent = auto ? 'Auto' : 'Manual';
     if (auto) {
       sigText.value = formatSigFromName(document.getElementById('authSig')?.value) || defaultAuthSig();
       sigText.readOnly = true;
@@ -5446,19 +5468,14 @@ function defaultAuthName() {
   return (first + ' ' + last).trim() || state.company.businessName || '';
 }
 
-/* Returns the formatted signature: "S.Clarke" */
+/* The auto signature is simply the trader's full name, exactly as written. */
 function defaultAuthSig() {
-  const first = (state.company.firstName || '').trim();
-  const last  = (state.company.lastName  || '').trim();
-  if (first && last) return first.charAt(0).toUpperCase() + '.' + last;
-  return first || last || state.company.businessName || '';
+  return defaultAuthName();
 }
 
-/* Formats any "First Last" string into "F.Last" -used when the name field changes */
+/* Auto signature = the name exactly as written (no initialising). */
 function formatSigFromName(name) {
-  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length < 2) return name || '';
-  return parts[0].charAt(0).toUpperCase() + '.' + parts.slice(1).join(' ');
+  return (name || '').trim();
 }
 
 function populateAuthSig() {
