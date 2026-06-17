@@ -105,76 +105,6 @@
     </div>
   </div>
 
-  <!-- ONBOARDING MODAL -->
-  <div id="onboardingModal" class="ob-screen" style="display:none" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
-    <div class="ob-card">
-
-    <div class="ob-header">
-      <div class="ob-logo-pair">
-        <img src="1 Lexi Handles It Transparent.png" alt="Lexi Handles It" class="ob-logo-img" onerror="this.style.display='none'">
-        <img src="2 So you dont have to transparent.png" alt="So you don't have to" class="ob-strap-img" onerror="this.style.display='none'">
-      </div>
-
-      <p class="ob-intro" id="onboardingTitle">Hi, I'm Lexi. I'm an avatar built to help tradespeople in the UK with the business side of trade.</p>
-
-    </div>
-
-    <div class="ob-middle">
-    <!-- LEFT COLUMN: steps -->
-    <div class="ob-left">
-      <h2 class="ob-steps-title">Three Simple Steps</h2>
-      <div class="ob-steps">
-        <div class="ob-step">
-          <span class="ob-num">1</span>
-          <div class="ob-step-text">
-            <strong>Set up your business</strong>
-          </div>
-        </div>
-        <div class="ob-step">
-          <span class="ob-num">2</span>
-          <div class="ob-step-text">
-            <strong>Create and send estimates, quotes, invoices and receipts</strong>
-          </div>
-        </div>
-        <div class="ob-step">
-          <span class="ob-num">3</span>
-          <div class="ob-step-text">
-            <strong>Manage your customers</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="ob-footer">
-        <div class="ob-referral">
-          <select id="referralSource" class="ob-referral-select">
-            <option value="" disabled selected>How'd you find me?</option>
-            <option value="google">I was Googling.</option>
-            <option value="social">Scrolling my Social Media.</option>
-            <option value="friend">A friend told me.</option>
-            <option value="flyer">I saw your flyer.</option>
-            <option value="other">I was doing something else.</option>
-          </select>
-        </div>
-
-        <button id="startBtn" class="btn btn-sage btn-full ob-start-btn">Start my 1 month free</button>
-      </div>
-    </div>
-
-    <!-- RIGHT COLUMN: portrait -->
-    <div class="ob-right">
-      <div class="ob-portrait-wrap">
-        <img src="Lexi Portrait Transparent 3.png" alt="Lexi" class="ob-portrait" onerror="this.style.display='none'">
-        <div class="ob-trial-badge" id="obTrialBadge">
-          <span class="ob-trial-days" id="obTrialDays">90</span>
-          <span class="ob-trial-label">days<br>free</span>
-        </div>
-      </div>
-    </div>
-    </div>
-
-    </div><!-- /.ob-card -->
-  </div>
-
   <!-- FIXED HEADER -->
   <header class="app-header" id="appHeader">
     <div class="header-logo" id="headerLogoArea">
@@ -333,14 +263,15 @@
           <button type="button" class="btn btn-sage btn-full" id="trialKeepGoingBtn">Keep using Lexi free</button>
           <button type="button" class="btn btn-outline btn-full" id="trialChooseTradesmanBtn">Upgrade to Tradesman</button>
           <button type="button" class="btn btn-outline btn-full" id="trialChooseMasterBtn">Upgrade to Master</button>
+          <button type="button" class="btn btn-outline btn-full" id="trialFounderToggleBtn">I have a founder code</button>
         </div>
-        <div class="founder-tester-box">
+        <div class="founder-tester-box" id="founderTesterBox" style="display:none">
           <label for="founderTesterCode">Founder tester code</label>
+          <p id="founderTesterMsg">For invited testers only. This opens Master with the private 12-month tester offer.</p>
           <div class="founder-tester-row">
-            <input type="text" id="founderTesterCode" autocomplete="off" placeholder="FOUNDER-01">
+            <input type="text" id="founderTesterCode" autocomplete="off" placeholder="Invite code">
             <button type="button" class="btn btn-outline" id="founderTesterBtn">Use code</button>
           </div>
-          <p id="founderTesterMsg">For invited testers only. This opens Master with the private 12-month tester offer.</p>
         </div>
       </div>
     </div>

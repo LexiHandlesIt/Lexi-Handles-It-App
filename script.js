@@ -960,7 +960,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ── Render immediately from local cache so the app is usable at once ──
-  setupOnboarding();
+  if (!canUseMainApp()) {
+    ensureTrialStarted();
+    showPage('page1');
+  }
   setupNewJobPicker();
   setupDescriptionHelp();
   setupJobTermsEdit();
@@ -2961,6 +2964,31 @@ function updatePage2Header() {
   }
 }
 
+// In-app replacement for the browser's native confirm() so the dialog reads
+// "Lexi says" instead of the browser-stamped "app.lexihandlesit.com says".
+function lexiConfirm(message, onConfirm, opts = {}) {
+  const title  = opts.title  || 'Lexi says';
+  const okText = opts.okText || 'OK';
+  const cancelText = opts.cancelText || 'Cancel';
+  const W = '#7D5730';
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px 22px;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+      <div style="font-size:1.15rem;font-weight:700;color:${W};margin-bottom:8px">${title}</div>
+      <div style="color:#444;font-size:0.95rem;line-height:1.45;margin-bottom:20px">${message}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="_lcCancel" type="button" style="padding:10px 16px;border-radius:10px;border:1.5px solid #ddd;background:#fff;color:#666;font-size:0.92rem;font-weight:600;cursor:pointer">${cancelText}</button>
+        <button id="_lcOk" type="button" style="padding:10px 18px;border-radius:10px;border:none;background:${W};color:#fff;font-size:0.92rem;font-weight:700;cursor:pointer">${okText}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+  ov.querySelector('#_lcOk').addEventListener('click', () => { close(); if (onConfirm) onConfirm(); });
+  ov.querySelector('#_lcCancel').addEventListener('click', close);
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+}
+
 function setupNavigation() {
   const hamburger = document.getElementById('hamburgerBtn');
   const navMenu   = document.getElementById('navMenu');
@@ -3152,6 +3180,14 @@ function setupNavigation() {
   document.getElementById('trialKeepGoingBtn')?.addEventListener('click', closeTrialPlansModal);
   document.getElementById('trialChooseTradesmanBtn')?.addEventListener('click', () => startStripeCheckout('tradesman'));
   document.getElementById('trialChooseMasterBtn')?.addEventListener('click', () => startStripeCheckout('master'));
+  document.getElementById('trialFounderToggleBtn')?.addEventListener('click', () => {
+    const box = document.getElementById('founderTesterBox');
+    if (!box) return;
+    const show = box.style.display === 'none';
+    box.style.display = show ? '' : 'none';
+    document.getElementById('trialFounderToggleBtn').textContent = show ? 'Hide founder code' : 'I have a founder code';
+    if (show) document.getElementById('founderTesterCode')?.focus();
+  });
   document.getElementById('founderTesterBtn')?.addEventListener('click', () => {
     const founderCode = document.getElementById('founderTesterCode')?.value || '';
     startStripeCheckout('master', { founder: true, founderCode });
@@ -3170,9 +3206,7 @@ function setupNavigation() {
   if (signOutBtn) {
     signOutBtn.addEventListener('click', () => {
       closeMenu();
-      if (confirm('Sign out? Your saved jobs will remain on this device.')) {
-        signOutOfLexi();
-      }
+      lexiConfirm("See you later! Your jobs will be waiting when you're back.", signOutOfLexi, { okText: 'Sign out' });
     });
   }
 
@@ -3269,33 +3303,6 @@ function setupNavigation() {
   document.getElementById('createFirstQuoteBtn')?.addEventListener('click', () => {
     prepareNewQuote();
     showPage('page3');
-  });
-}
-
-/* ===== ONBOARDING ===== */
-function setupOnboarding() {
-  const modal = document.getElementById('onboardingModal');
-  const onboarded = localStorage.getItem(KEY_ONBOARDED);
-  if (onboarded || canUseMainApp()) {
-    localStorage.setItem(KEY_ONBOARDED, '1');
-    if (modal) modal.style.display = 'none';
-    return;
-  }
-
-  modal.style.display = 'flex';
-  modal.classList.add('for-onboarding');
-
-  // Populate trial countdown badge
-  const badgeDays = document.getElementById('obTrialDays');
-  if (badgeDays) badgeDays.textContent = getTrialDaysRemaining() || TRIAL_DAYS;
-
-  document.getElementById('startBtn').addEventListener('click', () => {
-    const source = document.getElementById('referralSource').value;
-    submitReferral(source);
-    ensureTrialStarted();
-    localStorage.setItem(KEY_ONBOARDED, '1');
-    modal.style.display = 'none';
-    showPage(canUseMainApp() ? 'page4' : 'page1');
   });
 }
 
