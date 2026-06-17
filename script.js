@@ -77,7 +77,7 @@ const KEY_CUST_DATA    = 'lexi_cust_data';  // { "david okafor": { note, recurri
 const KEY_TRIAL_START  = 'lexi_trial_start';
 const KEY_TRIAL_END    = 'lexi_trial_end';
 const KEY_AUTH_REMEMBER_EMAIL = 'lexi_auth_remember_email';
-const TRIAL_DAYS       = 90;
+const TRIAL_DAYS       = 30;
 
 /* ===== SUBSCRIPTION ENTITLEMENTS ===== */
 function normaliseEntitlementRpcRow(data) {
@@ -407,11 +407,24 @@ function getTrialStartDate() {
   return ensureTrialStarted().start;
 }
 
+// The single authoritative trial end date (normalised to local midnight).
+// Prefers the server's date so every screen — and the server's own enforcement —
+// stay in step across devices; falls back to signup date + TRIAL_DAYS locally.
+function getTrialEndDate() {
+  if (typeof lexiEntitlement !== 'undefined' && lexiEntitlement?.trialEndsAt) {
+    const d = new Date(lexiEntitlement.trialEndsAt);
+    if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  const start = getTrialStartDate();
+  return new Date(start.getFullYear(), start.getMonth(), start.getDate() + TRIAL_DAYS);
+}
+
+// THE one place trial days are counted. Every screen (Account Info, Trials &
+// Plans, onboarding badge) must call this so they can never disagree.
 function getTrialDaysRemaining() {
   // Count by calendar day (ignore time-of-day) so the number ticks down at
-  // midnight, matching how "Member since" reads. Signup day shows the full 90.
-  const start = getTrialStartDate();
-  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + TRIAL_DAYS);
+  // midnight, matching how "Member since" reads. Signup day shows the full term.
+  const end = getTrialEndDate();
   const now = new Date();
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const ms = end.getTime() - todayMidnight.getTime();
@@ -3395,30 +3408,25 @@ async function openAccountInfoModal() {
     qsWrap.style.display = 'none';
   }
 
-  // Plan / trial status — default to trial line, override with paid plan if found
+  // Plan / trial status. Load the server entitlement first so the trial line uses
+  // the SAME shared counter the other screens see (no brief local-fallback flash),
+  // then show the right line for apprentice / paid / trial.
   const planEl = document.getElementById('accountPlan');
   if (planEl) {
-    const days = getTrialDaysRemaining();
-    planEl.textContent = days > 0 ? `Free trial — ${days} day${days === 1 ? '' : 's'} left` : 'Trial ended';
+    let entitlement = (typeof lexiEntitlement !== 'undefined') ? lexiEntitlement : null;
     if (lexiSupabase && user?.id) {
-      try {
-        const entitlement = lexiEntitlement || await loadLexiEntitlement();
-        if (entitlement?.planCode === 'trial') {
-          const end = entitlement.trialEndsAt ? new Date(entitlement.trialEndsAt) : null;
-          const remaining = end && !isNaN(end.getTime())
-            ? Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000))
-            : days;
-          planEl.textContent = `Free trial - ${remaining} day${remaining === 1 ? '' : 's'} left`;
-        } else if (entitlement?.planCode === 'apprentice') {
-          planEl.textContent = 'Plan: Apprentice (Free)';
-        } else if (entitlement) {
-          const status = (entitlement.subscriptionStatus || '').toLowerCase();
-          const statusNote = status && status !== 'active'
-            ? ` (${status.replaceAll('_', ' ')})`
-            : '';
-          planEl.textContent = `Plan: ${entitlement.planName}${statusNote}`;
-        }
-      } catch (e) { console.warn('Could not load plan:', e); }
+      try { entitlement = lexiEntitlement || await loadLexiEntitlement(); }
+      catch (e) { console.warn('Could not load plan:', e); }
+    }
+    if (entitlement?.planCode === 'apprentice') {
+      planEl.textContent = 'Plan: Apprentice (Free)';
+    } else if (entitlement && entitlement.planCode !== 'trial') {
+      const status = (entitlement.subscriptionStatus || '').toLowerCase();
+      const statusNote = status && status !== 'active' ? ` (${status.replaceAll('_', ' ')})` : '';
+      planEl.textContent = `Plan: ${entitlement.planName}${statusNote}`;
+    } else {
+      const days = getTrialDaysRemaining();
+      planEl.textContent = days > 0 ? `Free trial — ${days} day${days === 1 ? '' : 's'} left` : 'Trial ended';
     }
   }
 
