@@ -408,13 +408,12 @@ function getTrialStartDate() {
 }
 
 // The single authoritative trial end date (normalised to local midnight).
-// Prefers the server's date so every screen — and the server's own enforcement —
-// stay in step across devices; falls back to signup date + TRIAL_DAYS locally.
+// Always computed from the immutable signup date (auth user created_at) + the
+// current TRIAL_DAYS. We deliberately do NOT read lexiEntitlement.trialEndsAt:
+// that is a value stored once at signup, so it goes stale if the trial length
+// changes. created_at is server-issued and identical on every device, so this is
+// drift-proof and cross-device consistent without trusting a stored date.
 function getTrialEndDate() {
-  if (typeof lexiEntitlement !== 'undefined' && lexiEntitlement?.trialEndsAt) {
-    const d = new Date(lexiEntitlement.trialEndsAt);
-    if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  }
   const start = getTrialStartDate();
   return new Date(start.getFullYear(), start.getMonth(), start.getDate() + TRIAL_DAYS);
 }
