@@ -143,6 +143,23 @@ async function handleStripeCheckoutReturn() {
   }
 }
 
+// A founder code entered at signup is stashed in localStorage (the founder flow
+// needs an authenticated session, which only exists after the first confirmed
+// login). On that first authenticated load, offer to apply it.
+function maybeApplyPendingFounderCode() {
+  const code = (localStorage.getItem('lexi_pending_founder_code') || '').trim();
+  if (!code) return;
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return; // wait until truly signed in
+  // Clear immediately so it only fires once; the Trial & Plans entry remains as a
+  // fallback if they cancel the checkout.
+  localStorage.removeItem('lexi_pending_founder_code');
+  lexiConfirm(
+    `Apply your founder code "${code}" now to unlock your tester access?`,
+    () => startStripeCheckout('master', { founder: true, founderCode: code }),
+    { title: 'Founder code', okText: 'Apply code' }
+  );
+}
+
 async function startStripeCheckout(planCode, options = {}) {
   if (planCode !== 'tradesman' && planCode !== 'master') return;
   if (!lexiSupabase || !lexiAuthSession?.user?.id) {
@@ -231,9 +248,8 @@ async function claimLexiJobSlot(jobId) {
   const { data, error } = await lexiSupabase.rpc('claim_new_job', { p_job_id: jobId });
   if (error) throw error;
   const result = Array.isArray(data) ? data[0] : data;
-  if (result) {
-    await loadLexiEntitlement();
-  }
+  // Refresh entitlement in the background — don't block the send flow on it
+  if (result) loadLexiEntitlement().catch(() => {});
   return result || { allowed: false, counted: false, reason: 'empty_response' };
 }
 
@@ -434,7 +450,7 @@ function getTrialDaysRemaining() {
 const DEFAULT_COLOURS = { primary: '#1a1a1a', accent: '#555555', bg: '#ffffff' };
 
 // Tracks which state each obo tab is in so switchOboGrid and showPage can restore correctly
-const oboState = { svc: 'prompt', mat: 'prompt' }; // 'prompt' | 'postfill' | 'manual'
+const oboState = { svc: 'prompt', mat: 'prompt' }; // 'prompt' | 'postfill' | 'choice' | 'manual'
 let _switchOboGrid = null; // assigned inside DOMContentLoaded so showPage() can re-render the obo tab
 
 /* ===== TRADE AUTO-FILL DATA ===== */
@@ -923,6 +939,14 @@ function personaliseText() {
 })();
 
 /* ===== INIT ===== */
+// Register the service worker so notifications can reach the phone's system tray
+// (required on iOS/Android PWAs, including while the app is in the foreground).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service worker registration failed:', err));
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // About You -show more toggle
   const aboutYouMoreBtn = document.getElementById('aboutYouMoreBtn');
@@ -999,6 +1023,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   populateAuthSig();
   personaliseText();
   updateNotifToggleBtn();
+  maybeApplyPendingFounderCode();
   document.getElementById('jobsSpreadsheetToggle')?.addEventListener('change', e => {
     const lbl = document.getElementById('ssToggleLabel');
     if (e.target.checked) {
@@ -1066,6 +1091,9 @@ function setAuthMode(mode) {
   }
   const forgotBtn = document.getElementById('forgotPasswordBtn');
   if (forgotBtn) forgotBtn.style.display = mode === 'login' ? 'block' : 'none';
+  // Founder code is only offered at signup
+  const founderWrap = document.getElementById('authFounderWrap');
+  if (founderWrap) founderWrap.style.display = mode === 'signup' ? 'block' : 'none';
   setAuthMessage('');
 }
 
@@ -1088,6 +1116,13 @@ function setupAuthScreen() {
   document.getElementById('authLoginTab')?.addEventListener('click', () => setAuthMode('login'));
   document.getElementById('authSubmitBtn')?.addEventListener('click', handleEmailAuth);
   document.getElementById('forgotPasswordBtn')?.addEventListener('click', handleForgotPassword);
+  document.getElementById('authFounderToggle')?.addEventListener('change', e => {
+    const input = document.getElementById('authFounderCode');
+    if (input) {
+      input.style.display = e.target.checked ? 'block' : 'none';
+      if (e.target.checked) input.focus(); else input.value = '';
+    }
+  });
   document.getElementById('authPassword')?.addEventListener('keydown', event => {
     if (event.key === 'Enter') handleEmailAuth();
   });
@@ -1184,6 +1219,15 @@ async function handleEmailAuth() {
   if (authMode === 'signup') {
     const pwError = validatePasswordStrength(password);
     if (pwError) { setAuthMessage(pwError, 'error'); return; }
+    // Stash any founder code so it can be applied after their first confirmed login
+    // (the founder flow needs an authenticated session, which doesn't exist yet).
+    const founderOn = document.getElementById('authFounderToggle')?.checked;
+    const founderCode = (document.getElementById('authFounderCode')?.value || '').trim();
+    if (founderOn && founderCode) {
+      localStorage.setItem('lexi_pending_founder_code', founderCode);
+    } else {
+      localStorage.removeItem('lexi_pending_founder_code');
+    }
   }
   submitBtn.disabled = true;
   submitBtn.textContent = authMode === 'signup' ? 'Creating account...' : 'Logging in...';
@@ -1322,7 +1366,10 @@ function businessRowToCompany(row) {
     rateHourly:  row.hourly_rate   != null ? Number(row.hourly_rate)   : null,
     rateHalfDay: row.half_day_rate != null ? Number(row.half_day_rate) : null,
     rateDay:     row.day_rate      != null ? Number(row.day_rate)      : null,
-    rateCallout: row.callout_charge != null ? Number(row.callout_charge) : null
+    rateCallout: row.callout_charge != null ? Number(row.callout_charge) : null,
+    // Preference lives in payment_details JSON so it persists even if no dedicated
+    // column exists yet. Falls back to the top-level column if one is added later.
+    autoHoldingMessage: (payment.autoHoldingMessage != null ? payment.autoHoldingMessage : row.auto_holding_message) || false
   };
 }
 
@@ -1357,7 +1404,8 @@ function companyToBusinessRow(company) {
       bankSort: company.bankSort || '',
       bankAcc: company.bankAcc || '',
       paypalRef: company.paypalRef || '',
-      payOther: company.payOther || ''
+      payOther: company.payOther || '',
+      autoHoldingMessage: !!company.autoHoldingMessage
     },
     hourly_rate:    company.rateHourly   != null ? Number(company.rateHourly)  : null,
     half_day_rate:  company.rateHalfDay  != null ? Number(company.rateHalfDay) : null,
@@ -2631,6 +2679,16 @@ function nextRef(prefix, key) {
 }
 
 /* ===== TOAST ===== */
+// Returns the element so the caller can remove() it manually when ready.
+function showPersistentToast(msg) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span class="toast-spinner"></span> ${msg}`;
+  container.appendChild(el);
+  return el;
+}
+
 function toast(msg, type = '', duration = 3000) {
   const container = document.getElementById('toastContainer');
   const el = document.createElement('div');
@@ -3178,8 +3236,23 @@ function setupNavigation() {
   });
   document.getElementById('closeTrialPlansBtn')?.addEventListener('click', closeTrialPlansModal);
   document.getElementById('trialKeepGoingBtn')?.addEventListener('click', closeTrialPlansModal);
-  document.getElementById('trialChooseTradesmanBtn')?.addEventListener('click', () => startStripeCheckout('tradesman'));
-  document.getElementById('trialChooseMasterBtn')?.addEventListener('click', () => startStripeCheckout('master'));
+  document.getElementById('trialUpgradeBtn')?.addEventListener('click', openPlanComparisonModal);
+  // Plan comparison modal
+  document.getElementById('closePlanComparisonBtn')?.addEventListener('click', closePlanComparisonModal);
+  document.getElementById('planComparisonModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closePlanComparisonModal();
+  });
+  document.getElementById('planChooseApprentice')?.addEventListener('click', () => {
+    closePlanComparisonModal();
+    closeTrialPlansModal();
+  });
+  document.getElementById('planChooseTradesman')?.addEventListener('click', () => startStripeCheckout('tradesman'));
+  // Master is "Coming soon" pre-launch — capture interest via the waitlist instead of
+  // Stripe. To re-enable selling Master, revert this to startStripeCheckout('master').
+  document.getElementById('planChooseMaster')?.addEventListener('click', () => {
+    window.open('https://tally.so/r/yP1JXg', '_blank');
+    closePlanComparisonModal();
+  });
   document.getElementById('trialFounderToggleBtn')?.addEventListener('click', () => {
     const box = document.getElementById('founderTesterBox');
     if (!box) return;
@@ -3373,6 +3446,16 @@ function closeTrialPlansModal() {
     _plansFromAccount = false;
     openAccountInfoModal();
   }
+}
+
+function openPlanComparisonModal() {
+  const modal = document.getElementById('planComparisonModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closePlanComparisonModal() {
+  const modal = document.getElementById('planComparisonModal');
+  if (modal) modal.style.display = 'none';
 }
 
 /* ── Account Information modal ── */
@@ -4512,10 +4595,14 @@ function setupPage2() {
     document.getElementById('oboManualSection').style.display = '';
   };
   document.getElementById('autoFillServicesNoBtn')?.addEventListener('click', () => {
-    oboState.svc = 'manual'; showManualSection('autoFillServicesPrompt');
+    oboState.svc = 'choice';
+    document.getElementById('autoFillServicesPrompt').style.display = 'none';
+    document.getElementById('oboChoicePanel').style.display = '';
   });
   document.getElementById('autoFillMaterialsNoBtn')?.addEventListener('click', () => {
-    oboState.mat = 'manual'; showManualSection('autoFillMaterialsPrompt');
+    oboState.mat = 'choice';
+    document.getElementById('autoFillMaterialsPrompt').style.display = 'none';
+    document.getElementById('oboChoicePanel').style.display = '';
   });
 
   // Post-autofill: "Add more manually"
@@ -4530,11 +4617,40 @@ function setupPage2() {
     document.getElementById('oboManualSection').style.display = '';
   });
 
-  // Manual section "Back" — return to the prompt so they can auto-fill instead
+  // Manual section "Back" — return to the one-by-one/bulk choice
   document.getElementById('oboManualBackBtn')?.addEventListener('click', () => {
+    const isMat = document.querySelector('#jobCatSelector .obo-tab.active')?.dataset?.cat === 'materials';
+    if (isMat) oboState.mat = 'choice'; else oboState.svc = 'choice';
+    if (typeof _switchOboGrid === 'function') _switchOboGrid(isMat ? 'materials' : 'service');
+  });
+
+  // Choice panel "Back" — return to the autofill prompt
+  document.getElementById('oboChoiceBackBtn')?.addEventListener('click', () => {
     const isMat = document.querySelector('#jobCatSelector .obo-tab.active')?.dataset?.cat === 'materials';
     if (isMat) oboState.mat = 'prompt'; else oboState.svc = 'prompt';
     if (typeof _switchOboGrid === 'function') _switchOboGrid(isMat ? 'materials' : 'service');
+  });
+
+  // Choice: add one by one
+  document.getElementById('oboChooseOneByOne')?.addEventListener('click', () => {
+    const isMat = document.querySelector('#jobCatSelector .obo-tab.active')?.dataset?.cat === 'materials';
+    if (isMat) oboState.mat = 'manual'; else oboState.svc = 'manual';
+    if (typeof _switchOboGrid === 'function') _switchOboGrid(isMat ? 'materials' : 'service');
+  });
+
+  // Choice: add in bulk — scroll to bulk section
+  document.getElementById('oboChooseBulk')?.addEventListener('click', () => {
+    document.getElementById('bulkHeading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // Postfill "Back" — return to the autofill prompt
+  document.getElementById('oboPostFillServicesBackBtn')?.addEventListener('click', () => {
+    oboState.svc = 'prompt';
+    if (typeof _switchOboGrid === 'function') _switchOboGrid('service');
+  });
+  document.getElementById('oboPostFillMaterialsBackBtn')?.addEventListener('click', () => {
+    oboState.mat = 'prompt';
+    if (typeof _switchOboGrid === 'function') _switchOboGrid('materials');
   });
 
   // Post-autofill: "Change trade"
@@ -4618,6 +4734,7 @@ function setupPage2() {
     document.getElementById('autoFillMaterialsPrompt').style.display = 'none';
     document.getElementById('oboPostFillServices').style.display     = 'none';
     document.getElementById('oboPostFillMaterials').style.display    = 'none';
+    document.getElementById('oboChoicePanel').style.display          = 'none';
     document.getElementById('oboManualSection').style.display        = 'none';
     // Restore correct state for the active tab
     const tabState = isMat ? oboState.mat : oboState.svc;
@@ -4625,6 +4742,8 @@ function setupPage2() {
       document.getElementById(isMat ? 'autoFillMaterialsPrompt' : 'autoFillServicesPrompt').style.display = '';
     } else if (tabState === 'postfill') {
       document.getElementById(isMat ? 'oboPostFillMaterials' : 'oboPostFillServices').style.display = '';
+    } else if (tabState === 'choice') {
+      document.getElementById('oboChoicePanel').style.display = '';
     } else if (tabState === 'manual') {
       document.getElementById('oboManualSection').style.display = '';
     }
@@ -6955,16 +7074,14 @@ function openSpreadsheetView() {
   buildSsHead();
   buildSsRows();
 
-  const hint  = document.getElementById('ssRotateHint');
   const shell = document.getElementById('spreadsheetShell');
-  // When the phone is held in portrait, force the spreadsheet into landscape
+  // When the phone is held in portrait, auto-rotate the spreadsheet into landscape
   // via CSS so the wide table is readable. When the device is physically in
   // landscape, show it normally. Works on iOS + Android regardless of the
   // OS rotation lock or whether the app is installed (manifest is portrait).
   const updateRotateHint = () => {
     const portrait = window.innerHeight > window.innerWidth;
     if (shell) shell.classList.toggle('ss-force-landscape', portrait);
-    if (hint)  hint.style.display = portrait ? 'flex' : 'none';
   };
   updateRotateHint();
   // Re-check when the device actually rotates
@@ -7775,10 +7892,13 @@ function setupModals() {
 
     // Ensure the doc is saved so we can generate an acceptance token and use customer data
     let sendDocRef = activeDocId;
+    let sendingToast = null;
     if (!sendDocRef) {
-      // Draft send (from form) -auto-save first so we have an ID and can token-sign it
+      // Draft send (from form) — show feedback immediately so user knows the tap registered
+      sendingToast = showPersistentToast('Getting ready to send…');
+      // Auto-save first so we have an ID and can token-sign it
       const newId = uid();
-      if (!await authoriseNewLexiJob(newId)) return;
+      if (!await authoriseNewLexiJob(newId)) { sendingToast?.remove(); return; }
       const q = editedDoc.quote || {};
       const newDoc = {
         id: newId,
@@ -7817,6 +7937,7 @@ function setupModals() {
       }
     }
 
+    sendingToast?.remove();
     const savedDoc = state.saved.find(d => d.id === sendDocRef);
     if (savedDoc) {
       const baseMsg = quoteData.quoteNotes || '';
@@ -8054,6 +8175,9 @@ function openPreview(html, type, docId = null) {
   const modal = document.getElementById('previewModal');
   modal.classList.add('modal-front');
   modal.style.display = 'flex';
+  // Wake the database now, while the user is reading, so the Send round-trips
+  // (claim_new_job + the document upload) are fast by the time they tap Send.
+  warmupSupabase();
 }
 
 function closePreview() {
@@ -11588,6 +11712,25 @@ function printRaw(inner) {
   setTimeout(() => { win.print(); win.close(); }, 400);
 }
 
+/* ── Warm the (possibly paused) Supabase database with a cheap query ──
+   Free-tier projects pause after inactivity and cold-start on the first request,
+   which is what made the Send flow hang for ~45s. Calling this when the preview
+   opens absorbs that wake-up while the user is still reading. Throttled so a burst
+   of opens only pings once. */
+let _lastSupabaseWarmup = 0;
+function warmupSupabase() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  const now = Date.now();
+  if (now - _lastSupabaseWarmup < 60000) return; // at most once a minute
+  _lastSupabaseWarmup = now;
+  // HEAD query: hits Postgres to wake it, returns no rows. Failure is harmless.
+  lexiSupabase
+    .from('price_items')
+    .select('*', { head: true, count: 'estimated' })
+    .limit(1)
+    .then(() => {}, () => {});
+}
+
 /* ── Upload a document to Supabase Storage and return its public URL ── */
 async function uploadDocToStorage(htmlStr, filename, acceptToken = '', docType = '') {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) {
@@ -11637,13 +11780,17 @@ async function uploadDocToStorage(htmlStr, filename, acceptToken = '', docType =
   }
 }
 
-async function sendDoc(html, filename, message = '', custEmail = '', custPhone = '', passedDocType = '', acceptToken = '') {
+function sendDoc(html, filename, message = '', custEmail = '', custPhone = '', passedDocType = '', acceptToken = '') {
   const htmlStr = wrapDoc(html);
 
-  // Upload to Supabase Storage for a permanent shareable link
-  const docUrl = await uploadDocToStorage(htmlStr, filename, acceptToken, passedDocType);
+  // Start the Storage upload in parallel and show the channel picker IMMEDIATELY.
+  // The upload result (the shareable link) is only needed once the user actually
+  // picks a channel, so we hand sendDocRaw a promise instead of blocking on it.
+  // On a cold database the upload can take many seconds — this stops that from
+  // freezing the "How would you like to send?" modal.
+  const docUrlPromise = uploadDocToStorage(htmlStr, filename, acceptToken, passedDocType);
 
-  sendDocRaw(htmlStr, filename, message, custEmail, docUrl, custPhone, passedDocType);
+  sendDocRaw(htmlStr, filename, message, custEmail, docUrlPromise, custPhone, passedDocType);
 }
 
 function showSendMethodPicker(onEmail, onWhatsApp, onCopy, hasEmail = false, hasPhone = false) {
@@ -11726,23 +11873,42 @@ function showSendMethodPicker(onEmail, onWhatsApp, onCopy, hasEmail = false, has
   overlay.addEventListener('click', e => { if (e.target === overlay) { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); } });
 }
 
-async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUrl = null, custPhone = '', passedDocType = '') {
+// docUrlSource may be a resolved URL string, null, or a Promise that resolves to
+// either — the link is only woven into the message at the moment the user picks a
+// channel, so the picker can appear instantly while the upload finishes in the background.
+async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUrlSource = null, custPhone = '', passedDocType = '') {
   const rawType = passedDocType || filename.match(/^(estimate|quote|invoice|receipt)/i)?.[0] || 'document';
   const docType = rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase();
   const bizName = state.company?.businessName || [state.company?.firstName, state.company?.lastName].filter(Boolean).join(' ') || 'Lexi Handles It';
   const subject = `Your ${docType} from ${bizName}`;
 
-  // Replace the {VIEW_LINK} placeholder with the real storage URL (or remove the line if unavailable)
-  let fullMsg = message;
-  if (fullMsg.includes('{VIEW_LINK}')) {
-    if (docUrl) {
-      fullMsg = fullMsg.replace('{VIEW_LINK}', docUrl);
-    } else {
-      // Remove the whole "You can view..." paragraph if no link
-      fullMsg = fullMsg.replace(/You can view your .+? by clicking the link below:\n\{VIEW_LINK\}\n\n/s, '');
-      fullMsg = fullMsg.replace('\n{VIEW_LINK}\n', '\n');
+  // Weave the real storage URL into the {VIEW_LINK} placeholder (or strip the line if there's no link).
+  const buildFullMsg = (docUrl) => {
+    let fullMsg = message;
+    if (fullMsg.includes('{VIEW_LINK}')) {
+      if (docUrl) {
+        fullMsg = fullMsg.replace('{VIEW_LINK}', docUrl);
+      } else {
+        // Remove the whole "You can view..." paragraph if no link
+        fullMsg = fullMsg.replace(/You can view your .+? by clicking the link below:\n\{VIEW_LINK\}\n\n/s, '');
+        fullMsg = fullMsg.replace('\n{VIEW_LINK}\n', '\n');
+      }
     }
-  }
+    return fullMsg;
+  };
+
+  // Resolve the message lazily and only once: await the in-flight upload the first
+  // time a channel is chosen, then cache the result for any subsequent choice.
+  let _fullMsg = null;
+  const resolveMsg = async () => {
+    if (_fullMsg !== null) return _fullMsg;
+    let docUrl = docUrlSource;
+    if (docUrl && typeof docUrl.then === 'function') {
+      try { docUrl = await docUrl; } catch { docUrl = null; }
+    }
+    _fullMsg = buildFullMsg(docUrl);
+    return _fullMsg;
+  };
 
   const stampSentVia = (via) => {
     const doc = activeDocId ? state.saved.find(d => d.id === activeDocId) : null;
@@ -11750,19 +11916,27 @@ async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUr
   };
   // doEmail / doWhatsApp accept an optional override value for when the user
   // just supplied the missing detail via the capture form in the picker
-  const doEmail = (emailOverride) => {
+  const doEmail = async (emailOverride) => {
     const email = emailOverride || custEmail;
     stampSentVia('email');
+    const fullMsg = await resolveMsg();
     openEmailCompose(email, subject, fullMsg, false, showPicker);
   };
-  const doWhatsApp = (phoneOverride) => {
+  const doWhatsApp = async (phoneOverride) => {
     const phone = formatWhatsAppNumber(phoneOverride || custPhone);
     stampSentVia('whatsapp');
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`, '_blank');
+    // Claim the popup within the user gesture by opening a blank tab synchronously,
+    // then redirect it once the link is ready. Prevents mobile popup-blockers from
+    // killing the WhatsApp hand-off when the upload hasn't finished yet.
+    const win = window.open('', '_blank');
+    const fullMsg = await resolveMsg();
+    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`;
+    if (win) { win.location.href = waUrl; } else { window.open(waUrl, '_blank'); }
   };
 
   const showPicker = () => showSendMethodPicker(doEmail, doWhatsApp, doCopy, !!custEmail, !!custPhone);
   const doCopy = async () => {
+    const fullMsg = await resolveMsg();
     if (fullMsg && navigator.clipboard) {
       try { await navigator.clipboard.writeText(fullMsg); toast('Message copied -paste it into WhatsApp or email.', '', 6000); }
       catch(e) { toast('Could not copy to clipboard.', 'error', 4000); }
@@ -13183,13 +13357,25 @@ const NOTIF_KEY = 'lexi_notif_asked';
 function sendLexiNotification(title, body, tag = 'lexi') {
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
+  const opts = {
+    body,
+    tag,
+    icon: '1 Lexi Handles It Transparent.png',
+    badge: '1 Lexi Handles It Transparent.png',
+  };
+  // Prefer the service worker — on mobile (iOS PWA / Android) the plain
+  // Notification constructor often won't post to the system tray, especially
+  // while the app is in the foreground. The SW's showNotification does.
+  if ('serviceWorker' in navigator && navigator.serviceWorker) {
+    navigator.serviceWorker.ready
+      .then(reg => reg.showNotification(title, opts))
+      .catch(() => {
+        try { const n = new Notification(title, opts); setTimeout(() => n.close(), 8000); } catch(e) {}
+      });
+    return;
+  }
   try {
-    const n = new Notification(title, {
-      body,
-      tag,
-      icon: '1 Lexi Handles It Transparent.png',
-      badge: '1 Lexi Handles It Transparent.png',
-    });
+    const n = new Notification(title, opts);
     setTimeout(() => n.close(), 8000);
   } catch(e) { console.warn('Notification failed:', e); }
 }
@@ -14143,31 +14329,49 @@ function openEarningsModal() {
     </div>
 
     ${canExportEarnings
-      ? '<button type="button" class="btn btn-outline w-100" id="exportEarningsBtn" style="margin-top:14px">Download as Text</button>'
-      : '<button type="button" class="btn btn-outline w-100 lexi-feature-locked" data-lexi-feature="earnings_export" data-lexi-level="full" style="margin-top:14px">Download report - Master</button>'}`;
+      ? '<button type="button" class="btn btn-outline w-100" id="exportEarningsBtn" style="margin-top:14px">Download Spreadsheet</button>'
+      : '<button type="button" class="btn btn-outline w-100 lexi-feature-locked" data-lexi-feature="earnings_export" data-lexi-level="full" style="margin-top:14px">Download Spreadsheet - Master</button>'}`;
 
   // Wire export button
   document.getElementById('exportEarningsBtn')?.addEventListener('click', () => {
-    const lines = [
-      `Lexi Handles It -Earnings Summary`,
-      `Tax year ${taxYearLabel}`,
-      ``,
-      `Total invoiced:   ${fmtPrice(totalInvoiced)}`,
-      `Total collected:  ${fmtPrice(totalPaid)}`,
-      `Outstanding:      ${fmtPrice(totalOutstanding)}`,
-      `Number of jobs:   ${jobCount}`,
-      ``,
-      `Month-by-month:`,
-      ...months.map(m => {
-        const [yr, mo] = m.split('-');
-        return `  ${monthNames[parseInt(mo)-1]} ${yr}: invoiced ${fmtPrice(byMonth[m].invoiced)}, collected ${fmtPrice(byMonth[m].paid)}`;
-      }),
-      ``,
-      `Generated by Lexi Handles It`
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    // CSV — opens directly in Excel / Google Sheets. Numbers are kept as plain
+    // numbers (not "£x") so the user can sum and filter them.
+    const esc = (v) => {
+      const s = String(v == null ? '' : v);
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const rows = [];
+    rows.push(['Lexi Handles It — Earnings Export']);
+    rows.push(['Tax year', `${taxYearLabel} (6 Apr – 5 Apr)`]);
+    rows.push([`Generated ${new Date().toLocaleDateString('en-GB')}`]);
+    rows.push([]);
+    rows.push(['Customer', 'Reference', 'Type', 'Date', 'Invoiced (£)', 'Paid (£)', 'Outstanding (£)', 'Status', 'Last payment']);
+
+    const detail = (state.saved || [])
+      .filter(d => { const dd = (d.quote || {}).date || d.date; return dd && new Date(dd) >= taxYearStart; })
+      .sort((a, b) => String((a.quote || {}).date || a.date).localeCompare(String((b.quote || {}).date || b.date)));
+
+    detail.forEach(d => {
+      const q = d.quote || {};
+      const name = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || d.custName || '—';
+      const payments = getDocPayments(d);
+      const paid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+      const total = d.total || 0;
+      const outstanding = Math.max(0, total - paid);
+      const status = (total > 0 && outstanding <= 0) ? 'Paid' : (paid > 0 ? 'Part-paid' : 'Outstanding');
+      const lastPay = payments.length ? (payments[payments.length - 1].date || '') : '';
+      rows.push([name, q.ref || d.ref || '', q.type || d.type || '', q.date || d.date || '',
+                 total.toFixed(2), paid.toFixed(2), outstanding.toFixed(2), status, lastPay]);
+    });
+
+    rows.push([]);
+    rows.push(['TOTALS', '', '', '', totalInvoiced.toFixed(2), totalPaid.toFixed(2), totalOutstanding.toFixed(2), '', '']);
+
+    const csv = rows.map(r => r.map(esc).join(',')).join('\r\n');
+    // Leading BOM so Excel reads the £ symbols and accents correctly.
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `lexi-earnings-${taxYearLabel}.txt`; a.click();
+    a.download = `lexi-earnings-${taxYearLabel}.csv`; a.click();
   });
 
   document.getElementById('earningsModal').style.display = 'flex';

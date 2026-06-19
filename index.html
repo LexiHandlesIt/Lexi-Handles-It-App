@@ -56,6 +56,14 @@
           <button type="button" id="forgotPasswordBtn" style="display:none;background:none;border:none;color:inherit;font-size:0.85rem;cursor:pointer;padding:0;font-family:inherit">Forgot password?</button>
         </div>
 
+        <div class="auth-founder" id="authFounderWrap" style="display:none;margin-top:10px">
+          <label class="auth-remember">
+            <input type="checkbox" id="authFounderToggle">
+            <span>Got a founder code?</span>
+          </label>
+          <input type="text" id="authFounderCode" autocomplete="off" placeholder="Enter your founder code" style="display:none;margin-top:8px">
+        </div>
+
         <p class="auth-hint" id="authHint">Use uppercase, lowercase and a number. I'll send a confirmation email before you log in.</p>
         <div class="auth-message" id="authMessage" role="status" aria-live="polite"></div>
 
@@ -260,9 +268,8 @@
           <span id="trialStatusCopy">Use Lexi properly first. When the trial is nearly done, I'll help you choose the plan that fits.</span>
         </div>
         <div class="trial-plan-actions">
-          <button type="button" class="btn btn-sage btn-full" id="trialKeepGoingBtn">Keep using Lexi free</button>
-          <button type="button" class="btn btn-outline btn-full" id="trialChooseTradesmanBtn">Upgrade to Tradesman</button>
-          <button type="button" class="btn btn-outline btn-full" id="trialChooseMasterBtn">Upgrade to Master</button>
+          <button type="button" class="btn btn-sage btn-full" id="trialKeepGoingBtn">Keep using Lexi</button>
+          <button type="button" class="btn btn-outline btn-full" id="trialUpgradeBtn">Upgrade</button>
           <button type="button" class="btn btn-outline btn-full" id="trialFounderToggleBtn">I have a founder code</button>
         </div>
         <div class="founder-tester-box" id="founderTesterBox" style="display:none">
@@ -272,6 +279,97 @@
             <input type="text" id="founderTesterCode" autocomplete="off" placeholder="Invite code">
             <button type="button" class="btn btn-outline" id="founderTesterBtn">Use code</button>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLAN COMPARISON MODAL -->
+  <div class="modal-overlay" id="planComparisonModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="planComparisonTitle">
+    <div class="modal-card plan-compare-card">
+      <div class="modal-header">
+        <h2 class="modal-title" id="planComparisonTitle">Choose your plan</h2>
+        <button type="button" class="modal-close" id="closePlanComparisonBtn" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="plan-compare-intro">Every plan keeps your work safe. Upgrade any time as your business grows.</p>
+        <div class="plan-grid">
+
+          <!-- APPRENTICE -->
+          <div class="plan-col">
+            <div class="plan-col-head">
+              <h3 class="plan-name">Apprentice Plan</h3>
+              <div class="plan-price"><span class="plan-price-big">Free</span></div>
+              <div class="plan-allow">3 new jobs each month</div>
+              <p class="plan-tagline">For anyone starting out or only taking on a few jobs.</p>
+            </div>
+            <ul class="plan-features">
+              <li>Create estimates, quotes, invoices and receipts</li>
+              <li>Add your business details and logo</li>
+              <li>Save your usual rates, services and materials</li>
+              <li>Keep customer details and job history together</li>
+              <li>Record whether a job has been paid</li>
+              <li>Send documents by email, WhatsApp or link</li>
+              <li>Back up and export your records</li>
+              <li class="plan-note">Lexi branding appears at the bottom of documents.</li>
+            </ul>
+            <button type="button" class="btn btn-outline btn-full plan-cta" id="planChooseApprentice">Stay on Apprentice</button>
+          </div>
+
+          <!-- TRADESMAN -->
+          <div class="plan-col plan-col-featured">
+            <div class="plan-badge">Most popular</div>
+            <div class="plan-col-head">
+              <h3 class="plan-name">Tradesman Plan</h3>
+              <div class="plan-price"><span class="plan-price-big">£10</span><span class="plan-price-per">/month</span></div>
+              <div class="plan-price-note">Early-adopter price · normally £15</div>
+              <div class="plan-allow">20 new jobs each month</div>
+              <p class="plan-tagline">For busy tradespeople who want the business side handled properly.</p>
+            </div>
+            <div class="plan-plus">Everything in Apprentice, plus:</div>
+            <ul class="plan-features">
+              <li>Fully branded documents with your own colours</li>
+              <li>No Lexi branding on customer documents</li>
+              <li>Full customer dashboards and job tracking</li>
+              <li>Customer quote acceptance</li>
+              <li>Deposits, part-payments and payment history</li>
+              <li>Payment due dates, overdue tracking and chasing</li>
+              <li>Before-and-after job photos</li>
+              <li>Customer message and booking templates</li>
+              <li>Review requests when a job is paid</li>
+              <li>QR code and qualification sharing</li>
+              <li>Earnings overview</li>
+              <li>Quiet Season when you need to pause</li>
+            </ul>
+            <button type="button" class="btn btn-sage btn-full plan-cta" id="planChooseTradesman">Upgrade to Tradesman</button>
+          </div>
+
+          <!-- MASTER -->
+          <div class="plan-col">
+            <div class="plan-badge plan-badge-soon">Coming soon</div>
+            <div class="plan-col-head">
+              <h3 class="plan-name">Master Plan</h3>
+              <div class="plan-price"><span class="plan-price-big">£15</span><span class="plan-price-per">/month</span></div>
+              <div class="plan-price-note">Early-adopter price · normally £25</div>
+              <div class="plan-allow">Unlimited jobs</div>
+              <p class="plan-tagline">For established tradespeople who want Lexi watching the whole business.</p>
+            </div>
+            <div class="plan-plus">Everything in Tradesman, plus:</div>
+            <ul class="plan-features">
+              <li>Unlimited new jobs</li>
+              <li>A clear list of what needs your attention</li>
+              <li>Quote and estimate follow-up reminders</li>
+              <li>Recurring-customer visit reminders</li>
+              <li>Alerts for accepted quotes, overdue invoices and upcoming jobs</li>
+              <li>Advanced spreadsheet-style job management</li>
+              <li>Detailed monthly and tax-year earnings</li>
+              <li>Advanced business and earnings exports</li>
+              <li>Priority support</li>
+              <li>Early access to selected new features</li>
+            </ul>
+            <button type="button" class="btn btn-outline btn-full plan-cta" id="planChooseMaster">Notify me when it launches</button>
+          </div>
+
         </div>
       </div>
     </div>
@@ -774,19 +872,30 @@
 
         <!-- Post-autofill state — shown after autofill, before manual section -->
         <div id="oboPostFillServices" style="display:none">
+          <button type="button" class="obo-back-btn" id="oboPostFillServicesBackBtn">← Back</button>
           <div class="autofill-btns">
             <button type="button" class="btn btn-autofill-no" id="addMoreServicesManuallytBtn">Add Services Manually</button>
             <button type="button" class="btn btn-autofill-no" id="changeTradeBtnSvc">Change Trade</button>
           </div>
         </div>
         <div id="oboPostFillMaterials" style="display:none">
+          <button type="button" class="obo-back-btn" id="oboPostFillMaterialsBackBtn">← Back</button>
           <div class="autofill-btns">
             <button type="button" class="btn btn-autofill-no" id="addMoreMaterialsManuallyBtn">Add Materials Manually</button>
             <button type="button" class="btn btn-autofill-no" id="changeTradeBtnMat">Change Trade</button>
           </div>
         </div>
 
-        <!-- Manual entry — hidden until user clicks "No, I'll add it myself" or "Add more manually" -->
+        <!-- Choice: add one by one vs add in bulk (shown after declining autofill) -->
+        <div id="oboChoicePanel" style="display:none">
+          <button type="button" class="obo-back-btn" id="oboChoiceBackBtn">← Back</button>
+          <div class="autofill-btns">
+            <button type="button" class="btn btn-autofill-no" id="oboChooseOneByOne">Add one by one</button>
+            <button type="button" class="btn btn-autofill-no" id="oboChooseBulk">Add in bulk</button>
+          </div>
+        </div>
+
+        <!-- Manual entry — hidden until user clicks "Add one by one" -->
         <div id="oboManualSection" style="display:none">
 
         <button type="button" class="obo-back-btn" id="oboManualBackBtn">← Back</button>
@@ -1017,17 +1126,8 @@
         </div>
       </div>
 
-      <!-- Push notifications -->
-      <div class="card">
-        <h2 class="card-title">Push notifications?</h2>
-        <div class="toggle-row">
-          <div class="toggle-desc">Get alerted when a quote is accepted, even when the app is closed.</div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="notifToggleBtn">
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          </label>
-        </div>
-      </div>
+      <!-- Push notifications card removed pre-launch — feature not fully functional yet.
+           Re-add when Web Push (closed-app notifications) is built. -->
 
       <div class="page-footer">
         <button type="button" class="btn btn-outline btn-lg" id="bizBackToServices">Back</button>
@@ -2577,17 +2677,7 @@
       <img src="Lexi OK.png" alt="Lexi" style="height:90px;object-fit:contain;margin:0 auto 10px;display:block" onerror="this.style.display='none'">
       <h2 class="modal-title" style="margin-bottom:6px;color:#2e7d32">Quote Accepted!</h2>
       <p id="quoteAcceptedMsg" style="color:#555;font-size:0.9rem;margin:0 0 16px;line-height:1.6"></p>
-      <div id="acceptedNotifPrompt" style="display:none;align-items:center;gap:10px;background:#f5f0eb;border-radius:10px;padding:12px 14px;margin-bottom:16px;text-align:left">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7D5730" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        <div style="flex:1">
-          <div style="font-size:0.82rem;font-weight:700;color:#333;margin-bottom:2px">Get notified next time</div>
-          <div style="font-size:0.76rem;color:#666;line-height:1.4">Enable notifications so Lexi can alert you the moment a job is accepted, even when the app is closed.</div>
-        </div>
-        <label class="toggle-switch" style="flex-shrink:0" title="Enable notifications">
-          <input type="checkbox" id="acceptedNotifToggle" onchange="if(this.checked) requestLexiNotifications()">
-          <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        </label>
-      </div>
+      <!-- Notification opt-in prompt removed pre-launch — re-add with Web Push feature. -->
       <div id="acceptedBookingSection" style="display:none;text-align:left;margin-bottom:16px">
         <div style="font-weight:700;font-size:0.9rem;color:#333;margin-bottom:8px;text-align:center">Pick a date to book them in</div>
         <div style="display:flex;gap:10px">
@@ -2725,12 +2815,8 @@
       <div class="spreadsheet-topbar">
         <span class="spreadsheet-title" id="spreadsheetTitle">All Jobs</span>
         <div class="spreadsheet-topbar-right">
-          <span class="spreadsheet-rotate-hint" id="ssRotateHint">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
-            Rotate
-          </span>
-          <label class="ss-toggle-wrap" title="Switch back to list view">
-            <span class="ss-toggle-label">View as list</span>
+          <label class="ss-toggle-wrap" title="Switch back to card view">
+            <span class="ss-toggle-label">View as cards</span>
             <label class="toggle-switch">
               <input type="checkbox" id="ssBackToListToggle">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -2752,10 +2838,6 @@
         <button type="button" class="ss-toolbar-btn" id="ssColsBtn">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           Columns
-        </button>
-        <button type="button" class="ss-toolbar-btn" id="ssCsvBtn">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download
         </button>
       </div>
       <div class="spreadsheet-scroll">

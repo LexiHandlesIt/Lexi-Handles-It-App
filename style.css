@@ -1125,6 +1125,117 @@ input[type="text"].sig-text-input:focus {
   line-height: 1.35;
 }
 
+/* ===== PLAN COMPARISON MODAL ===== */
+.plan-compare-card {
+  max-width: 960px;
+  width: 100%;
+}
+.plan-compare-intro {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.plan-col {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  background: var(--white);
+}
+.plan-col-featured {
+  border-color: var(--sage);
+  box-shadow: 0 0 0 1px var(--sage);
+}
+.plan-badge {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--sage);
+  color: var(--white);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.plan-badge-soon { background: var(--terra); }
+
+.plan-name {
+  margin: 0 0 6px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--walnut);
+}
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.plan-price-big { font-size: 1.7rem; font-weight: 800; color: var(--terra); }
+.plan-price-per { font-size: 0.85rem; color: var(--terra); }
+.plan-price-note { font-size: 0.72rem; color: var(--terra); margin-top: 2px; }
+.plan-allow {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--sage);
+}
+.plan-tagline {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.plan-plus {
+  margin: 14px 0 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.plan-features {
+  list-style: none;
+  margin: 12px 0 18px;
+  padding: 0;
+  flex: 1;
+}
+.plan-features li {
+  position: relative;
+  padding: 4px 0 4px 22px;
+  font-size: 0.84rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.plan-features li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  color: var(--sage);
+  font-weight: 700;
+}
+.plan-features li.plan-note {
+  padding-left: 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.plan-features li.plan-note::before { content: none; }
+.plan-cta { margin-top: auto; }
+
+@media (max-width: 760px) {
+  .plan-grid { grid-template-columns: 1fr; }
+  .plan-col-featured { margin-top: 10px; }
+}
+
 @media (max-width: 480px) {
   .trial-plan-card .modal-body {
     padding-left: 24px;
@@ -5083,6 +5194,19 @@ input[type="text"].sig-text-input:focus {
 .toast.success { background: var(--success); }
 .toast.error { background: var(--danger); }
 .toast.fade-out { animation: toastOut 0.3s ease forwards; }
+
+.toast-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: toastSpin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes toastSpin { to { transform: rotate(360deg); } }
 
 /* ===== SAVED POPUP ===== */
 .saved-popup-overlay {
