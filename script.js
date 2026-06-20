@@ -1084,8 +1084,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadPriceListFromSupabase(),
     loadCustomersFromSupabase(),
     loadSavedDocsFromSupabase(),
-  ]).then(() => {
+  ]).then((results) => {
     savedDocsSyncReady = true;
+    const docsLoaded = results[3]; // loadSavedDocsFromSupabase result
     // Refresh UI with any data that changed after the Supabase sync
     refreshPriceList();
     refreshSavedDocs();
@@ -1102,6 +1103,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     syncAllLocalCustomersToSupabase();
     queueSavedDocsSync();
+
+    // Self-heal: if the documents load came back empty (most likely a cold-start
+    // blip that outlasted withNetworkRetry's back-off), try once more after a short
+    // delay so a second device is never left showing a customer with "no paperwork"
+    // until a manual refresh. Warm Supabase answers instantly the second time, and
+    // a genuinely empty account just does one harmless extra read.
+    if (!docsLoaded && lexiSupabase && lexiAuthSession?.user?.id) {
+      setTimeout(() => {
+        loadSavedDocsFromSupabase().then(ok => {
+          if (ok) { refreshSavedDocs(); updateSavedBadge(); updateJobPicker(); }
+        }).catch(() => {});
+      }, 4000);
+    }
   }).catch(err => {
     console.warn('Background Supabase sync failed:', err);
     savedDocsSyncReady = true; // still allow local saves to queue
@@ -1524,17 +1538,36 @@ async function withNetworkRetry(fn, attempts = 3) {
   }
   throw lastErr;
 }
+
+// Run a Supabase read with transient-network retry. supabase-js reports a cold-start
+// blip ("Failed to fetch") either by throwing or by returning it in res.error, so we
+// convert a returned transient error into a throw and let withNetworkRetry retry it.
+// Non-transient errors (RLS, missing column) are returned untouched for the caller to
+// handle. After all attempts a surviving network error is thrown to the caller.
+async function readWithNetworkRetry(queryFn) {
+  return withNetworkRetry(async () => {
+    const res = await queryFn();
+    if (res?.error && _isTransientNetworkError(res.error)) throw res.error;
+    return res;
+  });
+}
 let _businessSyncInFlight = false;
 
 async function loadBusinessFromSupabase() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
-  const { data, error } = await lexiSupabase
-    .from('businesses')
-    .select('*')
-    .eq('user_id', lexiAuthSession.user.id)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let data, error;
+  try {
+    ({ data, error } = await readWithNetworkRetry(() => lexiSupabase
+      .from('businesses')
+      .select('*')
+      .eq('user_id', lexiAuthSession.user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()));
+  } catch (err) {
+    console.warn('Could not load business from Supabase (network):', err);
+    return false;
+  }
 
   if (error) {
     console.warn('Could not load business from Supabase:', error);
@@ -1619,11 +1652,17 @@ function jobToPriceItemRow(job) {
 
 async function loadPriceListFromSupabase() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
-  const { data, error } = await lexiSupabase
-    .from('price_items')
-    .select('*')
-    .eq('user_id', lexiAuthSession.user.id)
-    .order('created_at', { ascending: true });
+  let data, error;
+  try {
+    ({ data, error } = await readWithNetworkRetry(() => lexiSupabase
+      .from('price_items')
+      .select('*')
+      .eq('user_id', lexiAuthSession.user.id)
+      .order('created_at', { ascending: true })));
+  } catch (err) {
+    console.warn('Could not load price list from Supabase (network):', err);
+    return false;
+  }
 
   if (error) {
     console.warn('Could not load price list from Supabase:', error);
@@ -1899,11 +1938,17 @@ function upsertLocalCustomer(q = {}, saveAfter = true) {
 
 async function loadCustomersFromSupabase() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
-  const { data, error } = await lexiSupabase
-    .from('customers')
-    .select('*')
-    .eq('user_id', lexiAuthSession.user.id)
-    .order('updated_at', { ascending: false });
+  let data, error;
+  try {
+    ({ data, error } = await readWithNetworkRetry(() => lexiSupabase
+      .from('customers')
+      .select('*')
+      .eq('user_id', lexiAuthSession.user.id)
+      .order('updated_at', { ascending: false })));
+  } catch (err) {
+    console.warn('Could not load customers from Supabase (network):', err);
+    return false;
+  }
 
   if (error) {
     console.warn('Could not load customers from Supabase:', error);
@@ -2366,11 +2411,20 @@ function savedDocRowsWithJsonColumn(userId, jsonColumn) {
 
 async function loadSavedDocsFromSupabase() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return false;
-  let { data, error } = await lexiSupabase
-    .from('documents')
-    .select('*')
-    .eq('user_id', lexiAuthSession.user.id)
-    .order('created_at', { ascending: false });
+  let data, error;
+  try {
+    ({ data, error } = await readWithNetworkRetry(() => lexiSupabase
+      .from('documents')
+      .select('*')
+      .eq('user_id', lexiAuthSession.user.id)
+      .order('created_at', { ascending: false })));
+  } catch (err) {
+    // A cold-start "Failed to fetch" survived all retries. Leave the local cache
+    // intact and let the startup .then() schedule a self-healing reload — never
+    // wipe state.saved here, or a second device shows jobs as "no paperwork".
+    console.warn('Could not load saved documents from Supabase (network):', err);
+    return false;
+  }
 
   if (error && /created_at/i.test(String(error.message || ''))) {
     const retry = await lexiSupabase
