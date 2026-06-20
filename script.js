@@ -13,6 +13,9 @@ const lexiSupabase = (
   : null;
 let authMode = 'login';
 let lexiAuthSession = null;
+let _activeUserId  = null;   // user id the app actually booted/loaded data for
+let _appReady      = false;  // true once initialiseAuth() has run (any outcome)
+let _authReloading = false;  // guard so we reload only once
 let priceListSyncTimer = null;
 let lexiEntitlement = null;
 
@@ -961,7 +964,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   setupAuthScreen();
+
+  // Whenever the effective signed-in user changes during a live session, reload so the
+  // proven cold-start pipeline runs for the correct user. Registered BEFORE initialiseAuth
+  // so the INITIAL_SESSION event fires while _appReady is false and is ignored.
+  lexiSupabase?.auth.onAuthStateChange((event, session) => {
+    if (!_appReady || _authReloading) return;
+    const newId = session?.user?.id || null;
+    if (event === 'SIGNED_OUT') {
+      if (_activeUserId) { _authReloading = true; location.reload(); }
+      return;
+    }
+    // SIGNED_IN / INITIAL_SESSION / TOKEN_REFRESHED: reload only if the user actually changed
+    if (newId && newId !== _activeUserId) { _authReloading = true; location.reload(); }
+  });
+
+  // Belt-and-braces for installed PWAs: when the app regains focus after an OAuth redirect,
+  // the resumed instance's listener may not fire — re-check the session and reload if the user changed.
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || !_appReady || _authReloading || !lexiSupabase) return;
+    try {
+      const { data } = await lexiSupabase.auth.getSession();
+      const id = data?.session?.user?.id || null;
+      if (id !== _activeUserId) { _authReloading = true; location.reload(); }
+    } catch (_) {}
+  });
+
   const canOpenApp = await initialiseAuth();
+  _appReady = true;
   if (!canOpenApp) return;
 
   loadFromStorage();
@@ -1063,6 +1093,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateJobPicker();
     populatePage1Fields();
     updateColourPreview();
+    // If a returning user was shown the onboarding/setup page because their data
+    // hadn't arrived yet (e.g. a cold Supabase made the pre-load time out), route
+    // them into the dashboard now that it has loaded — no manual refresh needed.
+    if (canUseMainApp() && document.getElementById('page1')?.classList.contains('active')) {
+      showPage('page4');
+      if (typeof scrollMyJobsToTop === 'function') scrollMyJobsToTop();
+    }
     syncAllLocalCustomersToSupabase();
     queueSavedDocsSync();
   }).catch(err => {
@@ -1152,12 +1189,12 @@ async function initialiseAuth() {
   try {
     // Race getSession against a 12-second timeout so a paused/unreachable
     // Supabase project never leaves the user stuck on the loading screen.
-    const result = await Promise.race([
+    const result = await withNetworkRetry(() => Promise.race([
       lexiSupabase.auth.getSession(),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Supabase did not respond in time. Check your connection or try again.')), 12000)
       )
-    ]);
+    ]));
     data  = result.data;
     error = result.error;
   } catch (e) {
@@ -1184,14 +1221,22 @@ async function initialiseAuth() {
     if (overlay) overlay.style.display = 'none';
     return false;
   }
-  // If localStorage belongs to a different user (or is untagged), clear it so data doesn't bleed across
+  // If localStorage belongs to a different user (or is untagged), clear the cached
+  // app data so it doesn't bleed across accounts. CRITICAL: never delete Supabase's
+  // own auth/session keys (prefixed "sb-") — removing them logs the user straight
+  // back out, leaving a "ghost login" where every query fails with permission denied.
   const storedUserId = localStorage.getItem('lexi_user_id');
   const currentUserId = lexiAuthSession.user.id;
   if (storedUserId !== currentUserId) {
     const keysToKeep = [KEY_AUTH_REMEMBER_EMAIL];
-    Object.keys(localStorage).forEach(k => { if (!keysToKeep.includes(k)) localStorage.removeItem(k); });
+    Object.keys(localStorage).forEach(k => {
+      if (keysToKeep.includes(k)) return;
+      if (k.startsWith('sb-')) return;        // preserve the Supabase session token
+      localStorage.removeItem(k);
+    });
   }
   localStorage.setItem('lexi_user_id', currentUserId);
+  _activeUserId = currentUserId;
 
   // Fire-and-forget - profile upsert doesn't block app load
   ensureSupabaseProfile(lexiAuthSession.user).catch(e => console.warn('Profile sync:', e));
@@ -1233,11 +1278,11 @@ async function handleEmailAuth() {
   submitBtn.textContent = authMode === 'signup' ? 'Creating account...' : 'Logging in...';
   try {
     if (authMode === 'signup') {
-      const { data, error } = await lexiSupabase.auth.signUp({
+      const { data, error } = await withNetworkRetry(() => lexiSupabase.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: window.location.origin + window.location.pathname }
-      });
+      }));
       if (error) throw error;
       if (data?.session) {
         lexiAuthSession = data.session;
@@ -1248,7 +1293,9 @@ async function handleEmailAuth() {
       setAuthMessage('Check your email to confirm your account, then come back and log in.', 'success');
       setAuthMode('login');
     } else {
-      const { data, error } = await lexiSupabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await withNetworkRetry(() =>
+        lexiSupabase.auth.signInWithPassword({ email, password })
+      );
       if (error) throw error;
       lexiAuthSession = data?.session || null;
       ensureSupabaseProfile(data?.user).catch(e => console.warn('Profile sync:', e));
@@ -1328,9 +1375,11 @@ async function ensureSupabaseProfile(user) {
 }
 
 async function signOutOfLexi() {
+  _authReloading = true; // we're about to reload; suppress the auth-change listener
   if (lexiSupabase) await lexiSupabase.auth.signOut();
   localStorage.removeItem(KEY_ONBOARDED);
   localStorage.removeItem(KEY_PL_ONBOARDED);
+  localStorage.removeItem('lexi_user_id'); // force a clean data wipe on next login
   location.reload();
 }
 
@@ -1455,6 +1504,22 @@ async function withSyncRetry(fn, attempts = 3) {
       lastErr = err;
       if (!_isTimeoutError(err) || i === attempts - 1) throw err;
       await new Promise(r => setTimeout(r, 700 * (i + 1))); // 0.7s, 1.4s back-off
+    }
+  }
+  throw lastErr;
+}
+
+// Retry a Supabase call that fails with a transient network blip ("Failed to fetch",
+// offline, cold-start drop). Returns the result object (which may still carry an
+// auth `error` for genuine failures like a wrong password — those are NOT retried).
+async function withNetworkRetry(fn, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch (err) {
+      lastErr = err;
+      if (!_isTransientNetworkError(err) || i === attempts - 1) throw err;
+      await new Promise(r => setTimeout(r, 800 * (i + 1))); // 0.8s, 1.6s back-off
     }
   }
   throw lastErr;
@@ -2504,40 +2569,17 @@ async function persistCurrentQuoteFromTerms() {
     return null;
   }
 
-  let doc;
-  if (activeDocId) {
-    // Update the existing saved job in place (no duplicate)
-    doc = state.saved.find(d => d.id === activeDocId);
-    if (doc) {
-      doc.quote = q;
-      doc.company = { ...state.company };
-      doc.custName = buildCustName(q);
-      doc.total = calcTotal(q);
-      doc.type = q.type;
-      doc.date = q.date;
-      doc.ref = q.ref || doc.ref;
-      doc.updatedAt = new Date().toISOString();
-    }
-  }
-  if (!doc) {
-    const newId = uid();
-    if (!await authoriseNewLexiJob(newId)) return null;
-    doc = {
-      id: newId,
-      quote: q,
-      company: { ...state.company },
-      custName: buildCustName(q),
-      total: calcTotal(q),
-      type: q.type,
-      date: q.date,
-      ref: q.ref || '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      invoiceSent: false, paid: false, paidAmount: 0, paidDate: '', payments: []
-    };
-    state.saved.unshift(doc);
-    activeDocId = newId;
-  }
+  if (!activeDocId) startNewQuoteSession();
+  const doc = await upsertQuoteDoc(activeDocId, {
+    quote: q,
+    company: { ...state.company },
+    custName: buildCustName(q),
+    total: calcTotal(q),
+    type: q.type,
+    date: q.date,
+    ref: q.ref || ''
+  });
+  if (!doc) return null;
 
   save();
   upsertLocalCustomer(q);
@@ -5485,6 +5527,7 @@ function prepareNewQuote() {
     const doc = state.saved.find(d => d.id === state.editingDocId);
     if (doc) {
       loadQuoteFromDoc(doc);
+      activeDocId = doc.id; // bind so send/terms upsert this same record
       return;
     }
   }
@@ -5494,6 +5537,7 @@ function prepareNewQuote() {
   if (draft && (draft.custFirstName || draft.custLastName || (draft.items && draft.items.length))) {
     state.quote = draft;
     state.editingDocId = null;
+    startNewQuoteSession(); // a restored unsaved draft is still a brand-new job
     const saveBtn = document.getElementById('saveQuoteBtn');
     if (saveBtn) saveBtn.textContent = '✓ Save';
     populateQuoteForm();
@@ -5502,14 +5546,13 @@ function prepareNewQuote() {
   }
 
   // Fresh quote
-  const stored = parseInt(localStorage.getItem(KEY_REF) || '100');
-  pendingRefNum = Math.max(stored, 100) + 1;
+  startNewQuoteSession();
   state.quote = {
     type: '',
     custTitle: '', custFirstName: '', custLastName: '',
     custAddr: '', custPostcode: '', custPhone: '', custEmail: '',
     date: todayStr(), validFor: '14', validCustom: '',
-    ref: buildRef(pendingRefNum),
+    ref: allocateRef(),
     items: [],
     vatRate: '20', vatCustom: '',
     discount: '0',
@@ -5631,13 +5674,57 @@ function buildRef(num) {
   return `LEXI-${num}-${dd}${mm}${yy}`;
 }
 
+// ── Reference numbering (self-healing) ─────────────────────────────────────────
+// The next sequence number is derived from the highest LEXI-<n> already present in
+// state.saved (which is synced from Supabase) as well as the stored counter, so it
+// always increments and never collides — even on a new device or after re-login.
+function maxSavedRefNum() {
+  let max = 0;
+  for (const d of (state.saved || [])) {
+    const m = /^LEXI-(\d+)-/.exec(d.ref || d.quote?.ref || '');
+    if (m) { const n = parseInt(m[1], 10); if (n > max) max = n; }
+  }
+  return max;
+}
+function nextRefNumber() {
+  const stored = parseInt(localStorage.getItem(KEY_REF) || '100', 10) || 100;
+  return Math.max(maxSavedRefNum(), stored, 100) + 1;
+}
+function allocateRef() { pendingRefNum = nextRefNumber(); return buildRef(pendingRefNum); }
+function commitRefNumber(num) {
+  const n = parseInt(num, 10); if (!n) return;
+  const stored = parseInt(localStorage.getItem(KEY_REF) || '100', 10) || 100;
+  if (n > stored) localStorage.setItem(KEY_REF, String(n));
+}
+
+// Start a brand-new builder session with one stable id used by every persist path.
+function startNewQuoteSession() { activeDocId = uid(); activeQuoteDraftDoc = null; }
+
+// THE single create/update path for a builder job. Returns the doc, or null if a
+// new-doc allowance claim was refused. Claims the job once (claim_new_job is
+// idempotent per id), and assigns + commits the authoritative reference on create.
+async function upsertQuoteDoc(id, fields) {
+  let doc = state.saved.find(d => d.id === id);
+  if (doc) { Object.assign(doc, fields, { id, updatedAt: new Date().toISOString() }); return doc; }
+  if (!await authoriseNewLexiJob(id)) return null;
+  if (pendingRefNum == null) pendingRefNum = nextRefNumber();
+  const ref = buildRef(pendingRefNum);
+  const q = fields.quote || {}; q.ref = q.ref || ref;
+  doc = {
+    id, invoiceSent: false, paid: false, paidAmount: 0, paidDate: '', payments: [],
+    ...fields, quote: q, ref: fields.ref || ref,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  };
+  state.saved.unshift(doc);
+  commitRefNumber(pendingRefNum); pendingRefNum = null;
+  return doc;
+}
+
 function generateRef() {
   if (state.editingDocId) return; // keep original ref when editing
   const el = document.getElementById('docRef');
   if (!el) return;
-  const stored = parseInt(localStorage.getItem(KEY_REF) || '100');
-  pendingRefNum = Math.max(stored, 100) + 1;
-  el.value = buildRef(pendingRefNum);
+  el.value = allocateRef();
 }
 
 function ensureDocumentRefAndDate(doc = {}) {
@@ -5645,10 +5732,9 @@ function ensureDocumentRefAndDate(doc = {}) {
   if (!doc.ref && doc.quote.ref) doc.ref = doc.quote.ref;
   if (!doc.quote.ref && doc.ref) doc.quote.ref = doc.ref;
   if (!doc.ref && !doc.quote.ref) {
-    const stored = parseInt(localStorage.getItem(KEY_REF) || '100');
-    const next = Math.max(stored, 100) + 1;
+    const next = nextRefNumber();
     const ref = buildRef(next);
-    localStorage.setItem(KEY_REF, next);
+    commitRefNumber(next);
     doc.ref = ref;
     doc.quote.ref = ref;
     doc.updatedAt = new Date().toISOString();
@@ -6061,10 +6147,8 @@ async function saveQuote() {
     const saveBtn = document.getElementById('saveQuoteBtn');
     if (saveBtn) saveBtn.textContent = '✓ Save';
   } else {
-    const newId = uid();
-    if (!await authoriseNewLexiJob(newId)) return;
-    state.saved.unshift({
-      id: newId,
+    if (!activeDocId) startNewQuoteSession();
+    const doc = await upsertQuoteDoc(activeDocId, {
       quote: q,
       company: { ...state.company },
       custName: buildCustName(q),
@@ -6072,20 +6156,10 @@ async function saveQuote() {
       type: q.type,
       date: q.date,
       ref: q.ref,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      invoiceSent: q.type === 'Invoice' || q.type === 'Receipt',
-      paid: false,
-      paidAmount: 0,
-      paidDate: '',
-      payments: []
+      invoiceSent: q.type === 'Invoice' || q.type === 'Receipt'
     });
-    // Commit the pending ref number to storage (only on actual save, never on abandon)
-    if (pendingRefNum !== null) {
-      const stored = parseInt(localStorage.getItem(KEY_REF) || '100');
-      if (pendingRefNum > stored) localStorage.setItem(KEY_REF, pendingRefNum);
-      pendingRefNum = null;
-    }
+    if (!doc) return;
+    q.ref = doc.ref;
   }
 
   clearDraftQuote(); // quote saved to jobs — draft no longer needed
@@ -7091,9 +7165,7 @@ function openSpreadsheetView() {
   window.addEventListener('resize', _ssRotateHintHandler);
   window.addEventListener('orientationchange', _ssRotateHintHandler);
 
-  document.getElementById('closeSpreadsheetBtn').onclick = closeSpreadsheetView;
   document.getElementById('ssColsBtn')?.addEventListener('click', openSsColPanel);
-  document.getElementById('ssCsvBtn')?.addEventListener('click', ssCsvDownload);
   document.getElementById('ssFilterSel')?.addEventListener('change', e => {
     _ssFilter = e.target.value; buildSsRows();
   });
@@ -7880,64 +7952,39 @@ function setupModals() {
     const quoteData = collectQuoteSendForm();
     const editedDoc = applyDocEdits(doc, quoteData);
     const html = buildDocHtml(editedDoc, 'quote', quoteData);
-    if (activeDocId) {
-      const savedDoc = state.saved.find(d => d.id === activeDocId);
-      if (savedDoc) {
-        Object.assign(savedDoc, editedDoc);
-        save();
-        refreshSavedDocs();
-      }
-    }
     document.getElementById('quoteModal').style.display = 'none';
 
-    // Ensure the doc is saved so we can generate an acceptance token and use customer data
-    let sendDocRef = activeDocId;
-    let sendingToast = null;
-    if (!sendDocRef) {
-      // Draft send (from form) — show feedback immediately so user knows the tap registered
-      sendingToast = showPersistentToast('Getting ready to send…');
-      // Auto-save first so we have an ID and can token-sign it
-      const newId = uid();
-      if (!await authoriseNewLexiJob(newId)) { sendingToast?.remove(); return; }
-      const q = editedDoc.quote || {};
-      const newDoc = {
-        id: newId,
-        quote: q,
-        company: { ...state.company },
-        custName: buildCustName(q),
-        total: editedDoc.total || calcTotal(q),
-        type: editedDoc.type || q.type || 'Estimate',
-        date: editedDoc.date || q.date || todayStr(),
-        ref: editedDoc.ref || q.ref || '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        invoiceSent: false,
-        paid: false,
-        paidAmount: 0,
-        paidDate: '',
-        payments: []
-      };
-      state.saved.unshift(newDoc);
-      save();  // writes to localStorage (now slim -should always succeed)
-      upsertLocalCustomer(q);
-      sendDocRef = newId;
-      // Bind this form to the new doc so a second Send updates it instead of
-      // creating a duplicate entry (was producing LEXI-106 AND LEXI-107).
-      activeDocId = newId;
-      updateSavedBadge();
-      refreshSavedDocs();
-      // Sync immediately to Supabase -do NOT rely on the debounced queue
-      // so a quick refresh cannot lose the new document before it reaches the cloud
-      if (savedDocsSyncReady && lexiSupabase && lexiAuthSession?.user?.id) {
-        saveSavedDocsToSupabase().catch(err => {
-          console.warn('Auto-save sync failed:', err);
-          localStorage.setItem('lexi_last_documents_sync_error', err?.message || String(err));
-          toast(`Estimate saved here, but cloud sync failed: ${err?.message || 'check connection'}`, 'error', 8000);
-        });
-      }
+    // Upsert into the ONE record for this builder session — create on first send,
+    // update thereafter — so sending can never create a duplicate card.
+    if (!activeDocId) startNewQuoteSession();
+    const q = editedDoc.quote || {};
+    const alreadySaved = !!state.saved.find(d => d.id === activeDocId);
+    const sendingToast = alreadySaved ? null : showPersistentToast('Getting ready to send…');
+    const persisted = await upsertQuoteDoc(activeDocId, {
+      quote: q,
+      company: { ...state.company },
+      custName: buildCustName(q),
+      total: editedDoc.total || calcTotal(q),
+      type: editedDoc.type || q.type || 'Estimate',
+      date: editedDoc.date || q.date || todayStr(),
+      ref: editedDoc.ref || q.ref || ''
+    });
+    sendingToast?.remove();
+    if (!persisted) return;
+    const sendDocRef = activeDocId;
+    save();
+    upsertLocalCustomer(q);
+    updateSavedBadge();
+    refreshSavedDocs();
+    // Sync immediately to Supabase -do NOT rely on the debounced queue
+    if (savedDocsSyncReady && lexiSupabase && lexiAuthSession?.user?.id) {
+      saveSavedDocsToSupabase().catch(err => {
+        console.warn('Auto-save sync failed:', err);
+        localStorage.setItem('lexi_last_documents_sync_error', err?.message || String(err));
+        toast(`Estimate saved here, but cloud sync failed: ${err?.message || 'check connection'}`, 'error', 8000);
+      });
     }
 
-    sendingToast?.remove();
     const savedDoc = state.saved.find(d => d.id === sendDocRef);
     if (savedDoc) {
       const baseMsg = quoteData.quoteNotes || '';
@@ -8338,9 +8385,9 @@ function openQuoteModalFromCurrentForm() {
     document.getElementById('custFirstName').focus();
     return;
   }
-  activeDocId = null;
+  if (!activeDocId) startNewQuoteSession(); // keep the builder's stable id (no duplicate on send)
   activeQuoteDraftDoc = {
-    id: null,
+    id: activeDocId,
     quote: q,
     company: { ...state.company },
     custName: buildCustName(q),
@@ -8354,7 +8401,7 @@ function openQuoteModalFromCurrentForm() {
   populateQuoteSendModal(activeQuoteDraftDoc, { show: false });
   // Go straight to the actual document preview — no intermediate form
   quotePreviewed = true;
-  openPreview(buildDocHtml(activeQuoteDraftDoc, 'quote'), 'quote', null);
+  openPreview(buildDocHtml(activeQuoteDraftDoc, 'quote'), 'quote', activeDocId);
 }
 
 function populateQBPreviewPage(doc) {
@@ -8413,23 +8460,18 @@ function setupQBPreviewPage() {
     if (!doc) return;
     const data = collectQBPreviewForm();
     const editedDoc = applyDocEdits(doc, data);
-    const newId = uid();
-    if (!await authoriseNewLexiJob(newId)) return;
+    if (!activeDocId) startNewQuoteSession();
     const q = editedDoc.quote || {};
-    const newDoc = {
-      id: newId,
+    const persisted = await upsertQuoteDoc(activeDocId, {
       quote: q,
       company: { ...state.company },
       custName: buildCustName(q),
       total: editedDoc.total || calcTotal(q),
       type: editedDoc.type || q.type || 'Estimate',
       date: editedDoc.date || q.date || todayStr(),
-      ref: editedDoc.ref || q.ref || '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      invoiceSent: false, paid: false, paidAmount: 0, paidDate: '', payments: []
-    };
-    state.saved.unshift(newDoc);
+      ref: editedDoc.ref || q.ref || ''
+    });
+    if (!persisted) return;
     save();
     upsertLocalCustomer(q);
     clearDraftQuote();
