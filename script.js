@@ -11172,8 +11172,8 @@ const DOC_CSS = `
   .doc-items-table tbody td.r{text-align:right}
   .item-unit{display:block;font-size:0.71rem;color:#888;margin-top:1px}
   .totals-sep td{border-top:1.5px solid #bbb!important;border-bottom:none!important;border-right:none!important;padding:6px 0 0!important;background:transparent}
-  .totals-row td{padding:3px 10px;font-size:0.82rem;border:none!important;background:transparent}
-  .totals-row td.r{text-align:right}
+  .doc-totals-row td{padding:3px 10px;font-size:0.82rem;border:none!important;background:transparent}
+  .doc-totals-row td.r{text-align:right}
   .totals-total{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .totals-total td{padding:8px 10px;font-size:0.9rem;font-weight:700;border:none!important;color:#fff}
   .totals-total td.r{text-align:right}
@@ -11249,7 +11249,7 @@ const DOC_CSS = `
     .doc-items-table thead th{padding:6px 5px;font-size:0.68rem;letter-spacing:0}
     .doc-items-table tbody td{padding:6px 5px;font-size:0.77rem}
     .item-unit{font-size:0.65rem}
-    .totals-row td{padding:2px 5px;font-size:0.76rem}
+    .doc-totals-row td{padding:2px 5px;font-size:0.76rem}
     .totals-total td{padding:7px 6px;font-size:0.82rem}
 
     /* Terms */
@@ -11378,10 +11378,9 @@ function buildDocHtml(doc, docType, extra = {}) {
 
   // ── Totals -label in col 3 (right-aligned), amount in col 4 (right-aligned) ──
   const tCell = (label, value, bold = false) =>
-    `<tr class="totals-row">
-      <td colspan="2" style="border:none;padding:0"></td>
-      <td style="text-align:right;padding:3px 10px;font-size:0.79rem;${bold?'font-weight:700':''}">${label}</td>
-      <td style="text-align:right;padding:3px 10px;font-size:0.82rem;">${value}</td>
+    `<tr class="doc-totals-row">
+      <td colspan="3" style="text-align:right;border:none;padding:3px 10px;font-size:0.79rem;${bold?'font-weight:700':''}">${label}</td>
+      <td style="text-align:right;border:none;padding:3px 10px;font-size:0.82rem;">${value}</td>
     </tr>`;
   const discRow = disc > 0 ? tCell(`Discount (${disc}%):`, `-${fmtPrice(sub*disc/100)}`) : '';
 
