@@ -12793,8 +12793,9 @@ function calSelectTemplate(templateId) {
   if (templateId === 'custom') {
     document.getElementById('calEmailModal').style.display = 'none';
     if (calEmailChannel === 'whatsapp') {
-      // Use location.href for reliable mobile WhatsApp deep-link (contact chooser, no pre-filled message)
-      window.location.href = 'https://wa.me/';
+      // Open straight to the customer's chat when we have their number (blank message).
+      const phone = (calEmailPhone || '').replace(/\D/g, '');
+      window.location.href = phone ? `https://wa.me/${phone}` : 'https://wa.me/';
     } else {
       if (!calEmailAddr) { showSavedPopup('No email address saved for this customer.'); return; }
       window.location.href = 'mailto:' + calEmailAddr;
@@ -12808,8 +12809,13 @@ function calSelectTemplate(templateId) {
     return;
   }
 
-  document.querySelectorAll('.cal-template-btn').forEach(btn => {
-    btn.classList.toggle('selected', btn.dataset.tmplId === templateId);
+  // Show only the chosen template: highlight it and hide the other options in the
+  // group so the trader sees just the one template they picked (the "← Back" button
+  // returns to the stage list, where re-entering a group restores all options).
+  document.querySelectorAll('.cal-template-btn').forEach(b => {
+    const isChosen = b.dataset.tmplId === templateId;
+    b.classList.toggle('selected', isChosen);
+    b.style.display = isChosen ? '' : 'none';
   });
   const btn = document.querySelector(`.cal-template-btn[data-tmpl-id="${templateId}"]`);
   if (btn) {
@@ -12884,7 +12890,11 @@ function sendCalEmail() {
 
   if (calEmailChannel === 'whatsapp') {
     const text = encodeURIComponent(liveBody || '');
-    window.open(`https://wa.me/?text=${text}`, '_blank');
+    // Open straight to the customer's chat when we have their number; only fall
+    // back to the no-number link (contact chooser) if no phone is saved.
+    const phone = (calEmailPhone || '').replace(/\D/g, '');
+    const waUrl = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
+    window.open(waUrl, '_blank');
   } else {
     if (!calEmailAddr) {
       showSavedPopup('No email address saved for this customer.');
