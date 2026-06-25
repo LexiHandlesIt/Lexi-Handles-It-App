@@ -3971,7 +3971,8 @@ input[type="text"].sig-text-input:focus {
   padding-bottom: 12px;
   margin-bottom: 14px;
 }
-.cdv-title-prefix { color: var(--gold); }
+.cdv-title-prefix { display: block; color: var(--gold); font-size: 0.85rem; font-weight: 600; }
+.cdv-title-name { display: block; color: var(--walnut); font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
 /* Contact action buttons row (Email / WhatsApp / Phone) */
 .cdv-contact-btns {
   display: flex;
@@ -4812,6 +4813,12 @@ input[type="text"].sig-text-input:focus {
 }
 
 .modal-title { font-size: 1.1rem; color: var(--walnut); }
+
+/* Customer dashboard: name + contact stacked in the white header, close top-right */
+#customerDashboardModal .modal-header { align-items: flex-start; }
+.cdv-header-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cdv-header-contact { display: flex; flex-direction: column; gap: 4px; }
+.cdv-header-contact:empty { display: none; }
 
 .modal-back-btn {
   margin-left: auto;

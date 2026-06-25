@@ -367,7 +367,9 @@ function setupLexiEntitlementGuards() {
 async function authoriseNewLexiJob(jobId) {
   try {
     const result = await claimLexiJobSlot(jobId);
-    if (result?.allowed) return true;
+    // Return the full claim result on success (it carries the server-allocated
+    // reference_number). Still truthy, so existing `if (!await …)` guards work.
+    if (result?.allowed) return result;
 
     if (result?.reason === 'job_limit_reached') {
       const limit = Number(result.monthly_job_limit || lexiEntitlement?.monthlyJobLimit || 0);
@@ -5760,13 +5762,20 @@ function startNewQuoteSession() { activeDocId = uid(); activeQuoteDraftDoc = nul
 async function upsertQuoteDoc(id, fields) {
   let doc = state.saved.find(d => d.id === id);
   if (doc) { Object.assign(doc, fields, { id, updatedAt: new Date().toISOString() }); return doc; }
-  if (!await authoriseNewLexiJob(id)) return null;
-  if (pendingRefNum == null) pendingRefNum = nextRefNumber();
+  const claim = await authoriseNewLexiJob(id);
+  if (!claim) return null;
+  // The server allocates the authoritative reference number (collision-proof across
+  // devices). Use it, overriding any stale client preview. Fall back to the local
+  // counter only when offline / local-only mode (no number came back).
+  const serverRefNum = Number(claim.reference_number) || 0;
+  if (serverRefNum) pendingRefNum = serverRefNum;
+  else if (pendingRefNum == null) pendingRefNum = nextRefNumber();
   const ref = buildRef(pendingRefNum);
-  const q = fields.quote || {}; q.ref = q.ref || ref;
+  const q = fields.quote || {};
+  q.ref = serverRefNum ? ref : (q.ref || ref); // server number wins over preview
   doc = {
     id, invoiceSent: false, paid: false, paidAmount: 0, paidDate: '', payments: [],
-    ...fields, quote: q, ref: fields.ref || ref,
+    ...fields, quote: q, ref: serverRefNum ? ref : (fields.ref || ref),
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   };
   state.saved.unshift(doc);
@@ -9126,7 +9135,12 @@ async function createNewCustomerFromPicker() {
     authSig: '', custSig: '', sigDate: ''
   };
   const newId = uid();
-  if (!await authoriseNewLexiJob(newId)) return;
+  const claim = await authoriseNewLexiJob(newId);
+  if (!claim) return;
+  // Adopt the server-allocated reference (authoritative); the local guess above is
+  // only a placeholder used when offline.
+  const serverRefNum = Number(claim.reference_number) || 0;
+  if (serverRefNum) { q.ref = buildRef(serverRefNum); commitRefNumber(serverRefNum); }
   const doc = {
     id: newId,
     quote: q,
@@ -9739,6 +9753,11 @@ function getCustomerTotals(docs) {
 
 function renderCustomerSelector(groups) {
   const body = document.getElementById('customerDashboardBody');
+  // Selector view lists every customer — reset the single-customer header.
+  const titleEl = document.getElementById('customerDashboardTitle');
+  if (titleEl) titleEl.textContent = 'Customers';
+  const headerContactEl = document.getElementById('customerDashboardContact');
+  if (headerContactEl) headerContactEl.innerHTML = '';
   body.innerHTML = `
     <div class="customer-selector-list">
       ${groups.map((group, idx) => {
@@ -10027,9 +10046,12 @@ function renderSingleCustomerDashboard(group, groups) {
     q.custEmail   ? `<span class="cdv-contact-line"><span class="cdv-contact-icon">${iconMail}</span>${esc(q.custEmail)}</span>` : '',
   ].filter(Boolean).join('');
 
-  // Put customer name in modal title
+  // Put customer name in modal title, and the contact details directly beneath it
+  // in the white header area.
   const titleEl = document.getElementById('customerDashboardTitle');
-  if (titleEl) titleEl.innerHTML = `<span class="cdv-title-prefix">Dashboard:</span> ${esc(group.name)}`;
+  if (titleEl) titleEl.innerHTML = `<span class="cdv-title-prefix">Customer Dashboard</span><span class="cdv-title-name">${esc(group.name)}</span>`;
+  const headerContactEl = document.getElementById('customerDashboardContact');
+  if (headerContactEl) headerContactEl.innerHTML = contactLines;
 
   // Contact action buttons (Email / WhatsApp / Phone)
   const dashPhone = q.custPhone || '';
@@ -10063,7 +10085,6 @@ function renderSingleCustomerDashboard(group, groups) {
     <div class="customer-dashboard-card printable-customer-dashboard">
       <div class="cdv-header">
         ${contactBtns}
-        ${contactLines ? `<div class="cdv-contact">${contactLines}</div>` : ''}
       </div>
       <div class="cdv-summary-bar">
         <div class="cdv-summary-item">
@@ -11838,10 +11859,29 @@ async function uploadDocToStorage(htmlStr, filename, acceptToken = '', docType =
     const safeFilename = (filename || 'document.html').replace(/[^a-zA-Z0-9._-]/g, '-');
     const path = `${lexiAuthSession.user.id}/${safeFilename}`;
     console.log('Uploading doc to storage:', path);
-    const { error } = await lexiSupabase.storage
-      .from('Documents')
-      .upload(path, blob, { contentType: 'text/html', upsert: true });
-    if (error) throw error;
+    // A cold free-tier database makes the first upload time out (StorageApiError
+    // "connection to the database timed out" / 500). Warm it, then retry a few
+    // times so a slow wake-up never leaves the customer without a link.
+    warmupSupabase();
+    const isRetryableUpload = (err) => {
+      const m = (String(err?.message || '') + ' ' + String(err?.error || '') + ' ' + String(err?.status || '')).toLowerCase();
+      return _isTransientNetworkError(err) ||
+        /timeout|timed out|statement|temporar|unavailable|connection|500|internal/.test(m);
+    };
+    let uploadErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { error } = await lexiSupabase.storage
+        .from('Documents')
+        .upload(path, blob, { contentType: 'text/html', upsert: true });
+      if (!error) { uploadErr = null; break; }
+      uploadErr = error;
+      if (attempt < 2 && isRetryableUpload(error)) {
+        await new Promise(r => setTimeout(r, 1200 * (attempt + 1))); // 1.2s, 2.4s back-off
+        continue;
+      }
+      break;
+    }
+    if (uploadErr) throw uploadErr;
     const { data } = lexiSupabase.storage.from('Documents').getPublicUrl(path);
     const storageUrl = data?.publicUrl || null;
     console.log('Doc storage URL:', storageUrl);
@@ -11885,7 +11925,7 @@ function sendDoc(html, filename, message = '', custEmail = '', custPhone = '', p
   // freezing the "How would you like to send?" modal.
   const docUrlPromise = uploadDocToStorage(htmlStr, filename, acceptToken, passedDocType);
 
-  sendDocRaw(htmlStr, filename, message, custEmail, docUrlPromise, custPhone, passedDocType);
+  sendDocRaw(htmlStr, filename, message, custEmail, docUrlPromise, custPhone, passedDocType, acceptToken);
 }
 
 function showSendMethodPicker(onEmail, onWhatsApp, onCopy, hasEmail = false, hasPhone = false) {
@@ -11971,7 +12011,7 @@ function showSendMethodPicker(onEmail, onWhatsApp, onCopy, hasEmail = false, has
 // docUrlSource may be a resolved URL string, null, or a Promise that resolves to
 // either — the link is only woven into the message at the moment the user picks a
 // channel, so the picker can appear instantly while the upload finishes in the background.
-async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUrlSource = null, custPhone = '', passedDocType = '') {
+async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUrlSource = null, custPhone = '', passedDocType = '', acceptToken = '') {
   const rawType = passedDocType || filename.match(/^(estimate|quote|invoice|receipt)/i)?.[0] || 'document';
   const docType = rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase();
   const bizName = state.company?.businessName || [state.company?.firstName, state.company?.lastName].filter(Boolean).join(' ') || 'Lexi Handles It';
@@ -11992,18 +12032,30 @@ async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUr
     return fullMsg;
   };
 
-  // Resolve the message lazily and only once: await the in-flight upload the first
-  // time a channel is chosen, then cache the result for any subsequent choice.
-  let _fullMsg = null;
+  // This document needs a shareable link if the message template references one.
+  const linkExpected = message.includes('{VIEW_LINK}');
+  let _resolvedUrl = undefined; // undefined = the in-flight upload not yet awaited
+  let _linkMissing = false;     // true after resolveMsg if a needed link is absent
+
+  // Resolve the message at the moment a channel is chosen. Awaits the in-flight
+  // upload once; if a link is required but still missing (cold-database timeout),
+  // re-attempts the upload right here so tapping the channel again retries it.
   const resolveMsg = async () => {
-    if (_fullMsg !== null) return _fullMsg;
-    let docUrl = docUrlSource;
-    if (docUrl && typeof docUrl.then === 'function') {
-      try { docUrl = await docUrl; } catch { docUrl = null; }
+    if (_resolvedUrl === undefined) {
+      let u = docUrlSource;
+      if (u && typeof u.then === 'function') { try { u = await u; } catch { u = null; } }
+      _resolvedUrl = u || null;
     }
-    _fullMsg = buildFullMsg(docUrl);
-    return _fullMsg;
+    if (!_resolvedUrl && linkExpected) {
+      _resolvedUrl = await uploadDocToStorage(htmlStr, filename, acceptToken, passedDocType);
+    }
+    _linkMissing = linkExpected && !_resolvedUrl;
+    return buildFullMsg(_resolvedUrl);
   };
+
+  // Shared guard: refuse to send a quote whose link failed to generate, rather
+  // than silently sending a linkless (useless) document.
+  const LINK_FAIL_MSG = "The document link didn't generate (the database was slow). Nothing was sent — please tap the button again in a few seconds.";
 
   const stampSentVia = (via) => {
     const doc = activeDocId ? state.saved.find(d => d.id === activeDocId) : null;
@@ -12013,18 +12065,20 @@ async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUr
   // just supplied the missing detail via the capture form in the picker
   const doEmail = async (emailOverride) => {
     const email = emailOverride || custEmail;
-    stampSentVia('email');
     const fullMsg = await resolveMsg();
+    if (_linkMissing) { toast(LINK_FAIL_MSG, 'error', 9000); showPicker(); return; }
+    stampSentVia('email');
     openEmailCompose(email, subject, fullMsg, false, showPicker);
   };
   const doWhatsApp = async (phoneOverride) => {
     const phone = formatWhatsAppNumber(phoneOverride || custPhone);
-    stampSentVia('whatsapp');
     // Claim the popup within the user gesture by opening a blank tab synchronously,
     // then redirect it once the link is ready. Prevents mobile popup-blockers from
     // killing the WhatsApp hand-off when the upload hasn't finished yet.
     const win = window.open('', '_blank');
     const fullMsg = await resolveMsg();
+    if (_linkMissing) { if (win) win.close(); toast(LINK_FAIL_MSG, 'error', 9000); showPicker(); return; }
+    stampSentVia('whatsapp');
     const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`;
     if (win) { win.location.href = waUrl; } else { window.open(waUrl, '_blank'); }
   };
@@ -12032,6 +12086,7 @@ async function sendDocRaw(htmlStr, filename, message = '', custEmail = '', docUr
   const showPicker = () => showSendMethodPicker(doEmail, doWhatsApp, doCopy, !!custEmail, !!custPhone);
   const doCopy = async () => {
     const fullMsg = await resolveMsg();
+    if (_linkMissing) { toast(LINK_FAIL_MSG, 'error', 9000); showPicker(); return; }
     if (fullMsg && navigator.clipboard) {
       try { await navigator.clipboard.writeText(fullMsg); toast('Message copied -paste it into WhatsApp or email.', '', 6000); }
       catch(e) { toast('Could not copy to clipboard.', 'error', 4000); }
