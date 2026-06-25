@@ -7783,8 +7783,8 @@ function setupModals() {
     setShareBackButtons(false);
     if (document.getElementById('page4')?.classList.contains('active')) window.scrollTo({ top: 0, behavior: 'smooth' });
   });
-  document.getElementById('closeMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
-  document.getElementById('cancelMarkPaidBtn').addEventListener('click', () => { document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
+  document.getElementById('closeMarkPaidBtn').addEventListener('click', () => { resumeReceiptAfterPayment = false; document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
+  document.getElementById('cancelMarkPaidBtn').addEventListener('click', () => { resumeReceiptAfterPayment = false; document.getElementById('markPaidModal').style.display = 'none'; reopenDashboardAfterMoneyIn(); });
   document.getElementById('mpAmount').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('confirmMarkPaidBtn').click(); } });
   document.getElementById('closeEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
   document.getElementById('doneEditPaymentsBtn').addEventListener('click', () => document.getElementById('editPaymentsModal').style.display = 'none');
@@ -8257,6 +8257,17 @@ function setupModals() {
     queueSavedDocsSync(true);
     refreshSavedDocs();
     document.getElementById('markPaidModal').style.display = 'none';
+    // If this payment was logged as part of "send a receipt for a partial payment",
+    // resume the receipt: re-open the composer (still in memory) and regenerate the
+    // receipt reflecting the new payment, instead of returning to the dashboard.
+    if (resumeReceiptAfterPayment) {
+      resumeReceiptAfterPayment = false;
+      resetReceiptUrlCache();           // payment changed → receipt content changed
+      refreshOpenCustomerDashboard();   // update totals underneath
+      document.getElementById('calEmailModal').style.display = 'flex';
+      calReceiptShare();
+      return;
+    }
     // Return to customer dashboard if it was open when Money In was triggered
     if (activeCustomerGroup) {
       try {
@@ -12531,11 +12542,41 @@ let calEmailTemplates = [];
 let calEmailAddr = '';
 let calEmailChannel = 'email';   // 'email' | 'whatsapp'
 let calEmailPhone = '';
+// Cached receipt-link upload (per doc) so the slow Storage upload is prefetched
+// while the trader reads the options, not after they tap Receipt.
+let calReceiptUrlDocId = null;
+let calReceiptUrlPromise = null;
+let resumeReceiptAfterPayment = false; // set when a partial payment must resume the receipt
+const RECEIPT_LINK_TOKEN = '{RECEIPT_LINK}';
+const RECEIPT_PENDING_TEXT = '⏳ Preparing your secure receipt link…';
+const RECEIPT_ERROR_TEXT = '⚠️ Receipt link could not be generated — please try Send again.';
+
+// Build + upload the receipt document once and cache the in-flight promise by docId,
+// so repeated calls (prefetch on group open, then the actual Receipt tap) reuse it.
+function ensureReceiptUrl(docId) {
+  if (calReceiptUrlDocId === docId && calReceiptUrlPromise) return calReceiptUrlPromise;
+  const doc = (state.saved || []).find(d => d.id === docId);
+  if (!doc) return Promise.resolve(null);
+  calReceiptUrlDocId = docId;
+  const ref = doc.receiptRef || doc.ref || doc.quote?.ref || '';
+  calReceiptUrlPromise = (async () => {
+    const html     = wrapDoc(buildDocHtml(doc, 'receipt', {}));
+    const filename = getDocFilenameFromRef(ref || 'receipt');
+    return uploadDocToStorage(html, filename, '', 'receipt');
+  })();
+  return calReceiptUrlPromise;
+}
+
+function resetReceiptUrlCache() {
+  calReceiptUrlDocId = null;
+  calReceiptUrlPromise = null;
+}
 
 function openCalEmailComposer(docId, eventType, channel, presetTemplateId) {
   const doc = (state.saved || []).find(d => d.id === docId);
   if (!doc) return;
 
+  if (docId !== calReceiptUrlDocId) resetReceiptUrlCache(); // drop a stale receipt link
   calEmailDocId  = docId;
   calEmailChannel = channel || 'email';
 
@@ -12770,6 +12811,9 @@ function calSelectGroup(groupId) {
   const listEl = document.getElementById('calTemplateList');
   if (!listEl) return;
   const groupLabels = { before: 'Before Acceptance', after: 'After Acceptance', complete: 'After Job Completion' };
+  // Receipt lives in this group and needs a slow Storage upload — start it now so the
+  // link is usually ready by the time the trader taps Receipt.
+  if (groupId === 'complete' && calEmailDocId) ensureReceiptUrl(calEmailDocId);
   const items = calEmailTemplates.filter(t => t.group === groupId);
   const btnHtml = t => `
     <button type="button" class="cal-template-btn"
@@ -12803,9 +12847,10 @@ function calSelectTemplate(templateId) {
     return;
   }
 
-  // "Receipt" shares the actual receipt document — build + upload + link (async)
+  // "Receipt" shares the actual receipt document — first confirm the payment is
+  // recorded (so the receipt never shows £0.00 paid), then build + upload + link.
   if (templateId === 'receipt') {
-    calReceiptShare();
+    startReceiptFlow();
     return;
   }
 
@@ -12828,48 +12873,141 @@ function calSelectTemplate(templateId) {
   updateCalEmailPreview();
 }
 
-// Build the receipt document, upload it, and put a message + read-only link into
-// the editable preview so the trader can send it like any other template.
+// ── Receipt: confirm the payment is recorded before sending one ────────────────
+// A receipt should reflect money actually received. If the job is not marked paid
+// in full, ask before generating it so the customer never gets a "£0.00 paid" receipt.
+function startReceiptFlow() {
+  const doc = (state.saved || []).find(d => d.id === calEmailDocId);
+  if (!doc) return;
+  recalcDocPayments(doc);
+  // Already paid in full (or nothing to charge) → straight to the receipt.
+  if (doc.paid || (doc.total || 0) <= 0) { calReceiptShare(); return; }
+  showReceiptPaidPrompt(doc);
+}
+
+// Small overlay (same lightweight pattern as openContactChooser).
+function _receiptOverlay(innerHtml) {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = `<div style="background:#fff;border-radius:16px;padding:26px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)">${innerHtml}</div>`;
+  document.body.appendChild(ov);
+  return ov;
+}
+
+function showReceiptPaidPrompt(doc) {
+  const W = '#7D5730';
+  const fill = `display:block;width:100%;padding:13px;margin-bottom:10px;border-radius:10px;border:none;background:${W};color:#fff;font-size:1rem;font-weight:600;cursor:pointer`;
+  const out  = `display:block;width:100%;padding:12px;margin-bottom:10px;border-radius:10px;border:1.5px solid ${W};background:#fff;color:${W};font-size:0.95rem;font-weight:600;cursor:pointer`;
+  const txt  = `display:block;width:100%;padding:8px;border:none;background:transparent;color:#999;font-size:0.88rem;cursor:pointer`;
+  const ov = _receiptOverlay(`
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:8px;color:#333">Has this customer paid in full?</div>
+    <div style="color:#777;font-size:0.9rem;margin-bottom:20px">Total ${fmtPrice(doc.total || 0)} · Outstanding ${fmtPrice(getDocOutstandingAmount(doc))}. A receipt should show what they've actually paid.</div>
+    <button id="_rpYes" style="${fill}">Yes, paid in full</button>
+    <button id="_rpNo" style="${out}">No, partial payment</button>
+    <button id="_rpCancel" style="${txt}">Cancel</button>`);
+  const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+  ov.querySelector('#_rpYes').onclick = () => { close(); recordFullPaymentForReceipt(doc); };
+  ov.querySelector('#_rpNo').onclick = () => { close(); showReceiptPartialPrompt(doc); };
+  ov.querySelector('#_rpCancel').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+}
+
+function showReceiptPartialPrompt(doc) {
+  const W = '#7D5730';
+  const fill = `display:block;width:100%;padding:13px;margin-bottom:10px;border-radius:10px;border:none;background:${W};color:#fff;font-size:0.98rem;font-weight:600;cursor:pointer`;
+  const txt  = `display:block;width:100%;padding:8px;border:none;background:transparent;color:#999;font-size:0.88rem;cursor:pointer`;
+  const ov = _receiptOverlay(`
+    <div style="font-size:1.15rem;font-weight:700;margin-bottom:8px;color:#333">Send a receipt for a partial payment?</div>
+    <div style="color:#777;font-size:0.9rem;margin-bottom:20px">Record the amount they've actually paid, then I'll generate a receipt showing the part-payment and the balance still owed.</div>
+    <button id="_rpPartial" style="${fill}">Record a payment &amp; send receipt</button>
+    <button id="_rpCancel2" style="${txt}">Cancel</button>`);
+  const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+  ov.querySelector('#_rpPartial').onclick = () => {
+    close();
+    resumeReceiptAfterPayment = true;            // resume the receipt after they log it
+    document.getElementById('calEmailModal').style.display = 'none';
+    openMarkPaid(calEmailDocId);
+  };
+  ov.querySelector('#_rpCancel2').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+}
+
+// "Yes, paid in full" → log a Full Payment for the outstanding balance, persist,
+// refresh the dashboard underneath, then generate the receipt.
+function recordFullPaymentForReceipt(doc) {
+  if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
+  const alreadyPaid = doc.payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const remaining   = Math.max(0, (doc.total || 0) - alreadyPaid);
+  if (remaining > 0) {
+    doc.payments.push({ amount: remaining, date: todayStr(), type: 'Full Payment' });
+    if (typeof sortPaymentsByDate === 'function') sortPaymentsByDate(doc.payments);
+  }
+  recalcDocPayments(doc);
+  save();
+  queueSavedDocsSync(true);
+  resetReceiptUrlCache();          // payment changed → receipt content changed → re-upload
+  refreshOpenCustomerDashboard();  // content-only; keeps the composer in front
+  calReceiptShare();
+}
+
+// Re-render the customer dashboard underneath without toggling its visibility, so
+// the composer stays on top while the totals update.
+function refreshOpenCustomerDashboard() {
+  if (!activeCustomerGroup) return;
+  try {
+    const groups  = buildCustomerGroups();
+    const updated = groups.find(g => g.docs.some(d => d.id === calEmailDocId)) || activeCustomerGroup;
+    activeCustomerGroup = updated;
+    renderSingleCustomerDashboard(updated, groups);
+  } catch (e) { console.error('Dashboard refresh error:', e); }
+}
+
+// Show the receipt message immediately with a placeholder for the link, then swap
+// in the real link once the (prefetched) Storage upload resolves.
 async function calReceiptShare() {
   const doc = (state.saved || []).find(d => d.id === calEmailDocId);
   if (!doc) return;
-  document.querySelectorAll('.cal-template-btn').forEach(btn => {
-    btn.classList.toggle('selected', btn.dataset.tmplId === 'receipt');
+  // Collapse the list to just the Receipt button (consistent with other templates).
+  document.querySelectorAll('.cal-template-btn').forEach(b => {
+    const isReceipt = b.dataset.tmplId === 'receipt';
+    b.classList.toggle('selected', isReceipt);
+    b.style.display = isReceipt ? '' : 'none';
   });
-  const preview = document.getElementById('calEmailPreview');
-  const sendBtn = document.getElementById('sendCalEmailBtn');
-  if (preview) { preview.style.display = 'block'; preview.value = 'Preparing receipt…'; preview.readOnly = true; }
-  if (sendBtn) sendBtn.disabled = true;
 
   const q          = doc.quote || {};
   const co         = state.company || {};
   const custFirst  = q.custFirstName || 'there';
   const traderName = [co.firstName, co.lastName].filter(Boolean).join(' ') || (co.firstName || 'your tradesperson');
   const ref        = doc.receiptRef || doc.ref || q.ref || '';
-  const total      = fmtPrice(doc.total || 0);
-
-  try {
-    const html     = wrapDoc(buildDocHtml(doc, 'receipt', {}));
-    const filename = getDocFilenameFromRef(ref || 'receipt');
-    const url      = await uploadDocToStorage(html, filename, '', 'receipt');
-    if (!url) throw new Error('Receipt link not generated');
-    const body =
+  const paidAmount = fmtPrice(doc.paidAmount || doc.total || 0);
+  const makeBody = (linkLine) =>
 `Hi ${custFirst},
 
-Thank you for your payment of ${total} for ${ref}. Here is your receipt:
+Thank you for your payment of ${paidAmount} for ${ref}. Here is your receipt:
 
-${url}
+${linkLine}
 
 Thanks again,
 ${traderName}`;
+
+  const preview = document.getElementById('calEmailPreview');
+  const sendBtn = document.getElementById('sendCalEmailBtn');
+  // Show wording instantly with a placeholder; keep the selected template's body
+  // tokenised so the send guard knows the link is not in yet. Send stays enabled.
+  calEmailSelectedTemplate = { id: 'receipt', subject: `Your receipt -${ref}`, body: makeBody(RECEIPT_LINK_TOKEN) };
+  if (preview) { preview.style.display = 'block'; preview.readOnly = false; preview.value = makeBody(RECEIPT_PENDING_TEXT); }
+  if (sendBtn) sendBtn.disabled = false;
+
+  try {
+    const url = await ensureReceiptUrl(calEmailDocId);
+    if (!url) throw new Error('Receipt link not generated');
+    const body = makeBody(url);
     calEmailSelectedTemplate = { id: 'receipt', subject: `Your receipt -${ref}`, body };
-    if (preview) { preview.value = body; preview.readOnly = false; }
+    // Only refresh the preview if the trader hasn't started editing it.
+    if (preview && preview.value === makeBody(RECEIPT_PENDING_TEXT)) preview.value = body;
   } catch (e) {
-    // uploadDocToStorage already surfaces a toast on failure
-    if (preview) { preview.value = ''; preview.readOnly = false; }
-    calEmailSelectedTemplate = null;
-  } finally {
-    if (sendBtn) sendBtn.disabled = false;
+    // Leave the tokenised body in place so the send guard re-attempts / blocks.
+    if (preview && preview.value === makeBody(RECEIPT_PENDING_TEXT)) preview.value = makeBody(RECEIPT_ERROR_TEXT);
   }
 }
 
@@ -12881,11 +13019,31 @@ function updateCalEmailPreview() {
   previewEl.value = calEmailSelectedTemplate.body || '';
 }
 
-function sendCalEmail() {
+async function sendCalEmail() {
   if (!calEmailSelectedTemplate) return;
 
   // Use whatever is currently in the editable preview, so trader tweaks send too
   const previewEl = document.getElementById('calEmailPreview');
+
+  // Receipt: never send without the shareable link. If it isn't ready (or the
+  // trader tapped Send while it was still uploading), wait for it, then weave it
+  // into the message. If it ultimately fails, block the send with a clear message.
+  if (calEmailSelectedTemplate.id === 'receipt') {
+    const sendBtn = document.getElementById('sendCalEmailBtn');
+    if (sendBtn) sendBtn.disabled = true;
+    let url = null;
+    try { url = await ensureReceiptUrl(calEmailDocId); } catch (e) { url = null; }
+    if (sendBtn) sendBtn.disabled = false;
+    if (!url) { toast('The receipt link is still preparing or could not be generated. Please try Send again in a moment.', 'error', 8000); return; }
+    if (previewEl) {
+      let body = previewEl.value || calEmailSelectedTemplate.body || '';
+      [RECEIPT_LINK_TOKEN, RECEIPT_PENDING_TEXT, RECEIPT_ERROR_TEXT].forEach(m => { body = body.split(m).join(url); });
+      if (!body.includes(url)) body += `\n\n${url}`; // safety: never send a linkless receipt
+      previewEl.value = body;
+      calEmailSelectedTemplate.body = body;
+    }
+  }
+
   const liveBody  = previewEl ? previewEl.value : (calEmailSelectedTemplate.body || '');
 
   if (calEmailChannel === 'whatsapp') {
@@ -12935,6 +13093,8 @@ function setupCalendar() {
     document.getElementById('calEmailModal').style.display = 'none';
     calEmailSelectedTemplate = null;
     calEmailChannel = 'email';
+    resumeReceiptAfterPayment = false;
+    resetReceiptUrlCache();
   }
   ['closeCalEmailModal', 'closeCalEmailModalBtn'].forEach(id => {
     document.getElementById(id)?.addEventListener('click', closeCalEmailModalFn);
