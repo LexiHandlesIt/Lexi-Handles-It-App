@@ -3333,6 +3333,7 @@ input[type="text"].sig-text-input:focus {
   border-color: transparent;
   padding: 0;
   cursor: default;
+  text-transform: none;     /* show "Status: Estimate" as written, not shouty caps */
 }
 .type-badge.jca-badge:hover { opacity: 1; }
 
@@ -4812,6 +4813,18 @@ input[type="text"].sig-text-input:focus {
   border-bottom: 1px solid var(--border);
 }
 
+/* My Jobs "Loading your jobs…" spinner (shown until the first cloud load lands) */
+.jobs-loading-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--border);
+  border-top-color: var(--sage);
+  border-radius: 50%;
+  animation: jobsSpin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+@keyframes jobsSpin { to { transform: rotate(360deg); } }
+
 .modal-title { font-size: 1.1rem; color: var(--walnut); }
 
 /* Customer dashboard: name + contact stacked in the white header, close top-right */
@@ -6015,6 +6028,9 @@ input[type="text"].sig-text-input:focus {
 .cdv-more-wrap { position: relative; }
 .cdv-more-wrap .cdv-more-btn { width: 100%; }
 .cdv-job-actions .cal-icon-btn.cdv-labeled { flex: 1; }
+.cdv-job-actions .cdv-more-wrap { flex: 1; }
+/* The per-job Contact/Share/More row sits directly under Edit/Invoice/Receipt */
+.cdv-job-contact-actions { border-bottom: 1px solid var(--border); }
 /* Accent colours for the per-job action tiles */
 .cal-icon-btn.cdv-action-edit    { border-color: var(--walnut); color: var(--walnut); }
 .cal-icon-btn.cdv-action-invoice { border-color: var(--sage); color: var(--sage); }
@@ -7218,6 +7234,8 @@ input[type="text"].sig-text-input:focus {
   display: flex;
   gap: 8px;
   padding: 8px 14px 12px;
+  justify-content: space-between;
+  align-items: center;
 }
 .jca-open {
   flex-shrink: 0;

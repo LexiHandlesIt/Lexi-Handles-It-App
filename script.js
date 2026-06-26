@@ -64,6 +64,10 @@ function handleAddToHomeScreen() {
 let customerSyncTimer = null;
 let savedDocsSyncTimer = null;
 let savedDocsSyncReady = false;
+// True once a documents load from Supabase has actually completed (success or a
+// confirmed-empty result). Until then, the My Jobs list shows "Loading your jobs…"
+// rather than "no jobs", so a cold-database load never looks like data loss.
+let docsLoadedOnce = false;
 
 /* ===== STORAGE KEYS ===== */
 const KEY_CO   = 'tq_co';
@@ -289,7 +293,7 @@ const LEXI_FEATURE_CONTROLS = [
   { selector: '#autoFillRatesBtn,#autoFillServicesBtn,#autoFillMaterialsBtn,#changeTradeBtnRates,#changeTradeBtnSvc,#changeTradeBtnMat', feature: 'trade_autofill', level: 'full' },
   { selector: '#bulkChooseService,#bulkChooseMaterials,#csvUploadZone,#csvFile,#bulkPaste,#parseBulkBtn', feature: 'bulk_price_import', level: 'full' },
   { selector: '#voiceBtn,#voiceBtnMaterials', feature: 'voice_item_entry', level: 'full' },
-  { selector: '#beforePhotosInput,#afterPhotosInput,#quoteIncludePhotos,#qbpIncludePhotos', feature: 'job_photos', level: 'full' },
+  { selector: '#beforePhotosInput,#afterPhotosInput,#quoteIncludePhotos,#qbpIncludePhotos,#pjBeforePhotosInput,#pjAfterPhotosInput,#pjIncludeBeforePhotos,#pjIncludeAfterPhotos', feature: 'job_photos', level: 'full' },
   { selector: '#jobsSpreadsheetToggle', feature: 'advanced_job_spreadsheet', level: 'full' },
   { selector: '#menuCalendar', feature: 'in_app_calendar', level: 'full' },
   { selector: '#downloadIcsBtn', feature: 'external_calendar_export', level: 'full' },
@@ -1086,9 +1090,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadPriceListFromSupabase(),
     loadCustomersFromSupabase(),
     loadSavedDocsFromSupabase(),
-  ]).then((results) => {
+  ]).then(() => {
     savedDocsSyncReady = true;
-    const docsLoaded = results[3]; // loadSavedDocsFromSupabase result
     // Refresh UI with any data that changed after the Supabase sync
     refreshPriceList();
     refreshSavedDocs();
@@ -1106,17 +1109,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     syncAllLocalCustomersToSupabase();
     queueSavedDocsSync();
 
-    // Self-heal: if the documents load came back empty (most likely a cold-start
-    // blip that outlasted withNetworkRetry's back-off), try once more after a short
-    // delay so a second device is never left showing a customer with "no paperwork"
-    // until a manual refresh. Warm Supabase answers instantly the second time, and
-    // a genuinely empty account just does one harmless extra read.
-    if (!docsLoaded && lexiSupabase && lexiAuthSession?.user?.id) {
-      setTimeout(() => {
-        loadSavedDocsFromSupabase().then(ok => {
-          if (ok) { refreshSavedDocs(); updateSavedBadge(); updateJobPicker(); }
-        }).catch(() => {});
-      }, 4000);
+    // Self-heal: if the first documents load did not succeed (a cold-start blip that
+    // outlasted withNetworkRetry), keep retrying with backoff so the list fills in
+    // without a manual refresh. While this runs, refreshSavedDocs shows
+    // "Loading your jobs…" rather than "no jobs", so a cold load never looks like
+    // data loss. `docsLoadedOnce` is set true inside loadSavedDocsFromSupabase the
+    // moment a load succeeds (even if empty), which stops the loop.
+    if (!docsLoadedOnce && lexiSupabase && lexiAuthSession?.user?.id) {
+      (async () => {
+        for (const delay of [3000, 8000, 20000]) {
+          if (docsLoadedOnce) break;
+          await new Promise(r => setTimeout(r, delay));
+          if (docsLoadedOnce) break;
+          try { await loadSavedDocsFromSupabase(); } catch (_) {}
+          refreshSavedDocs(); updateSavedBadge(); updateJobPicker();
+        }
+        // Give up gracefully so the real empty state can show instead of a
+        // perpetual loading indicator.
+        docsLoadedOnce = true;
+        refreshSavedDocs();
+      })();
     }
   }).catch(err => {
     console.warn('Background Supabase sync failed:', err);
@@ -1391,11 +1403,27 @@ async function ensureSupabaseProfile(user) {
 }
 
 async function signOutOfLexi() {
+  // Flush any not-yet-synced jobs to the cloud BEFORE signing out, so logging out
+  // (which clears the local cache on the next login) can never lose a job. If the
+  // flush fails after retries, let the user decide rather than silently losing data.
+  try {
+    if (lexiSupabase && lexiAuthSession?.user?.id && (state.saved || []).length) {
+      await saveSavedDocsToSupabase();
+      localStorage.removeItem('lexi_last_documents_sync_error');
+    }
+  } catch (e) {
+    console.warn('Sign-out flush failed:', e);
+    const proceed = confirm('Some jobs have not finished saving to the cloud yet. If you sign out now they could be lost. Sign out anyway?');
+    if (!proceed) return;
+  }
   _authReloading = true; // we're about to reload; suppress the auth-change listener
   if (lexiSupabase) await lexiSupabase.auth.signOut();
   localStorage.removeItem(KEY_ONBOARDED);
   localStorage.removeItem(KEY_PL_ONBOARDED);
-  localStorage.removeItem('lexi_user_id'); // force a clean data wipe on next login
+  // NOTE: intentionally keep 'lexi_user_id'. Removing it forced a full local wipe on
+  // the next login, which could delete a job that had not yet reached the cloud. A
+  // same-user re-login now preserves the cache; a DIFFERENT user still triggers the
+  // cross-account wipe in initialiseAuth (storedUserId !== currentUserId).
   location.reload();
 }
 
@@ -2442,6 +2470,10 @@ async function loadSavedDocsFromSupabase() {
     return false;
   }
 
+  // The query succeeded (even if it returned zero rows) — the cloud has answered,
+  // so we can stop showing the "Loading your jobs…" state.
+  docsLoadedOnce = true;
+
   if (Array.isArray(data) && data.length) {
     const remoteDocs = data.map(savedDocRowToDoc).filter(doc => doc.id);
     state.saved = mergeSavedDocs(state.saved, remoteDocs);
@@ -2517,7 +2549,8 @@ async function saveSavedDocsToSupabase() {
     const customerId = await getSupabaseCustomerId(doc.quote || {});
     docsWithCustomers.push({ doc, customerId });
     try {
-      await upsertSingleDocToSupabase(userId, doc, customerId);
+      // Retry cold-DB timeouts / network blips so a job is never left unsynced.
+      await withNetworkRetry(() => upsertSingleDocToSupabase(userId, doc, customerId));
     } catch (err) {
       const message = String(err?.message || '');
       if (/document_data|schema cache|column/i.test(message)) {
@@ -2598,7 +2631,8 @@ async function syncSingleDocToSupabase(doc) {
   _clearCustIdCache();
   try {
     const customerId = await getSupabaseCustomerId(doc.quote || {});
-    await upsertSingleDocToSupabase(userId, doc, customerId);
+    // Retry cold-DB timeouts / network blips so a job is never left unsynced.
+    await withNetworkRetry(() => upsertSingleDocToSupabase(userId, doc, customerId));
     // Best-effort single job-summary upsert (no orphan cleanup — that would
     // wrongly delete every other job since we only know about this one doc).
     try {
@@ -5401,16 +5435,23 @@ function syncCustMoreToggle() {
 
 /* ===== PAGE JOBS -ADD JOBS ===== */
 function setupPageJobs() {
-  // Services / Materials tab switching
+  // Build-your-quote tab switching: My Rates / My Services / My Materials / My Photos
+  const PJ_PANELS = { rates: 'pjRatesPanel', service: 'pjServicePanel', materials: 'pjMaterialsPanel', photos: 'pjPhotosPanel' };
   document.querySelectorAll('#pjCatSelector .obo-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#pjCatSelector .obo-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      const isMat = btn.dataset.pjtab === 'materials';
-      document.getElementById('pjServicePanel').style.display  = isMat ? 'none' : '';
-      document.getElementById('pjMaterialsPanel').style.display = isMat ? '' : 'none';
+      const tab = btn.dataset.pjtab;
+      Object.entries(PJ_PANELS).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = (key === tab) ? '' : 'none';
+      });
     });
   });
+
+  // My Photos tab — before/after capture for the quote being built
+  document.getElementById('pjBeforePhotosInput')?.addEventListener('change', e => handleBuilderPhotoUpload(e, 'before'));
+  document.getElementById('pjAfterPhotosInput')?.addEventListener('change', e => handleBuilderPhotoUpload(e, 'after'));
 
   // Services picker search
   document.getElementById('jobPickerSearch').addEventListener('input', () => updateServicesPicker());
@@ -5691,6 +5732,8 @@ function populateQuoteForm() {
   renderQuoteItems();
   recalcTotals();
   updateJobPicker();
+  // My Photos tab: load this quote's photos + include choices (empty for a new quote).
+  loadBuilderPhotos(state.quote);
 }
 
 /* Returns the full printed name: "Samantha Clarke" */
@@ -5904,9 +5947,9 @@ function updateMaterialsPicker() {
 }
 
 function updateRatesSection() {
-  const section = document.getElementById('myRatesSection');
   const row = document.getElementById('myRatesBtns');
-  if (!section || !row) return;
+  const empty = document.getElementById('pjRatesEmpty');
+  if (!row) return;
 
   const c = state.company;
   // Order: col1 row1, col2 row1, col1 row2, col2 row2
@@ -5917,8 +5960,9 @@ function updateRatesSection() {
     { label: 'Day Rate',        key: 'rateDay',     value: c.rateDay,     unit: 'day' },
   ].filter(r => r.value != null && r.value > 0);
 
-  if (!rates.length) { section.style.display = 'none'; return; }
-  section.style.display = '';
+  // The My Rates tab is always present — show a prompt instead of hiding when empty.
+  if (!rates.length) { row.innerHTML = ''; if (empty) empty.style.display = ''; return; }
+  if (empty) empty.style.display = 'none';
   row.innerHTML = '';
   row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
 
@@ -6157,7 +6201,11 @@ function collectQuoteState() {
     authSig:       getVal('authSig'),
     custSigText:   getVal('custSigText'),
     custSig:       '',
-    sigDate:       todayStr()
+    sigDate:       todayStr(),
+    // Job photos captured in the My Photos tab, plus which sets to put in documents.
+    photos:        { before: [...(state.quote.photos?.before || [])], after: [...(state.quote.photos?.after || [])] },
+    includeBeforePhotos: !!document.getElementById('pjIncludeBeforePhotos')?.checked,
+    includeAfterPhotos:  !!document.getElementById('pjIncludeAfterPhotos')?.checked
   };
 }
 
@@ -7331,6 +7379,7 @@ function refreshSavedDocs() {
   const sort   = sortSel ? sortSel.value : 'added-newest';
   const container = document.getElementById('savedDocsList');
   const empty     = document.getElementById('savedDocsEmpty');
+  const loading   = document.getElementById('savedDocsLoading');
 
   let docs = [...state.saved];
   let repairedDocs = false;
@@ -7426,15 +7475,27 @@ function refreshSavedDocs() {
     docs.sort((a, b) => docAddedTime(b) - docAddedTime(a));
   }
 
-  // Remove all doc cards but keep the empty-state element in the DOM
+  // De-bitty: while the first cloud documents load is still pending, the customers
+  // table may have landed before the documents table. Showing customer-only cards
+  // now would flash "everyone owes £0" until the documents fill in. Suppress them
+  // until the documents load has completed so the list paints once, correct.
+  const docsStillLoading = !docsLoadedOnce && !!lexiSupabase && !!lexiAuthSession?.user?.id;
+  if (docsStillLoading) standaloneCustomers = [];
+
+  // Remove all doc cards but keep the empty-state + loading elements in the DOM
   Array.from(container.children).forEach(child => {
-    if (child !== empty) child.remove();
+    if (child !== empty && child !== loading) child.remove();
   });
 
   if (!docs.length && !standaloneCustomers.length) {
-    empty.style.display = 'flex';
+    // Logged in but the first cloud load hasn't landed yet → show "Loading your
+    // jobs…" instead of "no jobs", so a cold database never looks like data loss.
+    const stillLoading = !docsLoadedOnce && !!lexiSupabase && !!lexiAuthSession?.user?.id;
+    if (loading) loading.style.display = stillLoading ? 'flex' : 'none';
+    empty.style.display = stillLoading ? 'none' : 'flex';
     return;
   }
+  if (loading) loading.style.display = 'none';
   empty.style.display = 'none';
 
   standaloneCustomers.forEach(customer => {
@@ -7467,7 +7528,6 @@ function refreshSavedDocs() {
 
   docs.forEach(doc => {
     const card = document.createElement('div');
-    const nextStep = getNextStep(doc);
     const docType = doc.type || (doc.quote && doc.quote.type) || 'Estimate';
     const displayRef = doc.ref || doc.quote?.ref || '';
     const displayDate = doc.date || doc.quote?.date || '';
@@ -7493,9 +7553,8 @@ function refreshSavedDocs() {
         </div>
       </div>
       <div class="job-card-actions">
-        <button type="button" class="jca-open" data-id="${doc.id}">Open</button>
-        <button type="button" class="jca-primary jca-next" data-id="${doc.id}">${nextStep.label}</button>
-        <span class="type-badge ${statusBadge} jca-badge">${statusLabel}</span>
+        <span class="type-badge ${statusBadge} jca-badge">Status: ${statusLabel}</span>
+        <button type="button" class="jca-open" data-id="${doc.id}">Open Dashboard</button>
       </div>
       <div class="saved-doc-payment-tally">
         <span class="sdpt-payment-info">
@@ -7508,9 +7567,8 @@ function refreshSavedDocs() {
 
     container.appendChild(card);
 
-    // Open → customer dashboard; single guided next-step action
+    // Open → customer dashboard (all per-status actions live inside it)
     card.querySelector('.jca-open')?.addEventListener('click', () => openCustomerDashboardForDoc(doc.id));
-    card.querySelector('.jca-next')?.addEventListener('click', () => runNextStep(doc));
   });
 }
 
@@ -9120,6 +9178,55 @@ function renderPhotosPreview(doc) {
   render('afterPhotosPreview', doc.photos?.after || []);
 }
 
+// ── My Photos tab (quote builder) — capture onto the in-progress quote ──────────
+function handleBuilderPhotoUpload(e, which) {
+  if (!hasLexiFeature('job_photos', 'full')) {
+    e.target.value = '';
+    showLexiFeatureLocked('job_photos');
+    return;
+  }
+  if (!state.quote.photos) state.quote.photos = { before: [], after: [] };
+  const files = [...(e.target.files || [])].slice(0, 3);
+  Promise.all(files.map(fileToDataUrl)).then(urls => {
+    state.quote.photos[which] = urls.slice(0, 3);
+    renderBuilderPhotosPreview();
+  });
+}
+
+function renderBuilderPhotosPreview() {
+  const photos = state.quote.photos || {};
+  const render = (id, list) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = (list || []).map(src => `<img src="${src}" alt="Job photo">`).join('') ||
+      '<p class="photo-empty">No photos added yet.</p>';
+  };
+  render('pjBeforePhotosPreview', photos.before || []);
+  render('pjAfterPhotosPreview', photos.after || []);
+}
+
+// Load a quote's saved photos + include choices into the My Photos tab (on edit).
+function loadBuilderPhotos(q = {}) {
+  state.quote.photos = { before: [...(q.photos?.before || [])], after: [...(q.photos?.after || [])] };
+  const incB = document.getElementById('pjIncludeBeforePhotos');
+  const incA = document.getElementById('pjIncludeAfterPhotos');
+  if (incB) incB.checked = !!q.includeBeforePhotos;
+  if (incA) incA.checked = !!q.includeAfterPhotos;
+  renderBuilderPhotosPreview();
+}
+
+// Clear the My Photos tab for a brand-new quote.
+function resetBuilderPhotos() {
+  state.quote.photos = { before: [], after: [] };
+  const incB = document.getElementById('pjIncludeBeforePhotos');
+  const incA = document.getElementById('pjIncludeAfterPhotos');
+  if (incB) incB.checked = false;
+  if (incA) incA.checked = false;
+  const bi = document.getElementById('pjBeforePhotosInput'); if (bi) bi.value = '';
+  const ai = document.getElementById('pjAfterPhotosInput');  if (ai) ai.value = '';
+  renderBuilderPhotosPreview();
+}
+
 function rememberPreviewChoice() {
   if (document.getElementById('dontShowPreviewFirst')?.checked) {
     localStorage.setItem(KEY_PREVIEW_FIRST_SUPPRESSED, '1');
@@ -9996,13 +10103,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
       <span>${d.acceptedBy ? `Signed by ${esc(d.acceptedBy)}` : 'Customer has accepted this quote'}${d.acceptedAt ? ` on ${new Date(d.acceptedAt).toLocaleDateString('en-GB')}` : ''}</span>
     </div>` : '';
 
-  const ns = getNextStep(d);
-  const nextStepBtn = `
-    <button type="button" class="cdv-next-step-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="${ns.action}">
-      <span class="cdv-next-step-hint">Next step</span>${esc(ns.label)}
-    </button>`;
-
-  const JSVG_EDIT    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const JSVG_EDIT    =`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
   const JSVG_INVOICE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
   const JSVG_RECEIPT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
   const jobActionBtns = `
@@ -10010,6 +10111,28 @@ function buildCustomerJobSection(d, jobNum = 0) {
       <button type="button" class="cal-icon-btn cdv-labeled cdv-action-edit" data-prog-doc-id="${esc(d.id)}" data-prog-action="editQuote">${JSVG_EDIT}<span>Edit Quote</span></button>
       <button type="button" class="cal-icon-btn cdv-labeled cdv-action-invoice" data-prog-doc-id="${esc(d.id)}" data-prog-action="invoice">${JSVG_INVOICE}<span>Invoice</span></button>
       <button type="button" class="cal-icon-btn cdv-labeled cdv-action-receipt" data-prog-doc-id="${esc(d.id)}" data-prog-action="receipt">${JSVG_RECEIPT}<span>Receipt</span></button>
+    </div>`;
+
+  // Contact / Share / More — per job, because contacting or sharing is always about
+  // a specific document (this estimate/invoice/receipt). Wired via the dashboard's
+  // delegated click handler (data-prog-action) so it works per doc without duplicate ids.
+  const JSVG_CONTACT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  const JSVG_SHARE   = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
+  const JSVG_MORE    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>`;
+  const JSVG_CAMERA  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
+  const JSVG_DELETE  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+  const jobContactBtns = `
+    <div class="cdv-job-actions cdv-job-contact-actions">
+      <button type="button" class="cal-icon-btn cdv-labeled" data-prog-doc-id="${esc(d.id)}" data-prog-action="contact">${JSVG_CONTACT}<span>Contact</span></button>
+      <button type="button" class="cal-icon-btn cdv-labeled" data-prog-doc-id="${esc(d.id)}" data-prog-action="share">${JSVG_SHARE}<span>Share</span></button>
+      <div class="cdv-more-wrap">
+        <button type="button" class="cal-icon-btn cdv-labeled cdv-more-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="moreToggle">${JSVG_MORE}<span>More</span></button>
+        <div class="cdv-more-menu" style="display:none">
+          <button type="button" class="cdv-more-item" data-prog-doc-id="${esc(d.id)}" data-prog-action="addPhoto">${JSVG_CAMERA}<span>Add photo</span></button>
+          <button type="button" class="cdv-more-item" data-prog-doc-id="${esc(d.id)}" data-prog-action="editQuote">${JSVG_EDIT}<span>Update details</span></button>
+          <button type="button" class="cdv-more-item cdv-more-delete" data-prog-doc-id="${esc(d.id)}" data-prog-action="deleteJob">${JSVG_DELETE}<span>Delete</span></button>
+        </div>
+      </div>
     </div>`;
 
   return `
@@ -10023,8 +10146,8 @@ function buildCustomerJobSection(d, jobNum = 0) {
           data-prog-doc-id="${esc(d.id)}" data-prog-action="${statusClass === 'paid' ? 'receipt' : statusClass === 'invoiced' || statusClass === 'overdue' ? 'invoice' : 'quote'}"
           title="Open ${statusLabel}">${esc(statusLabel)}</button>
       </div>
-      ${nextStepBtn}
       ${jobActionBtns}
+      ${jobContactBtns}
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
       ${acceptanceHtml}
@@ -10064,57 +10187,12 @@ function renderSingleCustomerDashboard(group, groups) {
   const headerContactEl = document.getElementById('customerDashboardContact');
   if (headerContactEl) headerContactEl.innerHTML = contactLines;
 
-  // Contact action buttons (Email / WhatsApp / Phone)
-  const dashPhone = q.custPhone || '';
-  const dashEmail = q.custEmail || '';
-  const dashDocId = firstDoc.id;
-  const DSVG_EMAIL = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
-  const DSVG_WA    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
-  const DSVG_PHONE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.44 2 2 0 0 1 3.57 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82a16 16 0 0 0 6.29 6.29l1.12-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
-  const DSVG_SHARE  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
-  const DSVG_EDIT   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
-  const DSVG_CAMERA = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
-  const DSVG_DELETE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
-  const DSVG_CONTACT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
-  const DSVG_MORE    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>`;
-  const contactBtns = `
-    <div class="cdv-contact-btns">
-      <button type="button" class="cal-icon-btn cal-icon-email cdv-labeled" onclick="openContactChooser('${esc(dashDocId)}')" title="Contact ${esc(group.name)}">${DSVG_CONTACT}<span>Contact</span></button>
-      <button type="button" class="cal-icon-btn cal-icon-share cdv-labeled" onclick="openSendChoiceModal()" title="Share my details with this customer">${DSVG_SHARE}<span>Share</span></button>
-      <div class="cdv-more-wrap">
-        <button type="button" class="cal-icon-btn cdv-labeled cdv-more-btn" id="custDashMoreBtn" title="More options">${DSVG_MORE}<span>More</span></button>
-        <div class="cdv-more-menu" id="custDashMoreMenu" style="display:none">
-          <button type="button" class="cdv-more-item" id="custDashCameraBtn">${DSVG_CAMERA}<span>Add photo</span></button>
-          <button type="button" class="cdv-more-item" id="custDashEditBtn">${DSVG_EDIT}<span>Update details</span></button>
-          <button type="button" class="cdv-more-item cdv-more-delete" id="custDashDeleteBtn">${DSVG_DELETE}<span>Delete</span></button>
-        </div>
-      </div>
-    </div>`;
+  // Contact / Share / More now live per job (built inside buildCustomerJobSection),
+  // because those actions are always about a specific document.
 
   // contentHtml = pure dashboard content (used for download -no buttons)
   const contentHtml = `
     <div class="customer-dashboard-card printable-customer-dashboard">
-      <div class="cdv-header">
-        ${contactBtns}
-      </div>
-      <div class="cdv-summary-bar">
-        <div class="cdv-summary-item">
-          <span class="cdv-summary-label">Total Charged</span>
-          <span class="cdv-summary-value">${fmtPrice(totals.total)}</span>
-        </div>
-        <div class="cdv-summary-item">
-          <span class="cdv-summary-label">Paid</span>
-          <span class="cdv-summary-value cdv-paid">${fmtPrice(totals.paid)}</span>
-        </div>
-        <div class="cdv-summary-item">
-          <span class="cdv-summary-label">Outstanding</span>
-          <span class="cdv-summary-value ${totals.outstanding > 0 ? 'cdv-outstanding' : 'cdv-paid'}">${fmtPrice(totals.outstanding)}</span>
-        </div>
-        <div class="cdv-summary-item">
-          <span class="cdv-summary-label">Jobs</span>
-          <span class="cdv-summary-value">${group.docs.length}</span>
-        </div>
-      </div>
       <div class="cdv-jobs-list">
         ${group.docs.map((d, i) => buildCustomerJobSection(d, group.docs.length > 1 ? i + 1 : 0)).join('')}
       </div>
@@ -10131,71 +10209,61 @@ function renderSingleCustomerDashboard(group, groups) {
   }
   applyLexiEntitlementRestrictions();
 
-  // Wire modal-header action buttons
-  const firstDocId = group.docs[0]?.id;
+  // Per-job action buttons (Edit/Invoice/Receipt + Contact/Share/More) and job-status
+  // progression — one delegated click handler. Added ONCE: `body` persists across
+  // re-renders, so re-adding it each time would stack duplicate handlers (firing
+  // actions N times). It reads `activeCustomerGroup` live, which is set on every render.
+  if (!body._cdvProgClickWired) {
+    body._cdvProgClickWired = true;
+    body.addEventListener('click', e => {
+      // Clicking anywhere outside a "More" wrap closes any open per-job More menu.
+      if (!e.target.closest('.cdv-more-wrap')) {
+        body.querySelectorAll('.cdv-more-menu').forEach(m => { m.style.display = 'none'; });
+      }
+      const btn = e.target.closest('[data-prog-doc-id]');
+      if (!btn) return;
+      const docId  = btn.dataset.progDocId;
+      const action = btn.dataset.progAction;
 
-  // "More" dropdown (Photo / Update / Delete) — toggle + close on outside click
-  const moreBtn  = document.getElementById('custDashMoreBtn');
-  const moreMenu = document.getElementById('custDashMoreMenu');
-  if (moreBtn && moreMenu) {
-    moreBtn.onclick = (e) => {
-      e.stopPropagation();
-      moreMenu.style.display = moreMenu.style.display === 'none' ? 'flex' : 'none';
-    };
-    moreMenu.querySelectorAll('button').forEach(b =>
-      b.addEventListener('click', () => { moreMenu.style.display = 'none'; }));
-    document.addEventListener('click', (e) => {
-      if (moreMenu.style.display !== 'none' && !e.target.closest('.cdv-more-wrap')) {
-        moreMenu.style.display = 'none';
+      // Toggle this job's More menu (close any others first).
+      if (action === 'moreToggle') {
+        const menu = btn.closest('.cdv-more-wrap')?.querySelector('.cdv-more-menu');
+        if (menu) {
+          const isOpen = menu.style.display !== 'none';
+          body.querySelectorAll('.cdv-more-menu').forEach(m => { m.style.display = 'none'; });
+          menu.style.display = isOpen ? 'none' : 'flex';
+        }
+        return;
+      }
+      // Any real action: close menus first, then run it.
+      body.querySelectorAll('.cdv-more-menu').forEach(m => { m.style.display = 'none'; });
+
+      if (action === 'receipt') {
+        _previewReturnDocId = docId;   // X on the preview returns to this dashboard
+        handleReceiptRequest(docId);
+      } else if (action === 'editQuote') {
+        loadQuoteIntoBuilder(docId, true);
+      } else if (action === 'contact') {
+        openContactChooser(docId);
+      } else if (action === 'share') {
+        openSendChoiceModal();
+      } else if (action === 'addPhoto') {
+        executeCustomerEdit('addPhoto', docId);
+      } else if (action === 'deleteJob') {
+        if (activeCustomerGroup) openCustomerDeleteChoice(activeCustomerGroup);
+      } else if (action === 'chase') {
+        openChaseForDoc(docId);
+      } else if (action === 'reminder') {
+        openChannelChooserForTemplate(docId, 'booking_reminder', 'Send reminder via…');
+      } else if (action === 'bookin') {
+        openChannelChooserForTemplate(docId, 'book_in', 'Book in via…');
+      } else {
+        document.getElementById('customerDashboardModal').style.display = 'none';
+        if      (action === 'quote' || action === 'send') openQuoteModal(docId);
+        else if (action === 'invoice') { _previewReturnDocId = docId; previewInvoice(docId); }
       }
     });
   }
-
-  const dashEditBtn = document.getElementById('custDashEditBtn');
-  if (dashEditBtn) dashEditBtn.onclick = () => {
-    activeEditDocId = group.docs.length === 1 ? firstDocId : null;
-    loadQuoteIntoBuilder(activeEditDocId || firstDocId, true);
-  };
-
-  // Camera button - open add photo flow for first doc
-  const dashCameraBtn = document.getElementById('custDashCameraBtn');
-  if (dashCameraBtn) dashCameraBtn.onclick = () => {
-    if (group.docs.length === 1) {
-      executeCustomerEdit('addPhoto', firstDocId);
-    } else {
-      // Pick which job to add photo to
-      activeEditDocId = null;
-      customerEditPickDoc('addPhoto');
-    }
-  };
-
-  // Delete button - ask document or customer
-  const dashDeleteBtn = document.getElementById('custDashDeleteBtn');
-  if (dashDeleteBtn) dashDeleteBtn.onclick = () => openCustomerDeleteChoice(group);
-
-  // Job status progression + per-job action buttons — event delegation
-  body.addEventListener('click', e => {
-    const btn = e.target.closest('[data-prog-doc-id]');
-    if (!btn) return;
-    const docId  = btn.dataset.progDocId;
-    const action = btn.dataset.progAction;
-    if (action === 'receipt') {
-      _previewReturnDocId = docId;   // X on the preview returns to this dashboard
-      handleReceiptRequest(docId);
-    } else if (action === 'editQuote') {
-      loadQuoteIntoBuilder(docId, true);
-    } else if (action === 'chase') {
-      openChaseForDoc(docId);
-    } else if (action === 'reminder') {
-      openChannelChooserForTemplate(docId, 'booking_reminder', 'Send reminder via…');
-    } else if (action === 'bookin') {
-      openChannelChooserForTemplate(docId, 'book_in', 'Book in via…');
-    } else {
-      document.getElementById('customerDashboardModal').style.display = 'none';
-      if      (action === 'quote' || action === 'send') openQuoteModal(docId);
-      else if (action === 'invoice') { _previewReturnDocId = docId; previewInvoice(docId); }
-    }
-  });
 
   // Job Accepted checkbox -show/hide date, auto-fill today, save
   body.addEventListener('change', e => {
@@ -11539,7 +11607,11 @@ function buildDocHtml(doc, docType, extra = {}) {
     </div>` : '';
 
   // ── Photos ───────────────────────────────────────────────────────
-  const photosHtml = extra.includePhotos ? buildPhotosSection(doc) : '';
+  // Per-set photo inclusion: the quote builder stores includeBefore/AfterPhotos on the
+  // quote; invoice/receipt fall back to their single "include photos" send-checkbox (both sets).
+  const incBeforePhotos = q.includeBeforePhotos != null ? q.includeBeforePhotos : !!extra.includePhotos;
+  const incAfterPhotos  = q.includeAfterPhotos  != null ? q.includeAfterPhotos  : !!extra.includePhotos;
+  const photosHtml = buildPhotosSection(doc, { before: incBeforePhotos, after: incAfterPhotos });
 
   // ── Acceptance page (quotes / estimates) ────────────────────────
   let acceptancePage = '';
@@ -11662,10 +11734,13 @@ function buildPaymentSection(co, docType, preferredMethod = '') {
   return `<div class="section"><h3>Payment Details</h3><p style="white-space:pre-line">${esc(lines.join('\n\n'))}</p></div>`;
 }
 
-function buildPhotosSection(doc) {
-  const photos = doc.photos || {};
-  const before = (photos.before || []).slice(0, 3);
-  const after = (photos.after || []).slice(0, 3);
+function buildPhotosSection(doc, include) {
+  const inc = include || { before: true, after: true };
+  // Builder photos ride on doc.quote.photos; dashboard-modal photos sit on doc.photos.
+  const src = (doc.photos && ((doc.photos.before || []).length || (doc.photos.after || []).length))
+    ? doc.photos : (doc.quote?.photos || {});
+  const before = inc.before ? (src.before || []).slice(0, 3) : [];
+  const after  = inc.after  ? (src.after  || []).slice(0, 3) : [];
   if (!before.length && !after.length) return '';
   const group = (title, list) => !list.length ? '' : `
     <div class="photo-doc-group">

@@ -1254,24 +1254,26 @@
         <p class="page-sub" id="pageJobsSub">What work are you quoting for?</p>
       </div>
 
-      <!-- SECTION 1: MY RATES -->
-      <div class="card pj-section" id="myRatesSection" style="display:none">
-        <h2 class="card-title pj-section-title">My Rates</h2>
-        <p class="pj-section-hint">Tick the rate you're using. Change the price or hours if needed.</p>
-        <div id="myRatesBtns"></div>
-      </div>
-
-      <!-- SECTION 2 & 3: SERVICES / MATERIALS TABS -->
+      <!-- BUILD-YOUR-QUOTE TABS: My Rates / My Services / My Materials / My Photos -->
       <div class="card pj-section">
         <div class="obo-tab-bar" id="pjCatSelector">
           <div class="obo-tabs-inner">
-            <button type="button" class="obo-tab active" data-pjtab="service">My Services</button>
-            <button type="button" class="obo-tab" data-pjtab="materials">Materials</button>
+            <button type="button" class="obo-tab active" data-pjtab="rates">My Rates</button>
+            <button type="button" class="obo-tab" data-pjtab="service">My Services</button>
+            <button type="button" class="obo-tab" data-pjtab="materials">My Materials</button>
+            <button type="button" class="obo-tab" data-pjtab="photos">My Photos</button>
           </div>
         </div>
 
+        <!-- Rates panel -->
+        <div id="pjRatesPanel">
+          <p class="pj-section-hint">Tick the rate you're using. Change the price or hours if needed.</p>
+          <div id="myRatesBtns"></div>
+          <p class="pj-section-hint" id="pjRatesEmpty" style="display:none">Add your rates in Settings (My Rates) to quick-pick them here.</p>
+        </div>
+
         <!-- Services panel -->
-        <div id="pjServicePanel">
+        <div id="pjServicePanel" style="display:none">
           <div class="picker-search-row">
             <input type="text" id="jobPickerSearch" placeholder="Search your services..." class="search-input">
             <button type="button" class="btn-mic" id="voiceBtn" title="Speak a job">
@@ -1314,6 +1316,25 @@
               <input type="number" id="customItemPrice" placeholder="0" min="0" step="any" class="oneoff-price-input">
             </div>
             <button type="button" class="btn btn-outline btn-sm oneoff-add-btn" id="addCustomItemBtn">Add Material</button>
+          </div>
+        </div>
+
+        <!-- Photos panel: two mirrored columns (Before | After) -->
+        <div id="pjPhotosPanel" style="display:none">
+          <p class="pj-section-hint">Add before and after photos for this job, then choose which to include in the documents you send.</p>
+          <div class="pj-photo-cols">
+            <div class="pj-photo-col">
+              <label for="pjBeforePhotosInput">Before Photos (up to 3)</label>
+              <input type="file" id="pjBeforePhotosInput" accept="image/*" multiple>
+              <div id="pjBeforePhotosPreview" class="photo-preview-grid"></div>
+              <label class="checkbox-label compact"><input type="checkbox" id="pjIncludeBeforePhotos"> Include before photos in documents</label>
+            </div>
+            <div class="pj-photo-col">
+              <label for="pjAfterPhotosInput">After Photos (up to 3)</label>
+              <input type="file" id="pjAfterPhotosInput" accept="image/*" multiple>
+              <div id="pjAfterPhotosPreview" class="photo-preview-grid"></div>
+              <label class="checkbox-label compact"><input type="checkbox" id="pjIncludeAfterPhotos"> Include after photos in documents</label>
+            </div>
           </div>
         </div>
       </div>
@@ -1627,6 +1648,10 @@
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           <p>Nothing here yet. Go land yourself a job.</p>
           <button type="button" class="btn btn-primary" id="createFirstQuoteBtn">Create your first quote</button>
+        </div>
+        <div class="empty-state" id="savedDocsLoading" style="display:none">
+          <div class="jobs-loading-spinner" aria-hidden="true"></div>
+          <p>Loading your jobs…</p>
         </div>
       </div>
     </section>
