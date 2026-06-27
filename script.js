@@ -195,13 +195,22 @@ async function startStripeCheckout(planCode, options = {}) {
   }
 
   try {
-    const { data, error } = await lexiSupabase.functions.invoke('create-checkout-session', {
-      body: {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout-session`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lexiAuthSession.access_token}`,
+        'apikey': SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         planCode,
         ...(options.founder ? { founderCode } : {})
-      },
+      }),
     });
-    if (error) throw error;
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.error || `Checkout request failed (${response.status})`);
+    }
     if (!data?.url) throw new Error('Stripe Checkout did not return a payment link.');
     window.location.href = data.url;
   } catch (error) {
@@ -759,6 +768,7 @@ let state = {
     discount: '0',
     notes: '', privateNotes: '',
     selectedTerms: [], customTerms: '',
+    paymentDays: 30, depositPct: 50, cancellationHours: 48,
     authSig: '', custSig: '', sigDate: ''
   },
   saved: [],
@@ -1226,21 +1236,18 @@ async function initialiseAuth() {
     data  = result.data;
     error = result.error;
   } catch (e) {
-    // Network failure or timeout — show login screen, let user try again
+    // Network failure or timeout: show login screen, let user try again. Never
+    // surface a raw "Failed to fetch" — give a calm, plain-English message.
     if (authScreen) authScreen.style.display = 'flex';
     if (overlay) overlay.style.display = 'none';
-    setAuthMessage(
-      (e.message || 'Could not reach the server.') +
-      ' If this keeps happening, your account may need a moment to wake up — wait 30 seconds and refresh.',
-      'error'
-    );
+    setAuthMessage(SERVER_WAKING_MSG, 'error');
     return false;
   }
 
   if (error) {
     if (authScreen) authScreen.style.display = 'flex';
     if (overlay) overlay.style.display = 'none';
-    setAuthMessage(error.message || 'I could not check your login. Try again.', 'error');
+    setAuthMessage(_isTransientNetworkError(error) ? SERVER_WAKING_MSG : (error.message || 'I could not check your login. Try again.'), 'error');
     return false;
   }
   lexiAuthSession = data?.session || null;
@@ -1350,7 +1357,9 @@ async function handleForgotPassword() {
     if (error) throw error;
     setAuthMessage(`Password reset email sent to ${email}. Check your inbox.`, 'success');
   } catch (err) {
-    const msg = err?.message || err?.error_description || (typeof err === 'string' ? err : null) || 'Could not send reset email — check your SMTP settings in Supabase.';
+    const msg = _isTransientNetworkError(err)
+      ? SERVER_WAKING_MSG
+      : (err?.message || err?.error_description || (typeof err === 'string' ? err : null) || 'Could not send the reset email. Check your SMTP settings in Supabase.');
     setAuthMessage(msg, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Forgot password?'; }
@@ -1369,7 +1378,13 @@ async function handleGoogleAuth() {
   if (error) setAuthMessage(authErrorMessage(error), 'error');
 }
 
+// Friendly text for a server-not-reachable / cold-database moment, so the user
+// never sees a raw "Failed to fetch".
+const SERVER_WAKING_MSG = "Couldn't reach the server just now. It may be waking up, please wait a few seconds and try again.";
+
 function authErrorMessage(error) {
+  // Network blips ("Failed to fetch"), timeouts and cold-DB stalls get a calm, plain-English message.
+  if (_isTransientNetworkError(error)) return SERVER_WAKING_MSG;
   const msg = error?.message || String(error || '');
   if (/invalid login/i.test(msg)) return 'Those login details do not match. Check your email and password.';
   if (/email not confirmed/i.test(msg)) return 'Check your email and confirm your account first.';
@@ -1417,14 +1432,31 @@ async function signOutOfLexi() {
     if (!proceed) return;
   }
   _authReloading = true; // we're about to reload; suppress the auth-change listener
-  if (lexiSupabase) await lexiSupabase.auth.signOut();
-  localStorage.removeItem(KEY_ONBOARDED);
-  localStorage.removeItem(KEY_PL_ONBOARDED);
-  // NOTE: intentionally keep 'lexi_user_id'. Removing it forced a full local wipe on
-  // the next login, which could delete a job that had not yet reached the cloud. A
-  // same-user re-login now preserves the cache; a DIFFERENT user still triggers the
-  // cross-account wipe in initialiseAuth (storedUserId !== currentUserId).
-  location.reload();
+  try {
+    if (lexiSupabase) {
+      await Promise.race([
+        lexiSupabase.auth.signOut({ scope: 'local' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Sign out timed out')), 4000))
+      ]);
+    }
+  } catch (e) {
+    console.warn('Supabase sign-out did not finish cleanly; clearing local session anyway:', e);
+  } finally {
+    lexiAuthSession = null;
+    localStorage.removeItem(KEY_ONBOARDED);
+    localStorage.removeItem(KEY_PL_ONBOARDED);
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('sb-')) localStorage.removeItem(k);
+    });
+    try {
+      sessionStorage.clear();
+    } catch (_) {}
+    // NOTE: intentionally keep 'lexi_user_id'. Removing it forced a full local wipe on
+    // the next login, which could delete a job that had not yet reached the cloud. A
+    // same-user re-login now preserves the cache; a DIFFERENT user still triggers the
+    // cross-account wipe in initialiseAuth (storedUserId !== currentUserId).
+    location.reload();
+  }
 }
 
 function businessRowToCompany(row) {
@@ -2734,15 +2766,22 @@ window.lexiCheckDocumentSync = async function lexiCheckDocumentSync() {
 // Strip bulky fields from docs before writing to localStorage.
 // company is already stored separately in KEY_CO and is restored on load.
 // This prevents localStorage from filling up when company has a logo (base64 image).
+// Keep small photo references (Storage URLs) but never let bulky base64 data URLs
+// into localStorage — those still live in Supabase only.
+function slimPhotoSet(photos) {
+  if (!photos) return photos;
+  const keep = list => (Array.isArray(list) ? list.filter(s => typeof s === 'string' && !s.startsWith('data:')) : []);
+  return { before: keep(photos.before), after: keep(photos.after) };
+}
+
 function slimDocForStorage(doc) {
-  // Strip bulky fields: company (stored separately), HTML cache, and photos
-  // (base64 images can be hundreds of KB each — Supabase holds the full data)
+  // Strip bulky fields: company (stored separately) and the HTML cache.
+  // Photos are now Storage URLs (tiny), so keep them; only drop oversized base64.
   // eslint-disable-next-line no-unused-vars
   const { company, _html, photos, ...rest } = doc;
-  // Also strip photos from nested quote object if present
+  if (photos) rest.photos = slimPhotoSet(photos);
   if (rest.quote && rest.quote.photos) {
-    const { photos: _p, ...slimQ } = rest.quote;
-    rest.quote = slimQ;
+    rest.quote = { ...rest.quote, photos: slimPhotoSet(rest.quote.photos) };
   }
   return rest;
 }
@@ -3122,12 +3161,8 @@ function showPage(pageId) {
         custSigText.value = '';
       }
     }
-    // Personalise the intro text with the customer's first name
-    const introEl = document.getElementById('completionIntroText');
-    if (introEl) {
-      const first = (state.quote.custFirstName || '').trim();
-      introEl.textContent = first ? `${first}, is this an estimate or a quote?` : 'Is this an estimate or a quote?';
-    }
+    // Always open the Terms tabs on "The Type" so the page is predictable.
+    if (typeof showTermsTab === 'function') showTermsTab('type');
     // Close tooltip if it was left open
     const tooltip = document.getElementById('estQuoteTooltip');
     if (tooltip) tooltip.style.display = 'none';
@@ -5433,6 +5468,17 @@ function syncCustMoreToggle() {
   if (label)  label.textContent = hasExtra ? 'Hide extra details' : 'Add more details';
 }
 
+// Terms sub-tab switching: The Type / The Numbers / The T's & C's / The Signature
+const TERMS_PANELS = { type: 'termsTypePanel', numbers: 'termsNumbersPanel', tcs: 'termsTcsPanel', signature: 'termsSignaturePanel' };
+function showTermsTab(tab) {
+  tab = TERMS_PANELS[tab] ? tab : 'type';
+  document.querySelectorAll('#termsCatSelector .obo-tab').forEach(b => b.classList.toggle('active', b.dataset.termstab === tab));
+  Object.entries(TERMS_PANELS).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (key === tab) ? '' : 'none';
+  });
+}
+
 /* ===== PAGE JOBS -ADD JOBS ===== */
 function setupPageJobs() {
   // Build-your-quote tab switching: My Rates / My Services / My Materials / My Photos
@@ -5452,6 +5498,13 @@ function setupPageJobs() {
   // My Photos tab — before/after capture for the quote being built
   document.getElementById('pjBeforePhotosInput')?.addEventListener('change', e => handleBuilderPhotoUpload(e, 'before'));
   document.getElementById('pjAfterPhotosInput')?.addEventListener('change', e => handleBuilderPhotoUpload(e, 'after'));
+  // Per-photo remove buttons (builder tab + dashboard photo modal)
+  ['pjBeforePhotosPreview', 'pjAfterPhotosPreview', 'beforePhotosPreview', 'afterPhotosPreview'].forEach(wirePhotoRemoval);
+
+  // Terms tab switching: The Type / The Numbers / The T's & C's / The Signature
+  document.querySelectorAll('#termsCatSelector .obo-tab').forEach(btn => {
+    btn.addEventListener('click', () => showTermsTab(btn.dataset.termstab));
+  });
 
   // Services picker search
   document.getElementById('jobPickerSearch').addEventListener('input', () => updateServicesPicker());
@@ -5469,6 +5522,12 @@ function setupPageJobs() {
   // Description of Work help toggle
   document.getElementById('descOfWorkHelpBtn')?.addEventListener('click', () => {
     const panel = document.getElementById('descOfWorkHelp');
+    if (panel) panel.hidden = !panel.hidden;
+  });
+
+  // Additional Terms help toggle (explanation + example)
+  document.getElementById('addTermsHelpBtn')?.addEventListener('click', () => {
+    const panel = document.getElementById('addTermsHelp');
     if (panel) panel.hidden = !panel.hidden;
   });
 
@@ -5655,6 +5714,7 @@ function prepareNewQuote() {
     discount: '0',
     notes: '', privateNotes: '',
     selectedTerms: [], customTerms: '',
+    paymentDays: 30, depositPct: 50, cancellationHours: 48,
     authSig: '', custSig: '', sigDate: ''
   };
   state.editingDocId = null;
@@ -5723,10 +5783,18 @@ function populateQuoteForm() {
   document.getElementById('vatCustom').style.display = q.vatRate === 'custom' ? 'inline-block' : 'none';
   document.getElementById('validCustomGroup').style.display = q.validFor === 'custom' ? 'block' : 'none';
 
-  // Terms
+  // Terms — tick the clause and fill the editable numbers. Legacy saved keys
+  // (payment30 / depositRequired) still light the matching new checkbox.
+  const _sel = q.selectedTerms || [];
+  const _has = { payment: _sel.includes('payment') || _sel.includes('payment30') || _sel.includes('payment14') || _sel.includes('payment7'),
+                 deposit: _sel.includes('deposit') || _sel.includes('depositRequired'),
+                 cancellation: _sel.includes('cancellation') };
   document.querySelectorAll('[name="terms"]').forEach(cb => {
-    cb.checked = (q.selectedTerms || []).includes(cb.value);
+    cb.checked = !!_has[cb.value] || _sel.includes(cb.value);
   });
+  setVal('termPaymentDays', q.paymentDays || (_sel.includes('payment30') ? 30 : _sel.includes('payment14') ? 14 : _sel.includes('payment7') ? 7 : 30));
+  setVal('termDepositPct',  q.depositPct || 50);
+  setVal('termCancelHours', q.cancellationHours || 48);
 
   clearCanvas();
   renderQuoteItems();
@@ -6197,6 +6265,9 @@ function collectQuoteState() {
     notes:         getVal('quoteNotes'),
     privateNotes:  getVal('quotePrivateNotes'),
     selectedTerms,
+    paymentDays:        parseInt(getVal('termPaymentDays'), 10) || 30,
+    depositPct:         parseInt(getVal('termDepositPct'), 10) || 50,
+    cancellationHours:  parseInt(getVal('termCancelHours'), 10) || 48,
     customTerms:   getVal('customTerms'),
     authSig:       getVal('authSig'),
     custSigText:   getVal('custSigText'),
@@ -8671,7 +8742,7 @@ function previewInvoice(docId) {
     if (!doc) return;
     const invRef     = doc.invoiceRef || doc.ref || nextRef('INV', KEY_INV);
     const _t         = (doc.quote?.selectedTerms || []);
-    const _tDays     = _t.includes('payment30') ? 30 : _t.includes('payment14') ? 14 : _t.includes('payment7') ? 7 : 30;
+    const _tDays     = getPaymentTermDays(doc.quote);
     const _base      = doc.jobCompletedDate || todayStr();
     const dueDate    = doc.invoiceDueDate || addDays(_base, _tDays);
     const html = buildDocHtml(doc, 'invoice', { invRef, invDate: todayStr(), dueDate });
@@ -8689,7 +8760,7 @@ function openInvoiceModal(docId) {
   setVal('invDate',    todayStr());
   // Auto-calculate due date: completion date + payment terms days (falls back to today + 30)
   const _terms      = (doc.quote?.selectedTerms || []);
-  const _termDays   = _terms.includes('payment30') ? 30 : _terms.includes('payment14') ? 14 : _terms.includes('payment7') ? 7 : 30;
+  const _termDays   = getPaymentTermDays(doc.quote);
   const _baseDate   = doc.jobCompletedDate || todayStr();
   setVal('invDueDate', doc.invoiceDueDate || addDays(_baseDate, _termDays));
   setVal('invCustFirst', q.custFirstName || '');
@@ -9158,12 +9229,9 @@ function handlePhotoUpload(e, which) {
   const doc = state.saved.find(d => d.id === activePhotoDocId);
   if (!doc) return;
   if (!doc.photos) doc.photos = { before: [], after: [] };
-  const files = [...(e.target.files || [])].slice(0, 3);
-  Promise.all(files.map(fileToDataUrl)).then(urls => {
-    doc.photos[which] = urls.slice(0, 3);
-    save();
-    renderPhotosPreview(doc);
-  });
+  if (!Array.isArray(doc.photos[which])) doc.photos[which] = [];
+  addPhotosToSet(doc.photos[which], e.target.files, () => { save(); renderPhotosPreview(doc); });
+  e.target.value = ''; // allow re-picking the same file
 }
 
 function fileToDataUrl(file) {
@@ -9174,15 +9242,129 @@ function fileToDataUrl(file) {
   });
 }
 
+// Compress/resize a chosen image to a sensible size for documents. A 4MB phone
+// photo becomes ~150-300KB. Returns { blob, dataUrl }; falls back to the raw
+// file if anything in the canvas pipeline fails.
+function compressImageFile(file, { maxEdge = 1280, quality = 0.7 } = {}) {
+  return new Promise(async resolve => {
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          if (Math.max(width, height) > maxEdge) {
+            const scale = maxEdge / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          canvas.toBlob(blob => {
+            if (blob) {
+              const out = new FileReader();
+              out.onload = e => resolve({ blob, dataUrl: e.target.result });
+              out.onerror = () => resolve({ blob, dataUrl });
+              out.readAsDataURL(blob);
+            } else {
+              resolve({ blob: file, dataUrl });
+            }
+          }, 'image/jpeg', quality);
+        } catch (_) { resolve({ blob: file, dataUrl }); }
+      };
+      img.onerror = () => resolve({ blob: file, dataUrl });
+      img.src = dataUrl;
+    } catch (_) {
+      resolve({ blob: file, dataUrl: null });
+    }
+  });
+}
+
+// Upload one compressed photo to the public Documents bucket; return its public
+// URL, or null on failure (e.g. offline) so the caller can fall back to the data URL.
+async function uploadJobPhoto(blob) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id || !blob) return null;
+  try {
+    const path = `photos/${lexiAuthSession.user.id}/${uid()}-${Date.now()}.jpg`;
+    let uploadErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { error } = await lexiSupabase.storage
+        .from('Documents')
+        .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+      if (!error) { uploadErr = null; break; }
+      uploadErr = error;
+      const m = String(error.message || error).toLowerCase();
+      if (attempt < 2 && /timeout|timed out|temporar|unavailable|connection|500|internal/.test(m)) {
+        await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
+      break;
+    }
+    if (uploadErr) { console.warn('Job photo upload failed:', uploadErr); return null; }
+    const { data } = lexiSupabase.storage.from('Documents').getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch (err) {
+    console.warn('Job photo upload error:', err);
+    return null;
+  }
+}
+
+// Add chosen files to a photo set: append (never overwrite), cap at 3, compress,
+// show instantly, then swap the data URL for the uploaded Storage URL.
+async function addPhotosToSet(arr, fileList, onChange) {
+  const slots = 3 - arr.length;
+  if (slots <= 0) { toast('You can add up to 3 photos here. Remove one first.', 'error', 4000); return; }
+  const files = [...(fileList || [])].slice(0, slots);
+  for (const file of files) {
+    const { blob, dataUrl } = await compressImageFile(file);
+    if (!dataUrl) continue;
+    arr.push(dataUrl);          // show the compressed photo immediately
+    onChange();                 // render + persist
+    uploadJobPhoto(blob).then(url => {
+      if (!url) return;         // offline: keep the data URL (still renders + embeds)
+      const at = arr.indexOf(dataUrl);
+      if (at >= 0) { arr[at] = url; onChange(); }  // permanent, tiny URL
+    });
+  }
+}
+
+// Render a photo set as thumbnails, each with a ✕ remove button.
+function renderPhotoGrid(id, list, which, ctx) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = (list && list.length)
+    ? list.map((src, i) => `<div class="photo-thumb-wrap"><img src="${esc(src)}" alt="Job photo"><button type="button" class="photo-remove" data-ctx="${ctx}" data-which="${which}" data-idx="${i}" aria-label="Remove photo">&times;</button></div>`).join('')
+    : '<p class="photo-empty">No photos added yet.</p>';
+}
+
+// One-time delegated remove handler for a preview grid (survives innerHTML re-renders).
+function wirePhotoRemoval(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el || el._removeWired) return;
+  el._removeWired = true;
+  el.addEventListener('click', e => {
+    const btn = e.target.closest('.photo-remove');
+    if (!btn) return;
+    const which = btn.dataset.which;
+    const idx   = parseInt(btn.dataset.idx, 10);
+    if (btn.dataset.ctx === 'builder') {
+      const arr = state.quote.photos?.[which];
+      if (arr) arr.splice(idx, 1);
+      renderBuilderPhotosPreview();
+      queueDraftSave();
+    } else {
+      const doc = state.saved.find(d => d.id === activePhotoDocId);
+      const arr = doc?.photos?.[which];
+      if (arr) arr.splice(idx, 1);
+      if (doc) { save(); renderPhotosPreview(doc); }
+    }
+  });
+}
+
 function renderPhotosPreview(doc) {
-  const render = (id, list) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.innerHTML = (list || []).map(src => `<img src="${src}" alt="Job photo">`).join('') ||
-      '<p class="photo-empty">No photos added yet.</p>';
-  };
-  render('beforePhotosPreview', doc.photos?.before || []);
-  render('afterPhotosPreview', doc.photos?.after || []);
+  renderPhotoGrid('beforePhotosPreview', doc.photos?.before || [], 'before', 'dashboard');
+  renderPhotoGrid('afterPhotosPreview',  doc.photos?.after  || [], 'after',  'dashboard');
 }
 
 // ── My Photos tab (quote builder) — capture onto the in-progress quote ──────────
@@ -9193,23 +9375,15 @@ function handleBuilderPhotoUpload(e, which) {
     return;
   }
   if (!state.quote.photos) state.quote.photos = { before: [], after: [] };
-  const files = [...(e.target.files || [])].slice(0, 3);
-  Promise.all(files.map(fileToDataUrl)).then(urls => {
-    state.quote.photos[which] = urls.slice(0, 3);
-    renderBuilderPhotosPreview();
-  });
+  if (!Array.isArray(state.quote.photos[which])) state.quote.photos[which] = [];
+  addPhotosToSet(state.quote.photos[which], e.target.files, () => { renderBuilderPhotosPreview(); queueDraftSave(); });
+  e.target.value = ''; // allow re-picking the same file
 }
 
 function renderBuilderPhotosPreview() {
   const photos = state.quote.photos || {};
-  const render = (id, list) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.innerHTML = (list || []).map(src => `<img src="${src}" alt="Job photo">`).join('') ||
-      '<p class="photo-empty">No photos added yet.</p>';
-  };
-  render('pjBeforePhotosPreview', photos.before || []);
-  render('pjAfterPhotosPreview', photos.after || []);
+  renderPhotoGrid('pjBeforePhotosPreview', photos.before || [], 'before', 'builder');
+  renderPhotoGrid('pjAfterPhotosPreview',  photos.after  || [], 'after',  'builder');
 }
 
 // Load a quote's saved photos + include choices into the My Photos tab (on edit).
@@ -9944,7 +10118,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
 
   // Payment due date & dynamic status badge
   const payTerms    = (q.selectedTerms || []);
-  const payTermDays = payTerms.includes('payment30') ? 30 : payTerms.includes('payment14') ? 14 : payTerms.includes('payment7') ? 7 : 30;
+  const payTermDays = getPaymentTermDays(q);
   const payDueStr   = d.invoiceDueDate || (d.jobCompletedDate ? addDays(d.jobCompletedDate, payTermDays) : '');
   const todayNow    = todayStr();
   let payStatusHtml = '';
@@ -11726,34 +11900,52 @@ function buildPhotosSection(doc, include) {
     </div>`;
 }
 
+// Payment-term days for a quote: prefers the editable number, falls back to the
+// legacy fixed-key terms, then defaults to 30. Used by every due-date calculation.
+function getPaymentTermDays(q) {
+  q = q || {};
+  const sel = q.selectedTerms || [];
+  if (sel.includes('payment') && Number(q.paymentDays) > 0) return Number(q.paymentDays);
+  if (sel.includes('payment7'))  return 7;
+  if (sel.includes('payment14')) return 14;
+  if (sel.includes('payment30')) return 30;
+  if (Number(q.paymentDays) > 0) return Number(q.paymentDays);
+  return 30;
+}
+
+// Build the terms sentences for a quote, handling both the new editable keys
+// (payment / deposit / cancellation + numbers) and legacy saved keys.
+function collectTermLines(q) {
+  q = q || {};
+  const sel = q.selectedTerms || [];
+  const days = getPaymentTermDays(q);
+  const dep  = Number(q.depositPct) > 0 ? Number(q.depositPct) : 50;
+  const hrs  = Number(q.cancellationHours) > 0 ? Number(q.cancellationHours) : 48;
+  const payLines = [];
+  const conLines = [];
+  // New editable clauses
+  if (sel.includes('payment')) payLines.push(`Payment due within ${days} days of invoice date.`);
+  if (sel.includes('deposit')) payLines.push(`A ${dep}% deposit is required before work commences.`);
+  if (sel.includes('cancellation')) conLines.push(`Cancellation within ${hrs} hours of scheduled start date may incur a charge.`);
+  // Legacy clauses from older saved docs
+  if (sel.includes('payment30'))      payLines.push('Payment due within 30 days of invoice date.');
+  if (sel.includes('depositRequired')) payLines.push('A 50% deposit is required before work commences.');
+  if (sel.includes('quotationValid'))  conLines.push('This quotation is valid for 30 days from the date shown.');
+  if (sel.includes('materialsExtra'))  conLines.push('Materials are not included unless stated above.');
+  return { payLines, conLines, addText: q.customTerms || '' };
+}
+
 function buildTermsSection(q) {
-  // Legacy -kept for compatibility; new output uses buildNewTermsHtml
-  const presets = {
-    payment30:       'Payment due within 30 days of invoice date.',
-    depositRequired: 'A 50% deposit is required before work commences.',
-    quotationValid:  'This quotation is valid for 30 days from the date shown.',
-    materialsExtra:  'Materials are not included unless stated above.',
-    cancellation:    'Cancellation within 48 hours of scheduled start date may incur a charge.'
-  };
-  const lines = (q.selectedTerms || []).map(k => presets[k]).filter(Boolean);
-  if (q.customTerms) lines.push(q.customTerms);
+  // Legacy list layout -kept for compatibility; main output uses buildNewTermsHtml
+  const { payLines, conLines, addText } = collectTermLines(q);
+  const lines = [...payLines, ...conLines];
+  if (addText) lines.push(addText);
   if (!lines.length) return '';
   return `<div class="section"><h3>Terms &amp; Conditions</h3><ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
 }
 
 function buildNewTermsHtml(q) {
-  const presets = {
-    payment30:       'Payment due within 30 days of invoice date.',
-    depositRequired: 'A 50% deposit is required before work commences.',
-    quotationValid:  'This quotation is valid for 30 days from the date shown.',
-    materialsExtra:  'Materials are not included unless stated above.',
-    cancellation:    'Cancellation within 48 hours of scheduled start date may incur a charge.'
-  };
-  const payKeys  = new Set(['payment30', 'depositRequired']);
-  const sel      = q.selectedTerms || [];
-  const payLines = sel.filter(k =>  payKeys.has(k)).map(k => presets[k]);
-  const conLines = sel.filter(k => !payKeys.has(k)).map(k => presets[k]);
-  const addText  = q.customTerms || '';
+  const { payLines, conLines, addText } = collectTermLines(q);
   if (!payLines.length && !conLines.length && !addText) return '';
   return `
     <div class="doc-section-heading">Terms and Conditions</div>
@@ -12306,7 +12498,7 @@ function getCalendarEvents() {
       // If invoice not yet sent, also mark the expected payment due date as a reminder
       if (!d.invoiceSent && !d.paid) {
         const terms    = (q.selectedTerms || []);
-        const termDays = terms.includes('payment30') ? 30 : terms.includes('payment14') ? 14 : terms.includes('payment7') ? 7 : 30;
+        const termDays = getPaymentTermDays(q);
         const expDue   = addDays(d.jobCompletedDate, termDays);
         addEvent(expDue, { ...base, type: 'invoiceDue', color: CAL_COLORS.invoiceDue, label: 'Invoice Not Yet Raised' });
       }
@@ -12369,7 +12561,7 @@ function renderCalendar() {
     } else if (!d.invoiceSent && !d.paid && d.jobCompletedDate) {
       // Job finished but no invoice sent -check if expected due date has passed
       const terms    = (q.selectedTerms || []);
-      const termDays = terms.includes('payment30') ? 30 : terms.includes('payment14') ? 14 : terms.includes('payment7') ? 7 : 30;
+      const termDays = getPaymentTermDays(q);
       const expDue   = addDays(d.jobCompletedDate, termDays);
       if (today >= expDue) {
         const days = Math.floor((new Date(today) - new Date(expDue)) / 86400000);
@@ -13335,7 +13527,7 @@ function getOverdueInvoices() {
     // Job complete, no invoice raised and past expected due date
     else if (!d.invoiceSent && d.jobCompletedDate) {
       const terms = (q.selectedTerms || []);
-      const termDays = terms.includes('payment30') ? 30 : terms.includes('payment14') ? 14 : terms.includes('payment7') ? 7 : 30;
+      const termDays = getPaymentTermDays(q);
       const expDue = addDays(d.jobCompletedDate, termDays);
       if (today >= expDue) {
         const days = Math.floor((new Date(today) - new Date(expDue)) / 86400000);
