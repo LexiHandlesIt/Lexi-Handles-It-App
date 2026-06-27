@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm Your Booking — Lexi Handles It</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Mulish', sans-serif;
+      background: #F5F0E8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+      max-width: 420px;
+      width: 100%;
+      padding: 32px 28px;
+      text-align: center;
+    }
+    .logo { margin-bottom: 24px; }
+    .biz-name-header { font-size: 1.1rem; font-weight: 800; color: #2c2c2c; margin-bottom: 4px; letter-spacing: -0.3px; }
+    .icon { font-size: 3rem; margin-bottom: 12px; }
+    h1 { font-size: 1.4rem; font-weight: 700; color: #2c2c2c; margin-bottom: 8px; }
+    .sub  { font-size: 0.95rem; color: #666; line-height: 1.6; margin-bottom: 20px; }
+    .ref-badge {
+      display: inline-block;
+      background: #f5f0e8;
+      border: 1px solid #e0d8cc;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #7D5730;
+      margin-bottom: 16px;
+    }
+    .date-box {
+      background: #fef6dc;
+      border: 1.5px solid #e8b84b;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 22px;
+    }
+    .date-box-label { font-size: 0.78rem; font-weight: 700; color: #7D5730; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .date-box-date  { font-size: 1.3rem; font-weight: 700; color: #2c2c2c; }
+    .name-group { margin-bottom: 16px; text-align: left; }
+    .name-group label { display: block; font-size: 0.82rem; font-weight: 700; color: #555; margin-bottom: 6px; }
+    .name-group input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #e0d8cc;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #2c2c2c;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .name-group input:focus { border-color: #7D5730; }
+    .btn-confirm {
+      width: 100%;
+      padding: 16px;
+      background: #2e7d32;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      margin-bottom: 12px;
+      transition: background 0.2s;
+    }
+    .btn-confirm:hover { background: #1e5c23; }
+    .btn-confirm:disabled { background: #aaa; cursor: default; }
+    .btn-alt {
+      width: 100%;
+      padding: 12px;
+      background: transparent;
+      color: #7D5730;
+      border: 1.5px solid #e0d8cc;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-alt:hover { border-color: #7D5730; background: #faf6ee; }
+    .alt-group { display: none; margin-top: 18px; text-align: left; }
+    .alt-group label { display: block; font-size: 0.82rem; font-weight: 700; color: #555; margin-bottom: 6px; }
+    .alt-group input[type=date] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #e0d8cc;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #2c2c2c;
+      outline: none;
+      margin-bottom: 12px;
+    }
+    .legal { font-size: 0.75rem; color: #aaa; margin-top: 20px; line-height: 1.5; }
+    .success-screen, .alt-screen, .error-screen { display: none; }
+    .success-screen .icon, .alt-screen .icon { color: #2e7d32; }
+    .success-screen h1 { color: #2e7d32; }
+    .error-screen h1 { color: #c0392b; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <!-- BOOKING SCREEN -->
+  <div id="bookScreen">
+    <div class="logo" id="bizLogoWrap"></div>
+    <div class="icon">📅</div>
+    <h1 id="bookHeading">Confirm Your Booking</h1>
+    <p class="sub" id="bookSub">Your tradesperson would like to book you in. Please confirm the date below, or suggest one that suits you better.</p>
+    <div id="refBadge" class="ref-badge" style="display:none"></div>
+    <div class="date-box" id="dateBox" style="display:none">
+      <div class="date-box-label">Proposed date</div>
+      <div class="date-box-date" id="proposedDateText"></div>
+    </div>
+    <div class="name-group">
+      <label for="custName">Your full name</label>
+      <input type="text" id="custName" placeholder="e.g. Sarah Mitchell" autocomplete="name">
+    </div>
+    <button type="button" class="btn-confirm" id="confirmBtn">Yes, this date works</button>
+    <button type="button" class="btn-alt" id="altBtn">Suggest another date</button>
+    <div class="alt-group" id="altGroup">
+      <label for="altDate">Pick a date that suits you</label>
+      <input type="date" id="altDate">
+      <button type="button" class="btn-confirm" id="altSubmitBtn">Send this date</button>
+    </div>
+    <p class="legal">Confirming lets your tradesperson know the date is booked. They will be notified straight away.</p>
+  </div>
+
+  <!-- SUCCESS (confirmed) SCREEN -->
+  <div class="success-screen" id="successScreen">
+    <div class="icon">✅</div>
+    <h1>Booking Confirmed!</h1>
+    <p class="sub">Thank you, <strong id="confirmedName"></strong>. <strong id="confirmedBizName"></strong> has been notified that <strong id="confirmedDateText"></strong> works for you.</p>
+    <p class="legal" style="margin-top:16px">Lexi Handles It — so you don't have to.</p>
+  </div>
+
+  <!-- ALTERNATIVE SUGGESTED SCREEN -->
+  <div class="alt-screen" id="altScreen">
+    <div class="icon">📨</div>
+    <h1>Suggestion sent</h1>
+    <p class="sub">Thank you. Your suggested date has been sent to <strong id="altBizName"></strong>, who will be in touch to confirm.</p>
+    <p class="legal" style="margin-top:16px">Lexi Handles It — so you don't have to.</p>
+  </div>
+
+  <!-- ERROR SCREEN -->
+  <div class="error-screen" id="errorScreen">
+    <div class="icon">🔍</div>
+    <h1>Link not found</h1>
+    <p class="sub">This booking link may have already been used or has expired. Please contact your tradesperson directly to confirm.</p>
+  </div>
+
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://dwiqqtutsjainpvdizgt.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_c0HS04ZbqIBPrbXvzNdPXw_IpeKBzHN';
+  const bookSupabase = window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+    : null;
+
+  const params   = new URLSearchParams(window.location.search);
+  const token    = params.get('token');
+  const ref      = params.get('ref');
+  const bizName  = params.get('biz') || '';
+  const proposed = params.get('date') || '';
+  if (bizName) document.title = `Confirm Your Booking — ${bizName}`;
+  const KEY = 'lexi_book_' + token;
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  const bizLogoWrap = document.getElementById('bizLogoWrap');
+  if (bizLogoWrap) bizLogoWrap.innerHTML = bizName ? `<div class="biz-name-header">${bizName}</div>` : '';
+
+  if (ref) {
+    const badge = document.getElementById('refBadge');
+    badge.textContent = 'Ref: ' + ref;
+    badge.style.display = 'inline-block';
+  }
+  if (proposed) {
+    document.getElementById('proposedDateText').textContent = fmtDate(proposed);
+    document.getElementById('dateBox').style.display = 'block';
+  }
+
+  let bookingRow = null;
+  initialiseBookingPage();
+
+  async function initialiseBookingPage() {
+    if (!token) { showScreen('errorScreen'); return; }
+    showScreen('bookScreen');
+    const existing = localStorage.getItem(KEY);
+    if (existing) {
+      try {
+        const data = JSON.parse(existing);
+        if (data.status === 'confirmed')   { finishConfirmed(data.name, data.date); return; }
+        if (data.status === 'alternative') { finishAlternative(); return; }
+      } catch(e) {}
+    }
+    if (!bookSupabase) return;
+    try {
+      const { data, error } = await loadBookingRow();
+      if (error) throw error;
+      if (!data) return;
+      bookingRow = data;
+      const displayRef = data.document_number || ref || '';
+      if (displayRef) {
+        const badge = document.getElementById('refBadge');
+        badge.textContent = 'Ref: ' + displayRef;
+        badge.style.display = 'inline-block';
+      }
+      if (data.proposed_date) {
+        document.getElementById('proposedDateText').textContent = fmtDate(data.proposed_date);
+        document.getElementById('dateBox').style.display = 'block';
+      }
+      const status = String(data.status || '').toLowerCase();
+      if (status === 'confirmed')        finishConfirmed(data.customer_name, data.confirmed_date || data.proposed_date);
+      else if (status === 'alternative') finishAlternative();
+      else                               showScreen('bookScreen');
+    } catch (error) {
+      console.error('Could not load booking link:', error);
+      showScreen('errorScreen');
+    }
+  }
+
+  async function loadBookingRow() {
+    if (!bookSupabase || !token) return { data: null, error: null };
+    const rpc = await bookSupabase.rpc('get_booking_confirmation', { p_token: token });
+    if (!rpc.error) return { data: Array.isArray(rpc.data) ? rpc.data[0] : rpc.data, error: null };
+    if (!/function|get_booking_confirmation|schema cache/i.test(String(rpc.error.message || ''))) return rpc;
+    return bookSupabase.from('booking_confirmations').select('*').eq('token', token).maybeSingle();
+  }
+
+  async function respondToBooking(status, date, name) {
+    if (!bookSupabase || !token) return { data: null, error: null };
+    const rpc = await bookSupabase.rpc('respond_to_booking', {
+      p_token: token, p_status: status, p_date: date || null, p_name: name || ''
+    });
+    if (!rpc.error) return { data: Array.isArray(rpc.data) ? rpc.data[0] : rpc.data, error: null };
+    if (!/function|respond_to_booking|schema cache/i.test(String(rpc.error.message || ''))) return rpc;
+    const update = {
+      status,
+      customer_name: name || undefined,
+      confirmed_date: status === 'confirmed' ? (date || proposed || null) : undefined,
+      suggested_date: status === 'alternative' ? (date || null) : undefined,
+      responded_at: new Date().toISOString()
+    };
+    return bookSupabase.from('booking_confirmations').update(update).eq('token', token)
+      .select('token,status,customer_name,proposed_date,confirmed_date,suggested_date').maybeSingle();
+  }
+
+  async function saveBookingResponse(data) {
+    localStorage.setItem(KEY, JSON.stringify(data));
+    if (!bookSupabase || !token) return;
+    const { data: updated, error } = await respondToBooking(data.status, data.date || '', data.name || '');
+    if (error) throw error;
+    if (!updated) throw new Error('Booking link could not be updated.');
+  }
+
+  function finishConfirmed(name, date) {
+    document.getElementById('confirmedBizName').textContent = bizName || 'your tradesperson';
+    document.getElementById('confirmedName').textContent = name || 'there';
+    document.getElementById('confirmedDateText').textContent = fmtDate(date || proposed) || 'the proposed date';
+    showScreen('successScreen');
+  }
+  function finishAlternative() {
+    document.getElementById('altBizName').textContent = bizName || 'your tradesperson';
+    showScreen('altScreen');
+  }
+
+  document.getElementById('confirmBtn').addEventListener('click', async () => {
+    const name = document.getElementById('custName').value.trim();
+    if (!name) {
+      const i = document.getElementById('custName');
+      i.focus(); i.style.borderColor = '#c0392b'; return;
+    }
+    const btn = document.getElementById('confirmBtn');
+    btn.disabled = true; btn.textContent = 'Confirming...';
+    const data = { status: 'confirmed', name, date: proposed || '', token, timestamp: new Date().toISOString() };
+    try {
+      await saveBookingResponse(data);
+      finishConfirmed(name, proposed);
+    } catch (error) {
+      btn.disabled = false; btn.textContent = 'Yes, this date works';
+      alert('I could not record that online. Please try again, or contact your tradesperson directly.');
+      console.error('Booking confirm failed:', error);
+    }
+  });
+
+  document.getElementById('altBtn').addEventListener('click', () => {
+    document.getElementById('altGroup').style.display = 'block';
+    document.getElementById('altBtn').style.display = 'none';
+  });
+
+  document.getElementById('altSubmitBtn').addEventListener('click', async () => {
+    const name = document.getElementById('custName').value.trim();
+    const date = document.getElementById('altDate').value;
+    if (!name) {
+      const i = document.getElementById('custName');
+      i.focus(); i.style.borderColor = '#c0392b'; return;
+    }
+    if (!date) {
+      const i = document.getElementById('altDate');
+      i.focus(); i.style.borderColor = '#c0392b'; return;
+    }
+    const btn = document.getElementById('altSubmitBtn');
+    btn.disabled = true; btn.textContent = 'Sending...';
+    const data = { status: 'alternative', name, date, token, timestamp: new Date().toISOString() };
+    try {
+      await saveBookingResponse(data);
+      finishAlternative();
+    } catch (error) {
+      btn.disabled = false; btn.textContent = 'Send this date';
+      alert('I could not record that online. Please try again, or contact your tradesperson directly.');
+      console.error('Booking suggestion failed:', error);
+    }
+  });
+
+  function showScreen(id) {
+    ['bookScreen','successScreen','altScreen','errorScreen'].forEach(s => {
+      document.getElementById(s).style.display = s === id ? 'block' : 'none';
+    });
+  }
+</script>
+</body>
+</html>

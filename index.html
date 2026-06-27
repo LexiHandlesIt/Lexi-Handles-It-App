@@ -1292,6 +1292,24 @@
             </div>
             <button type="button" class="btn btn-outline btn-sm oneoff-add-btn" id="addCustomServiceBtn">Add Service</button>
           </div>
+
+          <!-- Scope of Work: greyed-out box - visually distinct from the service name field above -->
+          <div class="pj-dow-wrap">
+            <div class="label-with-help">
+              <label for="quoteNotes">Scope of Work</label>
+              <button type="button" class="help-trigger" id="descOfWorkHelpBtn" aria-label="Why this matters">?</button>
+            </div>
+            <div class="help-panel" id="descOfWorkHelp" hidden>
+              <p class="help-panel-intro"><strong>Write as much detail as possible - it protects you and your customer.</strong></p>
+              <p>Be clear about exactly what you will do, and equally important, what is <em>not</em> included. This removes any room for misunderstanding and gives you solid ground if a dispute ever arises.</p>
+              <p class="help-panel-example-label">Example:</p>
+              <div class="help-panel-example">
+                <p><strong>Will do:</strong> Remove existing toilet and soil pipe connector. Supply and fit new close-coupled toilet (customer to choose model). Reconnect soil pipe and water supply. Test flush and check for leaks. Make good any minor floor damage around the base.</p>
+                <p><strong>Not included:</strong> Disposal of old toilet unit. Any tiling, flooring, or redecoration. Supply of toilet (unless agreed separately in writing).</p>
+              </div>
+            </div>
+            <textarea id="quoteNotes" rows="4"></textarea>
+          </div>
         </div>
 
         <!-- Materials panel -->
@@ -1346,23 +1364,6 @@
           <div class="empty-state" id="quoteItemsEmpty">
             <p>Nothing added yet.</p>
           </div>
-        </div>
-
-        <div class="form-group" style="margin-top:16px">
-          <div class="label-with-help">
-            <label for="quoteNotes">Description of Work</label>
-            <button type="button" class="help-trigger" id="descOfWorkHelpBtn" aria-label="Why this matters">?</button>
-          </div>
-          <div class="help-panel" id="descOfWorkHelp" hidden>
-            <p class="help-panel-intro"><strong>Write as much detail as possible — it protects you and your customer.</strong></p>
-            <p>Be clear about exactly what you will do, and equally important, what is <em>not</em> included. This removes any room for misunderstanding and gives you solid ground if a dispute ever arises.</p>
-            <p class="help-panel-example-label">Example:</p>
-            <div class="help-panel-example">
-              <p><strong>✔ Will do:</strong> Remove existing toilet and soil pipe connector. Supply and fit new close-coupled toilet (customer to choose model). Reconnect soil pipe and water supply. Test flush and check for leaks. Make good any minor floor damage around the base.</p>
-              <p><strong>✘ Not included:</strong> Disposal of old toilet unit. Any tiling, flooring, or redecoration. Supply of toilet (unless agreed separately in writing).</p>
-            </div>
-          </div>
-          <textarea id="quoteNotes" rows="4"></textarea>
         </div>
 
         <div class="pj-footer-btns">

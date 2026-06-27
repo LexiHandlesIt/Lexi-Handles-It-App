@@ -6354,8 +6354,9 @@ async function jobsRefresh() {
   scrollMyJobsToTop();
   // 3. Re-render the jobs list
   refreshSavedDocs();
-  // 4. Check for new acceptances
+  // 4. Check for new acceptances + booking confirmations
   await checkQuoteAcceptances();
+  await checkBookingConfirmations();
   if (btn) btn.style.opacity = '';
   toast('Jobs list refreshed.', 'success', 2000);
 }
@@ -7688,11 +7689,13 @@ function openCustomerDeleteChoice(group) {
     <div class="modal-card modal-card-sm" style="padding:24px;text-align:center">
       <h2 class="modal-title" style="margin-bottom:8px">What would you like to delete?</h2>
       <p style="color:#555;font-size:0.88rem;margin:0 0 20px;line-height:1.5">Choose carefully - deleted data cannot be recovered.</p>
-      <button type="button" id="_delDocBtn" class="btn btn-outline btn-full" style="margin-bottom:10px;border-color:#c0392b;color:#c0392b">
-        Delete document only<br><small style="font-weight:400;font-size:0.78rem">${esc(group.name)} stays in your app</small>
+      <button type="button" id="_delDocBtn" class="btn btn-outline btn-full" style="margin-bottom:10px;border-color:#c0392b;color:#c0392b;flex-direction:column;gap:3px;line-height:1.3">
+        <span style="font-weight:700">Delete this job only</span>
+        <small style="font-weight:400;font-size:0.78rem">${esc(group.name)} stays in your app</small>
       </button>
-      <button type="button" id="_delCustBtn" class="btn btn-outline btn-full" style="margin-bottom:16px;border-color:#c0392b;color:#c0392b">
-        Delete entire customer<br><small style="font-weight:400;font-size:0.78rem">All ${group.docs.length} document${group.docs.length > 1 ? 's' : ''} and all records removed</small>
+      <button type="button" id="_delCustBtn" class="btn btn-outline btn-full" style="margin-bottom:16px;border-color:#c0392b;color:#c0392b;flex-direction:column;gap:3px;line-height:1.3">
+        <span style="font-weight:700">Delete whole customer</span>
+        <small style="font-weight:400;font-size:0.78rem">All ${group.docs.length} document${group.docs.length > 1 ? 's' : ''} and all records removed</small>
       </button>
       <button type="button" id="_delCancelBtn" class="btn btn-outline btn-full">Cancel</button>
     </div>`;
@@ -8294,6 +8297,7 @@ function setupModals() {
   document.getElementById('confirmMarkPaidBtn').addEventListener('click', () => {
     const doc = state.saved.find(d => d.id === activeDocId);
     if (!doc) return;
+    const wasPaid     = !!doc.paid;
     const amount      = parseFloat(getVal('mpAmount')) || 0;
     const date        = getVal('mpDate') || todayStr();
     const paymentType = getVal('mpPaymentType') || 'Full Payment';
@@ -8336,7 +8340,10 @@ function setupModals() {
         renderSingleCustomerDashboard(updatedGroup, groups);
       } catch(e) { console.error('Dashboard re-render error:', e); }
     }
-    if (doc.paid) {
+    if (doc.paid && !wasPaid && !doc.receiptSent) {
+      // Just hit paid in full — offer the receipt that closes the loop.
+      promptReceiptAfterPaid(doc.id);
+    } else if (doc.paid) {
       showSavedPopup('Get in. That one is paid in full.', () => {
         maybeAskForReview(doc);
       }, 2000);
@@ -9950,7 +9957,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
   }
 
   const payIcon = `<svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`;
-  const payLabelRow = `<div class="cdv-section-label cdv-section-label-row"><span>${payIcon} Payments <span class="nav-beta-badge">Beta</span></span>${payStatusHtml}</div>`;
+  const payLabelRow = `<div class="cdv-section-label cdv-section-label-row"><span>${payIcon} Payments</span>${payStatusHtml}</div>`;
 
   const paymentsHtml = payments.length ? `
     <div class="cdv-section">
@@ -9998,31 +10005,35 @@ function buildCustomerJobSection(d, jobNum = 0) {
   // Cross-check the saved flags AND q.type so docs created directly as Invoice/Receipt
   // still show the correct step even if the invoiceSent flag wasn't set via the modal.
   const qTypeLower = (q.type || 'Estimate').toLowerCase();
-  // Ranks: 0=Estimate,1=Quote,2=Accepted,3=Job Booked,4=Job Started,5=Job Complete,6=Invoiced,7=Paid
+  // Ranks: 0=Estimate,1=Quote,2=Accepted,3=Job Booked,4=Job Started,5=Job Complete,6=Invoiced,7=Paid,8=Receipt sent
   const isAcceptedFlag = d.jobAccepted || d.acceptStatus === 'accepted';
   // Job Started: manual flag OR auto when today has reached the booked start date
   const jobAutoStarted = d.jobStartDate && d.jobStartDate <= todayStr();
   const jobStarted = d.jobStarted || jobAutoStarted;
-  const stageRank = d.paid || qTypeLower === 'receipt' || d.receiptRef ? 7
+  const receiptSent = d.receiptSent || qTypeLower === 'receipt' || d.receiptRef;
+  const stageRank = receiptSent                                ? 8
+    : d.paid                                                   ? 7
     : (d.invoiceSent || qTypeLower === 'invoice')             ? 6
     : (d.jobCompleted)                                        ? 5
     : jobStarted                                              ? 4
-    : (isAcceptedFlag && d.jobStartDate)                      ? 3
+    : d.jobStartDate                                          ? 3
     : isAcceptedFlag                                          ? 2
     : (qTypeLower === 'quote')                                ? 1
     :                                                           0;
-  // 8 stages: 4 top (left→right), 4 bottom (right→left snake)
+  // 9 stages laid out 3 per row, snaking right → down → left → down → right
   const tubeStages = [
-    { label: 'Estimate',      action: 'quote',   cls: 'stage-estimate',   row: 0, col: 0 },
-    { label: 'Quote',         action: 'quote',   cls: 'stage-quote',      row: 0, col: 1 },
-    { label: 'Accepted',      action: 'quote',   cls: 'stage-accepted',   row: 0, col: 2 },
-    { label: 'Job Booked',    action: 'quote',   cls: 'stage-booked',     row: 0, col: 3 },
-    { label: 'Job Started',   action: 'quote',   cls: 'stage-started',    row: 1, col: 3 },
-    { label: 'Job Complete',  action: 'invoice', cls: 'stage-complete',   row: 1, col: 2 },
-    { label: 'Invoiced',      action: 'invoice', cls: 'stage-invoice',    row: 1, col: 1 },
-    { label: 'Paid',          action: 'receipt', cls: 'stage-paid',       row: 1, col: 0 },
+    { label: 'Estimate',      action: 'quote',   cls: 'stage-estimate' },  // 0
+    { label: 'Quote',         action: 'quote',   cls: 'stage-quote' },     // 1
+    { label: 'Accepted',      action: 'quote',   cls: 'stage-accepted' },  // 2
+    { label: 'Job Booked',    action: 'quote',   cls: 'stage-booked' },    // 3
+    { label: 'Job Started',   action: 'quote',   cls: 'stage-started' },   // 4
+    { label: 'Job Complete',  action: 'invoice', cls: 'stage-complete' },  // 5
+    { label: 'Invoiced',      action: 'invoice', cls: 'stage-invoice' },   // 6
+    { label: 'Paid',          action: 'receipt', cls: 'stage-paid' },      // 7
+    { label: 'Receipt',       action: 'receipt', cls: 'stage-receipt' },   // 8
   ];
-  const makeStation = (s, i) => {
+  const makeStation = (i) => {
+    const s = tubeStages[i];
     const isDone   = i < stageRank;
     const isActive = i === stageRank;
     const dotCls   = isDone ? 'tube-done' : isActive ? `tube-active ${s.cls}` : 'tube-future';
@@ -10035,21 +10046,17 @@ function buildCustomerJobSection(d, jobNum = 0) {
       <span class="cdv-tube-lbl ${lblCls}">${s.label}</span>
     </div>`;
   };
-  const makeSeg = (isDone) => `<div class="cdv-tube-seg${isDone ? ' done' : ''}"></div>`;
-  // Row 0: stations 0–3 left to right
-  const row0 = tubeStages.slice(0,4).map((s,i) => {
-    const isDone = i < stageRank;
-    return makeStation(s, i) + (i < 3 ? makeSeg(isDone) : '');
-  }).join('');
-  // Row 1 reversed (DOM): Paid(7), Invoiced(6), Job Complete(5), Job Started(4) — right-to-left visually
-  const row2Stages = [...tubeStages.slice(4)].reverse(); // [Paid, Invoiced, JobComplete, JobStarted]
-  const row1 = row2Stages.map((s, j) => {
-    const realIdx = 7 - j; // 7=Paid, 6=Invoiced, 5=JobComplete, 4=JobStarted
-    const segDone = stageRank >= (7 - j);
-    return makeStation(s, realIdx) + (j < 3 ? makeSeg(segDone) : '');
-  }).join('');
-  // Corner: done when stageRank >= 4 (Job Started reached)
-  const cornerDone = stageRank >= 4;
+  // A segment between consecutive stages a and b is done once the later one is reached.
+  const makeSeg = (a, b, dir) => `<div class="cdv-tube-seg cdv-tube-seg-${dir}${stageRank >= Math.max(a, b) ? ' done' : ''}"></div>`;
+  const spacer = '<div class="cdv-tube-end"></div>';
+  const rCorner = (done) => `<div class="cdv-tube-corner-wrap"><div class="cdv-tube-corner${done ? ' done' : ''}"></div></div>`;
+  const lCorner = (done) => `<div class="cdv-tube-corner-wrap cdv-tube-corner-wrap-l"><div class="cdv-tube-corner cdv-tube-corner-l${done ? ' done' : ''}"></div></div>`;
+  // Row 0: 0→1→2 (arrows right), then a right-hand corner dropping to Job Booked
+  const row0 = `${spacer}${makeStation(0)}${makeSeg(0,1,'r')}${makeStation(1)}${makeSeg(1,2,'r')}${makeStation(2)}${rCorner(stageRank >= 3)}`;
+  // Row 1: 3→4→5 shown right-to-left, so DOM order [5,4,3] (arrows point left)
+  const row1 = `${spacer}${makeStation(5)}${makeSeg(5,4,'l')}${makeStation(4)}${makeSeg(4,3,'l')}${makeStation(3)}${spacer}`;
+  // Row 2: a left-hand corner rising to Job Complete, then 6→7→8 (arrows right)
+  const row2 = `${lCorner(stageRank >= 6)}${makeStation(6)}${makeSeg(6,7,'r')}${makeStation(7)}${makeSeg(7,8,'r')}${makeStation(8)}${spacer}`;
   // Warning: job auto-started today — show if date just passed and not manually confirmed
   const autoStartedToday = d.jobStartDate === todayStr() && !d.jobStarted;
   const startWarningHtml = autoStartedToday ? `
@@ -10060,10 +10067,14 @@ function buildCustomerJobSection(d, jobNum = 0) {
     <div class="cdv-tube-map">
       <div class="cdv-prog-label">Job Status</div>
       ${startWarningHtml}
-      <div class="cdv-tube-row">${row0}<div class="cdv-tube-corner-wrap"><div class="cdv-tube-corner${cornerDone ? ' done' : ''}"></div></div></div>
+      <div class="cdv-tube-row">${row0}</div>
       <div class="cdv-tube-row cdv-tube-row2">${row1}</div>
+      <div class="cdv-tube-row cdv-tube-row3">${row2}</div>
     </div>`;
 
+  const acceptedNeedsDate = d.jobAccepted && !d.jobStartDate;
+  const acceptDateHintHtml = acceptedNeedsDate ? `
+        <div class="cdv-accept-date-hint">Customer accepted. Add the date you have booked them in for to move this to Job Booked.</div>` : '';
   const scheduleHtml = `
     <div class="cdv-job-schedule">
       <div class="cdv-schedule-row">
@@ -10077,6 +10088,7 @@ function buildCustomerJobSection(d, jobNum = 0) {
             value="${esc(d.jobStartDate || '')}">
         </div>
       </div>
+      ${acceptDateHintHtml}
       <div class="cdv-schedule-row">
         <label class="cdv-accepted-label">
           <input type="checkbox" class="cdv-completed-cb" data-doc-id="${esc(d.id)}"${d.jobCompleted ? ' checked' : ''}>
@@ -10103,36 +10115,15 @@ function buildCustomerJobSection(d, jobNum = 0) {
       <span>${d.acceptedBy ? `Signed by ${esc(d.acceptedBy)}` : 'Customer has accepted this quote'}${d.acceptedAt ? ` on ${new Date(d.acceptedAt).toLocaleDateString('en-GB')}` : ''}</span>
     </div>` : '';
 
-  const JSVG_EDIT    =`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
-  const JSVG_INVOICE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
-  const JSVG_RECEIPT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
-  const jobActionBtns = `
-    <div class="cdv-job-actions">
-      <button type="button" class="cal-icon-btn cdv-labeled cdv-action-edit" data-prog-doc-id="${esc(d.id)}" data-prog-action="editQuote">${JSVG_EDIT}<span>Edit Quote</span></button>
-      <button type="button" class="cal-icon-btn cdv-labeled cdv-action-invoice" data-prog-doc-id="${esc(d.id)}" data-prog-action="invoice">${JSVG_INVOICE}<span>Invoice</span></button>
-      <button type="button" class="cal-icon-btn cdv-labeled cdv-action-receipt" data-prog-doc-id="${esc(d.id)}" data-prog-action="receipt">${JSVG_RECEIPT}<span>Receipt</span></button>
-    </div>`;
-
-  // Contact / Share / More — per job, because contacting or sharing is always about
-  // a specific document (this estimate/invoice/receipt). Wired via the dashboard's
-  // delegated click handler (data-prog-action) so it works per doc without duplicate ids.
+  // Send / Contact / Delete — per job.
+  const JSVG_SEND    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
   const JSVG_CONTACT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
-  const JSVG_SHARE   = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
-  const JSVG_MORE    = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>`;
-  const JSVG_CAMERA  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
   const JSVG_DELETE  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
   const jobContactBtns = `
     <div class="cdv-job-actions cdv-job-contact-actions">
+      <button type="button" class="cal-icon-btn cdv-labeled" data-prog-doc-id="${esc(d.id)}" data-prog-action="share">${JSVG_SEND}<span>Send</span></button>
       <button type="button" class="cal-icon-btn cdv-labeled" data-prog-doc-id="${esc(d.id)}" data-prog-action="contact">${JSVG_CONTACT}<span>Contact</span></button>
-      <button type="button" class="cal-icon-btn cdv-labeled" data-prog-doc-id="${esc(d.id)}" data-prog-action="share">${JSVG_SHARE}<span>Share</span></button>
-      <div class="cdv-more-wrap">
-        <button type="button" class="cal-icon-btn cdv-labeled cdv-more-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="moreToggle">${JSVG_MORE}<span>More</span></button>
-        <div class="cdv-more-menu" style="display:none">
-          <button type="button" class="cdv-more-item" data-prog-doc-id="${esc(d.id)}" data-prog-action="addPhoto">${JSVG_CAMERA}<span>Add photo</span></button>
-          <button type="button" class="cdv-more-item" data-prog-doc-id="${esc(d.id)}" data-prog-action="editQuote">${JSVG_EDIT}<span>Update details</span></button>
-          <button type="button" class="cdv-more-item cdv-more-delete" data-prog-doc-id="${esc(d.id)}" data-prog-action="deleteJob">${JSVG_DELETE}<span>Delete</span></button>
-        </div>
-      </div>
+      <button type="button" class="cal-icon-btn cdv-labeled cdv-delete-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="deleteJob">${JSVG_DELETE}<span>Delete</span></button>
     </div>`;
 
   return `
@@ -10146,7 +10137,6 @@ function buildCustomerJobSection(d, jobNum = 0) {
           data-prog-doc-id="${esc(d.id)}" data-prog-action="${statusClass === 'paid' ? 'receipt' : statusClass === 'invoiced' || statusClass === 'overdue' ? 'invoice' : 'quote'}"
           title="Open ${statusLabel}">${esc(statusLabel)}</button>
       </div>
-      ${jobActionBtns}
       ${jobContactBtns}
       <div class="cdv-items">${itemsHtml}</div>
       ${totalsHtml}
@@ -10216,27 +10206,10 @@ function renderSingleCustomerDashboard(group, groups) {
   if (!body._cdvProgClickWired) {
     body._cdvProgClickWired = true;
     body.addEventListener('click', e => {
-      // Clicking anywhere outside a "More" wrap closes any open per-job More menu.
-      if (!e.target.closest('.cdv-more-wrap')) {
-        body.querySelectorAll('.cdv-more-menu').forEach(m => { m.style.display = 'none'; });
-      }
       const btn = e.target.closest('[data-prog-doc-id]');
       if (!btn) return;
       const docId  = btn.dataset.progDocId;
       const action = btn.dataset.progAction;
-
-      // Toggle this job's More menu (close any others first).
-      if (action === 'moreToggle') {
-        const menu = btn.closest('.cdv-more-wrap')?.querySelector('.cdv-more-menu');
-        if (menu) {
-          const isOpen = menu.style.display !== 'none';
-          body.querySelectorAll('.cdv-more-menu').forEach(m => { m.style.display = 'none'; });
-          menu.style.display = isOpen ? 'none' : 'flex';
-        }
-        return;
-      }
-      // Any real action: close menus first, then run it.
-      body.querySelectorAll('.cdv-more-menu').forEach(m => { m.style.display = 'none'; });
 
       if (action === 'receipt') {
         _previewReturnDocId = docId;   // X on the preview returns to this dashboard
@@ -10247,8 +10220,6 @@ function renderSingleCustomerDashboard(group, groups) {
         openContactChooser(docId);
       } else if (action === 'share') {
         openSendChoiceModal();
-      } else if (action === 'addPhoto') {
-        executeCustomerEdit('addPhoto', docId);
       } else if (action === 'deleteJob') {
         if (activeCustomerGroup) openCustomerDeleteChoice(activeCustomerGroup);
       } else if (action === 'chase') {
@@ -12659,7 +12630,7 @@ function openCalEmailComposer(docId, eventType, channel, presetTemplateId) {
   const co         = state.company || {};
   const custFirst  = q.custFirstName || 'there';
   const custName   = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Customer';
-  const traderName = [co.firstName, co.lastName].filter(Boolean).join(' ') || (co.firstName || 'your tradesperson');
+  const traderName = [co.firstName, co.lastName].filter(Boolean).join(' ') || (co.firstName || '[insert name of person in my business details]');
   const ref        = doc.invoiceRef || doc.receiptRef || q.ref || doc.ref || '';
   const dueDate    = doc.invoiceDueDate ? formatDate(doc.invoiceDueDate) : 'as agreed';
   const total      = fmtPrice(doc.total || 0);
@@ -12745,7 +12716,8 @@ I would like to book you in for:
 
 ${bookingDate} at [time]
 
-Please reply to confirm this works for you.
+Confirm this date works, or suggest another, here:
+${BOOKING_LINK_TOKEN}
 
 Kind regards,
 ${traderName}`,
@@ -12948,6 +12920,50 @@ function calSelectTemplate(templateId) {
   updateCalEmailPreview();
 }
 
+// Open the email/WhatsApp composer for a doc and jump straight into the receipt
+// flow (used by the "send receipt now?" prompt after a job is paid in full).
+function openReceiptComposer(docId, channel) {
+  openCalEmailComposer(docId, 'paid', channel);
+  startReceiptFlow();
+}
+
+// After a job becomes paid in full, offer to send the receipt that closes the loop.
+function promptReceiptAfterPaid(docId) {
+  const doc = (state.saved || []).find(d => d.id === docId);
+  if (!doc) return;
+  const q = doc.quote || {};
+  const phone = (q.custPhone || '').trim();
+  const email = (q.custEmail || '').trim();
+  const W = '#7D5730';
+  const fill = `display:block;width:100%;padding:13px;margin-bottom:10px;border-radius:10px;border:none;background:${W};color:#fff;font-size:1rem;font-weight:600;cursor:pointer`;
+  const txt  = `display:block;width:100%;padding:8px;border:none;background:transparent;color:#999;font-size:0.88rem;cursor:pointer`;
+  const ov = _receiptOverlay(`
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:8px;color:#333">Paid in full. Nice one!</div>
+    <div style="color:#777;font-size:0.9rem;margin-bottom:20px">Send a receipt to close this job off properly?</div>
+    <button id="_prYes" style="${fill}">Yes, send the receipt</button>
+    <button id="_prNo" style="${txt}">Not now</button>`);
+  const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+  ov.querySelector('#_prYes').onclick = () => {
+    close();
+    // Ask which channel, then open the composer straight into the receipt flow.
+    const W2 = '#7D5730';
+    const row = (id, label, enabled) => `<button id="${id}" ${enabled ? '' : 'disabled'} style="display:flex;align-items:center;justify-content:center;width:100%;padding:14px;margin-bottom:10px;border-radius:10px;border:none;background:${enabled ? W2 : '#ccc'};color:#fff;font-size:1rem;font-weight:600;cursor:${enabled ? 'pointer' : 'not-allowed'};opacity:${enabled ? '1' : '0.6'}">${label}</button>`;
+    const cv = _receiptOverlay(`
+      <div style="font-size:1.2rem;font-weight:700;margin-bottom:6px;color:#333">Send receipt via…</div>
+      <div style="color:#777;font-size:0.88rem;margin-bottom:22px">How would you like to send it?</div>
+      ${row('_prWa', 'WhatsApp', !!phone)}
+      ${row('_prEmail', 'Email', !!email)}
+      <button id="_prCancel" style="${txt}">Cancel</button>`);
+    const cClose = () => { if (cv.parentNode) cv.parentNode.removeChild(cv); };
+    if (phone) cv.querySelector('#_prWa').onclick = () => { cClose(); openReceiptComposer(docId, 'whatsapp'); };
+    if (email) cv.querySelector('#_prEmail').onclick = () => { cClose(); openReceiptComposer(docId, 'email'); };
+    cv.querySelector('#_prCancel').onclick = cClose;
+    cv.addEventListener('click', e => { if (e.target === cv) cClose(); });
+  };
+  ov.querySelector('#_prNo').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+}
+
 // ── Receipt: confirm the payment is recorded before sending one ────────────────
 // A receipt should reflect money actually received. If the job is not marked paid
 // in full, ask before generating it so the customer never gets a "£0.00 paid" receipt.
@@ -13052,7 +13068,7 @@ async function calReceiptShare() {
   const q          = doc.quote || {};
   const co         = state.company || {};
   const custFirst  = q.custFirstName || 'there';
-  const traderName = [co.firstName, co.lastName].filter(Boolean).join(' ') || (co.firstName || 'your tradesperson');
+  const traderName = [co.firstName, co.lastName].filter(Boolean).join(' ') || (co.firstName || '[insert name of person in my business details]');
   const ref        = doc.receiptRef || doc.ref || q.ref || '';
   const paidAmount = fmtPrice(doc.paidAmount || doc.total || 0);
   const makeBody = (linkLine) =>
@@ -13100,6 +13116,29 @@ async function sendCalEmail() {
   // Use whatever is currently in the editable preview, so trader tweaks send too
   const previewEl = document.getElementById('calEmailPreview');
 
+  // Book In: weave a live booking link in so the customer can confirm the date or
+  // suggest another. Needs a proposed date to send (so book.html has one to show).
+  if (calEmailSelectedTemplate.id === 'book_in') {
+    const doc = (state.saved || []).find(d => d.id === calEmailDocId);
+    const bodyText = previewEl ? (previewEl.value || '') : (calEmailSelectedTemplate.body || '');
+    const needsLink = bodyText.includes(BOOKING_LINK_TOKEN);
+    if (needsLink) {
+      if (!doc || !doc.jobStartDate) {
+        toast('Add the booking date (Date Booked For) before sending, so the customer has a date to confirm.', 'error', 8000);
+        return;
+      }
+      const token = prepareBookingTokenForSend(calEmailDocId);
+      const url = token ? getBookingUrl(token) : '';
+      if (!url) { toast('Could not prepare the booking link. Please try again.', 'error', 7000); return; }
+      if (previewEl) {
+        let body = previewEl.value || calEmailSelectedTemplate.body || '';
+        body = body.split(BOOKING_LINK_TOKEN).join(url);
+        previewEl.value = body;
+        calEmailSelectedTemplate.body = body;
+      }
+    }
+  }
+
   // Receipt: never send without the shareable link. If it isn't ready (or the
   // trader tapped Send while it was still uploading), wait for it, then weave it
   // into the message. If it ultimately fails, block the send with a clear message.
@@ -13136,6 +13175,18 @@ async function sendCalEmail() {
     const subject = encodeURIComponent(calEmailSelectedTemplate.subject || '');
     const body    = encodeURIComponent(liveBody || '');
     window.location.href = `mailto:${calEmailAddr}?subject=${subject}&body=${body}`;
+  }
+
+  // A sent receipt closes the loop — mark it so the tube map lights the final node.
+  if (calEmailSelectedTemplate.id === 'receipt') {
+    const doc = (state.saved || []).find(d => d.id === calEmailDocId);
+    if (doc && !doc.receiptSent) {
+      doc.receiptSent = true;
+      save();
+      queueSavedDocsSync(true);
+      refreshSavedDocs();
+      refreshOpenCustomerDashboard();
+    }
   }
 
   document.getElementById('calEmailModal').style.display = 'none';
@@ -13310,7 +13361,7 @@ function updateChasePaymentsBadge() {
 }
 
 function buildChaseMessage(item, channel) {
-  const traderName = traderFormalFirstName() || 'your tradesperson';
+  const traderName = traderFormalFirstName() || '[insert name of person in my business details]';
   const custFirst = (item.custName || '').split(' ')[0] || item.custName;
 
   if (item.urgency === 'invoice-needed') {
@@ -13684,6 +13735,7 @@ async function checkQuoteAcceptances() {
 
   save();
   refreshSavedDocs();
+  refreshOpenCustomerDashboard(); // live-update an open dashboard (checkbox/date/tube map)
   // Show popup for the first newly accepted doc -reset acceptNotified so it always shows
   const doc = newlyAccepted[0];
   doc.acceptNotified = false;
@@ -13910,10 +13962,247 @@ function subscribeToQuoteAcceptances() {
         if (status === 'accepted') doc.acceptNotified = false; // always show popup for live updates
         save();
         refreshSavedDocs();
+        refreshOpenCustomerDashboard(); // live-update an open dashboard (checkbox/date/tube map)
         if (status === 'accepted') showQuoteAcceptedNotification();
       }
     })
     .subscribe();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BOOKING CONFIRMATIONS — customer confirms the proposed start
+   date or suggests an alternative (clone of the acceptance flow).
+   Requires supabase_booking_confirmations.sql to be run.
+   ═══════════════════════════════════════════════════════════ */
+
+const KEY_BOOK_BASE = 'lexi_book_'; // key prefix: lexi_book_<token>
+const BOOKING_LINK_TOKEN = '{BOOKING_LINK}';
+
+function generateBookingToken(docId) {
+  const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return null;
+  doc.bookingToken = token;
+  doc.bookingStatus = 'pending'; // pending | confirmed | alternative
+  save();
+  saveBookingPending(doc).catch(error => {
+    console.warn('Booking token saved locally but did not sync to Supabase:', error);
+  });
+  return token;
+}
+
+// Ensure a pending booking row exists for this doc, reusing the token if present.
+function prepareBookingTokenForSend(docId) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return null;
+  if (doc.bookingToken) {
+    doc.bookingStatus = 'pending';
+    save();
+    saveBookingPending(doc).catch(error => {
+      console.warn('Could not refresh booking row in Supabase:', error);
+    });
+    return doc.bookingToken;
+  }
+  return generateBookingToken(docId);
+}
+
+function getBookingUrl(token) {
+  // Always point at the live app — the customer opens this on their own device.
+  const base = LIVE_APP_URL.replace(/\/$/, '');
+  const doc  = (state.saved || []).find(d => d.bookingToken === token);
+  const ref  = doc?.ref || doc?.quote?.ref || '';
+  const biz  = (state.company?.businessName || [state.company?.firstName, state.company?.lastName].filter(Boolean).join(' ') || '').trim();
+  const date = doc?.jobStartDate || '';
+  return `${base}/book.html?token=${encodeURIComponent(token)}`
+    + (ref  ? '&ref='  + encodeURIComponent(ref)  : '')
+    + (biz  ? '&biz='  + encodeURIComponent(biz)  : '')
+    + (date ? '&date=' + encodeURIComponent(date) : '');
+}
+
+function bookingBaseRow(doc = {}) {
+  const q = doc.quote || {};
+  return {
+    user_id: lexiAuthSession?.user?.id,
+    token: doc.bookingToken || '',
+    local_document_id: doc.id || '',
+    document_number: doc.ref || q.ref || '',
+    customer_name: buildCustName(q) || doc.custName || '',
+    proposed_date: doc.jobStartDate || null,
+    status: doc.bookingStatus || 'pending',
+    confirmed_date: doc.bookingConfirmedDate || null,
+    suggested_date: doc.bookingSuggestedDate || null
+  };
+}
+
+function bookingInsertCandidates(doc = {}) {
+  const standard = bookingBaseRow(doc);
+  return [
+    standard,
+    omitKeys(standard, ['confirmed_date', 'suggested_date']),
+    omitKeys(standard, ['confirmed_date', 'suggested_date', 'customer_name', 'local_document_id']),
+    { user_id: standard.user_id, token: standard.token, document_number: standard.document_number, proposed_date: standard.proposed_date, status: standard.status }
+  ];
+}
+
+async function saveBookingPending(doc = {}) {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id || !doc.bookingToken) return;
+  let lastError = null;
+  for (const row of bookingInsertCandidates(doc)) {
+    const result = await lexiSupabase
+      .from('booking_confirmations')
+      .upsert(row, { onConflict: 'token' });
+    if (!result.error) return true;
+    lastError = result.error;
+    const message = String(result.error.message || '');
+    if (!/column|schema cache|constraint|conflict/i.test(message)) throw result.error;
+  }
+  if (lastError) throw lastError;
+  return false;
+}
+
+// Apply a booking response row to a doc. Returns true if something changed.
+function applyBookingToDoc(doc, data = {}) {
+  if (!doc || !data?.status) return false;
+  const status = String(data.status).toLowerCase();
+  if (status === 'confirmed') {
+    doc.bookingStatus = 'confirmed';
+    const confirmed = data.confirmed_date || data.proposed_date || data.date || doc.jobStartDate || '';
+    if (confirmed) doc.jobStartDate = confirmed;
+    doc.jobAccepted = true; // accepting a booking implies the quote is accepted
+    return true;
+  }
+  if (status === 'alternative') {
+    doc.bookingStatus = 'alternative';
+    doc.bookingSuggestedDate = data.suggested_date || data.date || '';
+    return true;
+  }
+  return false;
+}
+
+async function checkSupabaseBookingConfirmations() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return [];
+  const pending = (state.saved || []).filter(doc =>
+    doc.bookingToken && doc.bookingStatus !== 'confirmed'
+  );
+  if (!pending.length) return [];
+  const tokens = pending.map(doc => doc.bookingToken);
+  const { data, error } = await lexiSupabase
+    .from('booking_confirmations')
+    .select('*')
+    .in('token', tokens);
+  if (error) { console.warn('Could not check booking confirmations from Supabase:', error); return []; }
+  const changed = [];
+  (data || []).forEach(row => {
+    const status = String(row.status || '').toLowerCase();
+    if (!['confirmed', 'alternative'].includes(status)) return;
+    const doc = pending.find(item => item.bookingToken === row.token);
+    // Only treat as "new" if the status actually moved on.
+    if (doc && doc.bookingStatus !== status && applyBookingToDoc(doc, row)) changed.push(doc);
+  });
+  return changed;
+}
+
+async function checkBookingConfirmations() {
+  const changed = [];
+  const remote = await checkSupabaseBookingConfirmations();
+  if (remote?.length) changed.push(...remote);
+  // localStorage fallback (same-device / offline)
+  (state.saved || []).forEach(doc => {
+    if (doc.bookingToken && doc.bookingStatus !== 'confirmed') {
+      const stored = localStorage.getItem(KEY_BOOK_BASE + doc.bookingToken);
+      if (stored) {
+        try {
+          const data = JSON.parse(stored);
+          if (data.status && doc.bookingStatus !== String(data.status).toLowerCase() && applyBookingToDoc(doc, data)) {
+            changed.push(doc);
+          }
+        } catch(e) {}
+      }
+    }
+  });
+  if (!changed.length) return;
+  save();
+  refreshSavedDocs();
+  refreshOpenCustomerDashboard();
+  showBookingUpdateNotification(changed[0]);
+  saveSavedDocsToSupabase().catch(e => console.warn('Booking sync failed:', e));
+}
+
+let _bookingChannel = null;
+function subscribeToBookingConfirmations() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return;
+  if (_bookingChannel) { lexiSupabase.removeChannel(_bookingChannel); _bookingChannel = null; }
+  _bookingChannel = lexiSupabase
+    .channel('lexi-booking-confirmations')
+    .on('postgres_changes', {
+      event:  'UPDATE',
+      schema: 'public',
+      table:  'booking_confirmations',
+      filter: `user_id=eq.${lexiAuthSession.user.id}`
+    }, payload => {
+      const row = payload.new || {};
+      const status = String(row.status || '').toLowerCase();
+      if (!['confirmed', 'alternative'].includes(status)) return;
+      const doc = (state.saved || []).find(d => d.bookingToken === row.token);
+      if (doc && doc.bookingStatus !== status && applyBookingToDoc(doc, row)) {
+        save();
+        refreshSavedDocs();
+        refreshOpenCustomerDashboard();
+        showBookingUpdateNotification(doc);
+        saveSavedDocsToSupabase().catch(e => console.warn('Booking sync failed:', e));
+      }
+    })
+    .subscribe();
+}
+
+function _bookingFmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Lightweight overlay (same pattern as the receipt prompts).
+function showBookingUpdateNotification(doc) {
+  if (!doc) return;
+  const q = doc.quote || {};
+  const custName = [q.custFirstName, q.custLastName].filter(Boolean).join(' ') || 'Your customer';
+  const W = '#7D5730';
+  const fill = `display:block;width:100%;padding:13px;margin-bottom:10px;border-radius:10px;border:none;background:${W};color:#fff;font-size:1rem;font-weight:600;cursor:pointer`;
+  const txt  = `display:block;width:100%;padding:8px;border:none;background:transparent;color:#999;font-size:0.88rem;cursor:pointer`;
+  let inner;
+  if (doc.bookingStatus === 'confirmed') {
+    inner = `
+      <div style="font-size:2.4rem;margin-bottom:6px">✅</div>
+      <div style="font-size:1.2rem;font-weight:700;margin-bottom:8px;color:#333">Booking confirmed</div>
+      <div style="color:#777;font-size:0.92rem;margin-bottom:20px"><strong>${esc(custName)}</strong> confirmed <strong>${esc(_bookingFmtDate(doc.jobStartDate))}</strong>. I've moved this to Job Booked.</div>
+      <button id="_buOk" style="${fill}">Great</button>`;
+  } else {
+    const sug = doc.bookingSuggestedDate;
+    inner = `
+      <div style="font-size:2.4rem;margin-bottom:6px">📅</div>
+      <div style="font-size:1.2rem;font-weight:700;margin-bottom:8px;color:#333">New date suggested</div>
+      <div style="color:#777;font-size:0.92rem;margin-bottom:20px"><strong>${esc(custName)}</strong> can't make the proposed date and suggested <strong>${esc(_bookingFmtDate(sug))}</strong>.</div>
+      <button id="_buUse" style="${fill}">Use their date</button>
+      <button id="_buOk" style="${txt}">I'll sort it another way</button>`;
+  }
+  const ov = _receiptOverlay(inner);
+  const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+  const okBtn = ov.querySelector('#_buOk');
+  if (okBtn) okBtn.onclick = close;
+  const useBtn = ov.querySelector('#_buUse');
+  if (useBtn) useBtn.onclick = () => {
+    if (doc.bookingSuggestedDate) doc.jobStartDate = doc.bookingSuggestedDate;
+    doc.jobAccepted = true;
+    doc.bookingStatus = 'confirmed';
+    doc.bookingSuggestedDate = '';
+    save();
+    queueSavedDocsSync(true);
+    refreshSavedDocs();
+    refreshOpenCustomerDashboard();
+    close();
+  };
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
 }
 
 // ── Supabase / Mailchimp stubs ──
@@ -14242,10 +14531,11 @@ function setupChaseAndPause() {
   // Check expiry on load, then show if still paused
   checkPauseExpiry();
   checkQuoteAcceptances();
+  checkBookingConfirmations();
   if (isPaused()) showPausedScreen();
 
-  // Poll for quote acceptances every 8 seconds
-  setInterval(() => checkQuoteAcceptances(), 8000);
+  // Poll for quote acceptances + booking confirmations every 8 seconds
+  setInterval(() => { checkQuoteAcceptances(); checkBookingConfirmations(); }, 8000);
 
   // Check scheduled notifications on load and every hour
   checkScheduledNotifications();
@@ -14255,6 +14545,7 @@ function setupChaseAndPause() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       checkQuoteAcceptances();
+      checkBookingConfirmations();
       checkScheduledNotifications();
     }
   });
@@ -14262,6 +14553,7 @@ function setupChaseAndPause() {
   // Supabase real-time: instant notification when a customer accepts
   // (requires quote_acceptances table enabled in Supabase → Database → Replication)
   subscribeToQuoteAcceptances();
+  subscribeToBookingConfirmations();
 
   // Show seasonal banner if applicable
   checkSeasonalPrompt();

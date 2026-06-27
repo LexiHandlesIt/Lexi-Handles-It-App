@@ -3761,6 +3761,16 @@ input[type="text"].sig-text-input:focus {
   margin-bottom: 8px;
   line-height: 1.4;
 }
+.cdv-accept-date-hint {
+  font-size: 0.74rem;
+  color: var(--walnut-d);
+  background: var(--gold-light);
+  border: 1px solid var(--gold-mid);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 2px 0 4px;
+  line-height: 1.4;
+}
 .cdv-prog-label {
   font-size: 0.67rem;
   font-weight: 700;
@@ -3784,31 +3794,93 @@ input[type="text"].sig-text-input:focus {
   flex-shrink: 0;
   width: 20px;
   position: relative;
-  margin-top: 13px;
+  margin-top: 24px;
 }
 .cdv-tube-corner {
   width: 14px;
-  height: 42px;
+  height: 21px;
   border-top: none;
   border-right: 3px solid #e0d8cc;
   border-bottom: none;
   border-left: none;
   border-radius: 0;
   transition: border-color 0.2s;
+  position: relative;
 }
 .cdv-tube-corner.done {
   border-right-color: var(--gold-mid);
+}
+.cdv-tube-corner::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  right: -6px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid #c8bfb0;
+}
+.cdv-tube-corner.done::after { border-top-color: var(--gold); }
+/* Row 3: third row of the snake */
+.cdv-tube-row3 { margin-top: 6px; }
+/* Invisible end spacer (20px) so all three rows are the same width and columns align */
+.cdv-tube-end { flex-shrink: 0; width: 20px; }
+/* Left corner connector: vertical line dropping from Paid down to Receipt */
+.cdv-tube-corner-wrap-l { margin-top: 0; }
+.cdv-tube-corner-l {
+  border-right: none;
+  border-left: 3px solid #e0d8cc;
+}
+.cdv-tube-corner-l.done { border-left-color: var(--gold-mid); }
+.cdv-tube-corner-l::after {
+  right: auto;
+  left: -6px;
 }
 /* Track segment between stations */
 .cdv-tube-seg {
   flex: 1;
   height: 3px;
-  background: #e0d8cc;
-  border-radius: 2px;
+  position: relative;
+  background: transparent;
   margin-top: 13px;
+}
+/* Short arrow graphic (line + head ≈ 47px) centred in the gap between dots */
+.cdv-tube-seg::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 41px;
+  height: 3px;
+  border-radius: 2px;
+  background: #e0d8cc;
   transition: background 0.2s;
 }
-.cdv-tube-seg.done { background: var(--gold-mid); }
+.cdv-tube-seg.done::before { background: var(--gold-mid); }
+.cdv-tube-seg::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+/* Right-pointing: head at the right end of the centred line */
+.cdv-tube-seg-r::after {
+  left: calc(50% + 20.5px);
+  border-left: 6px solid #c8bfb0;
+}
+.cdv-tube-seg-r.done::after { border-left-color: var(--gold); }
+/* Left-pointing: head at the left end of the centred line */
+.cdv-tube-seg-l::after {
+  right: calc(50% + 20.5px);
+  border-right: 6px solid #c8bfb0;
+}
+.cdv-tube-seg-l.done::after { border-right-color: var(--gold); }
 /* Station = circle + label stacked */
 .cdv-tube-station {
   display: flex;
@@ -3851,6 +3923,7 @@ input[type="text"].sig-text-input:focus {
 .cdv-tube-dot.tube-active.stage-complete  { background: var(--sage); border-color: var(--sage); }
 .cdv-tube-dot.tube-active.stage-invoice   { background: var(--walnut); border-color: var(--walnut); }
 .cdv-tube-dot.tube-active.stage-paid      { background: var(--success); border-color: var(--success); }
+.cdv-tube-dot.tube-active.stage-receipt   { background: var(--gold); border-color: var(--gold); }
 /* Label under circle */
 .cdv-tube-lbl {
   font-size: 0.58rem;
@@ -8210,4 +8283,35 @@ body.biz-mode #page-biz-prefs {
 .lexi-basic-dashboard .cdv-action-invoice,
 .lexi-basic-dashboard .cdv-action-receipt {
   display: none !important;
+}
+
+/* ===== MY PHOTOS TAB: two-column Before/After layout ===== */
+.pj-photo-cols { display: flex; gap: 16px; }
+.pj-photo-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.pj-photo-col label:first-child { font-size: 0.85rem; font-weight: 700; color: var(--charcoal); }
+.pj-photo-col input[type="file"] { width: 100%; }
+@media (max-width: 480px) {
+  .pj-photo-cols { flex-direction: column; }
+}
+
+/* ===== SCOPE OF WORK: greyed box in My Services tab ===== */
+.pj-dow-wrap {
+  margin-top: 18px;
+  padding: 14px;
+  background: #f3f3f3;
+  border: 1.5px solid #d8d4ce;
+  border-radius: 10px;
+}
+.pj-dow-wrap .label-with-help label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pj-dow-wrap textarea {
+  background: #ebebeb;
+  border-color: #ccc;
+  color: #555;
+  font-size: 0.88rem;
 }
