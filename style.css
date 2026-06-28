@@ -3459,12 +3459,35 @@ input[type="text"].sig-text-input:focus {
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--border);
+  display: block;
 }
 .photo-empty {
   grid-column: 1 / -1;
   font-size: 0.85rem;
   color: #888;
 }
+/* Thumbnail wrapper with a remove button */
+.photo-thumb-wrap { position: relative; }
+.photo-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s;
+}
+.photo-remove:hover { background: var(--danger); }
 .stacked-actions {
   display: flex;
   flex-direction: column;
@@ -7859,6 +7882,17 @@ input[type="text"].sig-text-input:focus {
   border-bottom: 2px solid var(--white); /* erase bar border = connected feel */
   z-index: 1;
 }
+/* Main builder tabs (The Customer / Work / Terms / Preview):
+   selected tab + the bar behind it are white; the other tabs are brand cream.
+   Completed sections turn brand green via the .done rules below. */
+#quoteBuilderTabs { background: var(--white); }
+#quoteBuilderTabs .qb-tab { background: var(--cream); }
+#quoteBuilderTabs .qb-tab:hover { background: var(--walnut-tint); }
+#quoteBuilderTabs .qb-tab.active {
+  background: var(--white);
+  border-bottom-color: var(--white); /* merge the active tab into the white bar */
+}
+
 .qb-tab.done {
   color: var(--sage);
 }
@@ -8284,6 +8318,24 @@ body.biz-mode #page-biz-prefs {
 .lexi-basic-dashboard .cdv-action-receipt {
   display: none !important;
 }
+
+/* ===== EDITABLE TERMS & CONDITIONS (tick + inline number) ===== */
+.term-line { align-items: flex-start; }
+.term-line .term-text { line-height: 1.7; }
+.term-num {
+  width: 56px;
+  padding: 2px 6px;
+  margin: 0 2px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--walnut-d);
+  text-align: center;
+  background: var(--white);
+}
+.term-num:focus { outline: none; border-color: var(--walnut); }
 
 /* ===== MY PHOTOS TAB: two-column Before/After layout ===== */
 .pj-photo-cols { display: flex; gap: 16px; }
