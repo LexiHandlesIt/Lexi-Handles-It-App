@@ -1443,19 +1443,6 @@
               </select>
               <input type="number" id="vatCustom" min="0" max="100" step="1" placeholder="%" class="vat-custom" style="display:none">
             </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label for="docValidFor">Valid For</label>
-              <select id="docValidFor">
-                <option value="7">7 days</option>
-                <option value="14" selected>14 days</option>
-                <option value="30">30 days</option>
-                <option value="custom">Custom&hellip;</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group" id="validCustomGroup" style="display:none;margin-top:8px">
-            <label for="docValidCustom">Custom validity (days)</label>
-            <input type="number" id="docValidCustom" min="1">
           </div>
 
           <div class="totals-block" style="margin-top:16px">
@@ -1466,8 +1453,25 @@
           </div>
         </div>
 
-        <!-- T'S & C'S panel: tick the clause, edit the number inside it -->
+        <!-- T'S & C'S panel: validity duration first, then the tickable terms -->
         <div id="termsTcsPanel" style="display:none">
+          <label for="docValidFor">Duration</label>
+          <p class="pj-section-hint" style="margin:2px 0 8px">How long this quote or estimate stays valid.</p>
+          <div class="form-group">
+            <select id="docValidFor">
+              <option value="7">7 days</option>
+              <option value="14" selected>14 days</option>
+              <option value="30">30 days</option>
+              <option value="custom">Custom&hellip;</option>
+            </select>
+          </div>
+          <div class="form-group" id="validCustomGroup" style="display:none">
+            <label for="docValidCustom">Custom validity (days)</label>
+            <input type="number" id="docValidCustom" min="1">
+          </div>
+
+          <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
           <label>Terms &amp; Conditions</label>
           <p class="pj-section-hint" style="margin:2px 0 8px">Tick the terms you want, and change the numbers to suit the job.</p>
           <div class="terms-options">

@@ -3808,20 +3808,20 @@ input[type="text"].sig-text-input:focus {
   align-items: flex-start;
   position: relative;
 }
-/* Row 2: reversed right-to-left (Paid, Invoiced, Job Complete) */
+/* Row 2: reversed right-to-left (Job Complete, Job Started, Job Booked) */
 .cdv-tube-row2 {
-  margin-top: 6px;
+  margin-top: 100px;
 }
-/* Corner connector: vertical line on right dropping from Job Booked down to Job Complete */
+/* Corner connector: tall vertical line so the down arrow sits on its own line between rows */
 .cdv-tube-corner-wrap {
   flex-shrink: 0;
   width: 20px;
   position: relative;
-  margin-top: 24px;
+  margin-top: 13px;
 }
 .cdv-tube-corner {
   width: 14px;
-  height: 21px;
+  height: 52px;
   border-top: none;
   border-right: 3px solid #e0d8cc;
   border-bottom: none;
@@ -3846,11 +3846,10 @@ input[type="text"].sig-text-input:focus {
 }
 .cdv-tube-corner.done::after { border-top-color: var(--gold); }
 /* Row 3: third row of the snake */
-.cdv-tube-row3 { margin-top: 6px; }
+.cdv-tube-row3 { margin-top: 100px; }
 /* Invisible end spacer (20px) so all three rows are the same width and columns align */
 .cdv-tube-end { flex-shrink: 0; width: 20px; }
-/* Left corner connector: vertical line dropping from Paid down to Receipt */
-.cdv-tube-corner-wrap-l { margin-top: 0; }
+/* Left corner connector: drops from Job Complete (row 1 left) down to Invoiced (row 3 left) */
 .cdv-tube-corner-l {
   border-right: none;
   border-left: 3px solid #e0d8cc;
@@ -3911,7 +3910,33 @@ input[type="text"].sig-text-input:focus {
   align-items: center;
   gap: 5px;
   flex-shrink: 0;
+  position: relative;
 }
+/* Vertical down connector centred under a turning circle, dropping to the circle
+   directly below it in the next row. Arrow sits at the bottom. */
+.cdv-tube-down {
+  position: absolute;
+  top: 80px;            /* below the label, floating centred in the gap */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 20px;         /* half the previous length */
+  background: #e0d8cc;
+  border-radius: 2px;
+}
+.cdv-tube-down.done { background: var(--gold-mid); }
+.cdv-tube-down::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid #c8bfb0;
+}
+.cdv-tube-down.done::after { border-top-color: var(--gold); }
 /* Circle dot */
 .cdv-tube-dot {
   width: 26px; height: 26px;
@@ -4569,6 +4594,71 @@ input[type="text"].sig-text-input:focus {
   font-weight: 600;
   padding-top: 4px;
 }
+/* ===== CUSTOMER DASHBOARD: per-job tabs ===== */
+.cdv-job-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 8px 8px 0;
+  background: var(--cream);
+  border-bottom: 1.5px solid var(--border);
+}
+.cdv-jtab {
+  flex: 1;
+  padding: 8px 4px;
+  border: 1.5px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--cream-d);
+  color: var(--walnut-l);
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.15;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cdv-jtab.active {
+  background: #fff;
+  color: var(--walnut);
+  margin-bottom: -1.5px;
+}
+.cdv-jpanel { padding: 12px 14px; }
+.cdv-jpanel .cdv-section:first-child { padding-top: 0; }
+
+/* Inline Money In form inside the Job Payments tab */
+.cdv-pay-form {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.cdv-pay-form-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--walnut);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.cdv-pay-form .form-group { margin-bottom: 10px; }
+.cdv-pay-form .form-group label { font-size: 0.78rem; font-weight: 600; color: var(--charcoal); }
+.cdv-pay-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cdv-pay-log-btn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 11px;
+  border: none;
+  border-radius: 8px;
+  background: var(--walnut);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.cdv-pay-log-btn:hover { background: var(--walnut-d); }
 
 /* Notes */
 .cdv-note-text {
@@ -7897,8 +7987,7 @@ input[type="text"].sig-text-input:focus {
   color: var(--sage);
 }
 .qb-tab.done::after {
-  content: ' ✓';
-  font-size: 0.8rem;
+  content: none; /* no checkmark — completed sections are shown by the green label only */
 }
 /* Push page content down when tab bar is visible */
 body.qb-mode #page3,
@@ -8320,7 +8409,8 @@ body.biz-mode #page-biz-prefs {
 }
 
 /* ===== EDITABLE TERMS & CONDITIONS (tick + inline number) ===== */
-.term-line { align-items: flex-start; }
+.term-line { align-items: flex-start; margin-bottom: 14px; }
+.term-line:last-child { margin-bottom: 0; }
 .term-line .term-text { line-height: 1.7; }
 .term-num {
   width: 56px;

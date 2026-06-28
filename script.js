@@ -7375,17 +7375,24 @@ function closeSpreadsheetView() {
 // The current lifecycle status of a job — shared by the job card, the customer
 // dashboard and (conceptually) the spreadsheet so the wording never disagrees.
 function getJobStatus(doc) {
+  // Mirrors the dashboard tube-map stageRank exactly so the card badge and the
+  // Job Status track never disagree.
   const q = doc.quote || {};
+  const qType = (q.type || doc.type || 'Estimate').toLowerCase();
   const isAccepted = doc.acceptStatus === 'accepted' || doc.jobAccepted;
+  const jobStarted = doc.jobStarted || (doc.jobStartDate && doc.jobStartDate <= todayStr());
+  const receiptSent = doc.receiptSent || qType === 'receipt' || doc.receiptRef;
   const isOverdue  = !doc.paid && doc.invoiceSent && doc.invoiceDueDate && todayStr() > doc.invoiceDueDate;
-  if (doc.paid)                          return { cls: 'paid',     label: 'Paid' };
-  if (isOverdue)                         return { cls: 'overdue',  label: 'Overdue' };
-  if (doc.invoiceSent)                   return { cls: 'invoiced', label: 'Invoiced' };
-  if (doc.jobCompleted)                  return { cls: 'complete', label: 'Completed' };
-  if (isAccepted && doc.jobStartDate)    return { cls: 'booked',   label: 'Booked' };
-  if (isAccepted)                        return { cls: 'accepted', label: 'Accepted' };
-  const t = (q.type || doc.type || 'Estimate');
-  return { cls: t.toLowerCase(), label: t };
+  if (receiptSent)                            return { cls: 'paid',     label: 'Receipt sent' };
+  if (doc.paid)                               return { cls: 'paid',     label: 'Paid' };
+  if (isOverdue)                              return { cls: 'overdue',  label: 'Overdue' };
+  if (doc.invoiceSent || qType === 'invoice') return { cls: 'invoiced', label: 'Invoiced' };
+  if (doc.jobCompleted)                       return { cls: 'complete', label: 'Completed' };
+  if (jobStarted)                             return { cls: 'started',  label: 'Job Started' };
+  if (doc.jobStartDate)                       return { cls: 'booked',   label: 'Booked In' };
+  if (isAccepted)                             return { cls: 'accepted', label: 'Accepted' };
+  if (qType === 'quote')                      return { cls: 'quote',    label: 'Quote' };
+  return { cls: 'estimate', label: 'Estimate' };
 }
 
 // The single logical "next step" for a job, shared by the job card and the
@@ -8939,6 +8946,42 @@ function renderMpPrevInfo() {
   if (addLabel) addLabel.style.display = 'block';
 }
 
+// Log a payment straight from the dashboard's inline Money In form (no modal).
+function logInlinePayment(docId, btn) {
+  const doc = state.saved.find(d => d.id === docId);
+  if (!doc) return;
+  const card = btn.closest('.cdv-job-card');
+  if (!card) return;
+  const amount = parseFloat(card.querySelector('.cdv-pay-amount')?.value) || 0;
+  const date   = card.querySelector('.cdv-pay-date')?.value || todayStr();
+  const type   = card.querySelector('.cdv-pay-type')?.value || 'Full Payment';
+  if (amount <= 0) { toast('Enter an amount received.', 'error'); return; }
+  if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
+  if (!hasLexiFeature('part_payments', 'full')) {
+    const alreadyPaid = doc.payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const remaining = Math.max(0, (doc.total || 0) - alreadyPaid);
+    if (doc.payments.length || Math.abs(amount - remaining) > 0.01) {
+      showLexiFeatureLocked('part_payments', 'Apprentice can mark one full payment. Deposits and part-payments are available on Tradesman.');
+      return;
+    }
+  }
+  const wasPaid = !!doc.paid;
+  doc.payments.push({ amount, date, type });
+  sortPaymentsByDate(doc.payments);
+  recalcDocPayments(doc);
+  save();
+  queueSavedDocsSync(true);
+  refreshSavedDocs();
+  activeDocId = docId;
+  _cdvJobTab[docId] = 'payments';   // stay on the Payments tab after re-render
+  refreshActiveDashboard();
+  if (doc.paid && !wasPaid && !doc.receiptSent) {
+    promptReceiptAfterPaid(doc.id);
+  } else {
+    showSavedPopup(doc.paid ? 'Get in. That one is paid in full.' : "Payment logged. I've got it.");
+  }
+}
+
 function openMarkPaid(docId) {
   activeDocId = docId;
   const doc = state.saved.find(d => d.id === docId);
@@ -10075,7 +10118,10 @@ function renderCustomerSelector(groups) {
   });
 }
 
-function buildCustomerJobSection(d, jobNum = 0) {
+// Remembers which tab each job card is on, so it survives re-renders.
+const _cdvJobTab = {};
+
+function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false) {
   ensureDocumentRefAndDate(d);
   const q = d.quote || {};
   // items may live in q.items or (legacy) d.items
@@ -10096,9 +10142,6 @@ function buildCustomerJobSection(d, jobNum = 0) {
   const statusLabel = _jobStatus.label;
   const ref = d.invoiceRef || d.receiptRef || q.ref || d.ref || '-';
   const docDate = q.date || d.date || '';
-  const photos = d.photos || {};
-  const beforePhotos = photos.before || [];
-  const afterPhotos  = photos.after  || [];
 
   const itemsHtml = items.length
     ? items.map(i => `
@@ -10133,22 +10176,48 @@ function buildCustomerJobSection(d, jobNum = 0) {
   const payIcon = `<svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`;
   const payLabelRow = `<div class="cdv-section-label cdv-section-label-row"><span>${payIcon} Payments</span>${payStatusHtml}</div>`;
 
-  const paymentsHtml = payments.length ? `
-    <div class="cdv-section">
-      ${payLabelRow}
-      ${payments.map((p, i) => `
+  // Full record of money in (date, type, amount).
+  const payRecordHtml = payments.length
+    ? payments.map((p, i) => `
         <div class="cdv-payment-row">
           <span class="cdv-pay-num">${p.type && p.type !== 'full' ? paymentTypeLabel(p.type) : `Payment ${i + 1}`}</span>
           <span class="cdv-pay-date">${formatDate(p.date)}</span>
           <span class="cdv-pay-amount">${fmtPrice(p.amount)}</span>
-        </div>`).join('')}
-      ${outstanding > 0
+        </div>`).join('') +
+      (outstanding > 0
         ? `<div class="cdv-payment-row cdv-outstanding-row"><span class="cdv-pay-num">Outstanding</span><span></span><span class="cdv-pay-amount">${fmtPrice(outstanding)}</span></div>`
-        : `<div class="cdv-paid-stamp">✓ Paid in full</div>`}
-    </div>` : `
+        : `<div class="cdv-paid-stamp">✓ Paid in full</div>`)
+    : `<p class="cdv-empty">No payments recorded yet.</p>`;
+  // Always-visible "Money In" entry form (no extra button/modal) — shown while money is owed.
+  const payFormHtml = outstanding > 0 ? `
+    <div class="cdv-pay-form">
+      <div class="cdv-pay-form-title">Money In</div>
+      <div class="form-group">
+        <label>Payment Type</label>
+        <select class="cdv-pay-type">
+          <option value="Full Payment">Full Payment</option>
+          <option value="Deposit">Deposit</option>
+          <option value="Part Payment">Part Payment</option>
+          <option value="Final Payment">Final Payment</option>
+        </select>
+      </div>
+      <div class="cdv-pay-form-grid">
+        <div class="form-group">
+          <label>Amount Received</label>
+          <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" class="cdv-pay-amount" min="0" step="any" placeholder="0" value="${outstanding > 0 ? outstanding.toFixed(2) : ''}"></div>
+        </div>
+        <div class="form-group">
+          <label>Date Received</label>
+          <input type="date" class="cdv-pay-date" value="${todayStr()}">
+        </div>
+      </div>
+      <button type="button" class="cdv-pay-log-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="logPayment">Log Payment</button>
+    </div>` : '';
+  const paymentsHtml = `
     <div class="cdv-section">
       ${payLabelRow}
-      <p class="cdv-empty">No payment recorded yet. To update payment click Update.</p>
+      ${payRecordHtml}
+      ${payFormHtml}
     </div>`;
 
   const notesHtml = q.notes ? `
@@ -10163,17 +10232,6 @@ function buildCustomerJobSection(d, jobNum = 0) {
       <p class="cdv-note-text">${esc(q.privateNotes)}</p>
     </div>` : '';
 
-  const photoGroup = (label, list) => list.length ? `
-    <div class="cdv-photo-group">
-      <div class="cdv-photo-label">${label}</div>
-      <div class="cdv-photo-grid">${list.map(src => `<img src="${src}" class="cdv-photo-thumb" alt="${label} photo">`).join('')}</div>
-    </div>` : '';
-  const photosHtml = (beforePhotos.length || afterPhotos.length) ? `
-    <div class="cdv-section">
-      <div class="cdv-section-label"><svg class="cdv-icon cdv-icon-label" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Photos</div>
-      ${photoGroup('Before', beforePhotos)}
-      ${photoGroup('After', afterPhotos)}
-    </div>` : '';
 
   // Work out which stage rank this doc is currently at
   // Cross-check the saved flags AND q.type so docs created directly as Invoice/Receipt
@@ -10206,7 +10264,10 @@ function buildCustomerJobSection(d, jobNum = 0) {
     { label: 'Paid',          action: 'receipt', cls: 'stage-paid' },      // 7
     { label: 'Receipt',       action: 'receipt', cls: 'stage-receipt' },   // 8
   ];
-  const makeStation = (i) => {
+  // A down connector lives inside the station where the snake turns, so it sits
+  // centred under that circle (and over the circle directly below it).
+  const downConn = (done) => `<span class="cdv-tube-down${done ? ' done' : ''}"></span>`;
+  const makeStation = (i, connector = '') => {
     const s = tubeStages[i];
     const isDone   = i < stageRank;
     const isActive = i === stageRank;
@@ -10218,19 +10279,19 @@ function buildCustomerJobSection(d, jobNum = 0) {
         data-prog-action="${s.action}"
         title="${s.label}"></button>
       <span class="cdv-tube-lbl ${lblCls}">${s.label}</span>
+      ${connector}
     </div>`;
   };
   // A segment between consecutive stages a and b is done once the later one is reached.
   const makeSeg = (a, b, dir) => `<div class="cdv-tube-seg cdv-tube-seg-${dir}${stageRank >= Math.max(a, b) ? ' done' : ''}"></div>`;
   const spacer = '<div class="cdv-tube-end"></div>';
-  const rCorner = (done) => `<div class="cdv-tube-corner-wrap"><div class="cdv-tube-corner${done ? ' done' : ''}"></div></div>`;
-  const lCorner = (done) => `<div class="cdv-tube-corner-wrap cdv-tube-corner-wrap-l"><div class="cdv-tube-corner cdv-tube-corner-l${done ? ' done' : ''}"></div></div>`;
-  // Row 0: 0→1→2 (arrows right), then a right-hand corner dropping to Job Booked
-  const row0 = `${spacer}${makeStation(0)}${makeSeg(0,1,'r')}${makeStation(1)}${makeSeg(1,2,'r')}${makeStation(2)}${rCorner(stageRank >= 3)}`;
-  // Row 1: 3→4→5 shown right-to-left, so DOM order [5,4,3] (arrows point left)
-  const row1 = `${spacer}${makeStation(5)}${makeSeg(5,4,'l')}${makeStation(4)}${makeSeg(4,3,'l')}${makeStation(3)}${spacer}`;
-  // Row 2: a left-hand corner rising to Job Complete, then 6→7→8 (arrows right)
-  const row2 = `${lCorner(stageRank >= 6)}${makeStation(6)}${makeSeg(6,7,'r')}${makeStation(7)}${makeSeg(7,8,'r')}${makeStation(8)}${spacer}`;
+  // Row 0: 0→1→2 (arrows right); Accepted drops straight down to Job Booked
+  const row0 = `${spacer}${makeStation(0)}${makeSeg(0,1,'r')}${makeStation(1)}${makeSeg(1,2,'r')}${makeStation(2, downConn(stageRank >= 3))}${spacer}`;
+  // Row 1: 3→4→5 shown right-to-left (DOM [5,4,3], arrows point left); Job Complete
+  // (leftmost) drops straight down to Invoiced — the second S-bend.
+  const row1 = `${spacer}${makeStation(5, downConn(stageRank >= 6))}${makeSeg(5,4,'l')}${makeStation(4)}${makeSeg(4,3,'l')}${makeStation(3)}${spacer}`;
+  // Row 2: 6→7→8 (arrows right)
+  const row2 = `${spacer}${makeStation(6)}${makeSeg(6,7,'r')}${makeStation(7)}${makeSeg(7,8,'r')}${makeStation(8)}${spacer}`;
   // Warning: job auto-started today — show if date just passed and not manually confirmed
   const autoStartedToday = d.jobStartDate === todayStr() && !d.jobStarted;
   const startWarningHtml = autoStartedToday ? `
@@ -10300,6 +10361,13 @@ function buildCustomerJobSection(d, jobNum = 0) {
       <button type="button" class="cal-icon-btn cdv-labeled cdv-delete-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="deleteJob">${JSVG_DELETE}<span>Delete</span></button>
     </div>`;
 
+  // Four tabs per job (Job Itinerary / Job Notes / Job Status / Job Payments).
+  // Active tab is remembered per doc so it survives re-renders.
+  const activeTab = _cdvJobTab[d.id] || 'itinerary';
+  const tabBtn = (id, label) => `<button type="button" class="cdv-jtab${activeTab === id ? ' active' : ''}" data-jtab="${id}" data-doc-id="${esc(d.id)}">${label}</button>`;
+  const panel = (id, inner) => `<div class="cdv-jpanel" data-jpanel="${id}" data-doc-id="${esc(d.id)}"${activeTab === id ? '' : ' style="display:none"'}>${inner}</div>`;
+  const customerExtrasHtml = isFirst && groupName ? buildCustomerExtras(groupName) : '';
+
   return `
     <div class="cdv-job-card">
       <div class="cdv-job-header">
@@ -10312,15 +10380,16 @@ function buildCustomerJobSection(d, jobNum = 0) {
           title="Open ${statusLabel}">${esc(statusLabel)}</button>
       </div>
       ${jobContactBtns}
-      <div class="cdv-items">${itemsHtml}</div>
-      ${totalsHtml}
-      ${acceptanceHtml}
-      ${progressionHtml}
-      ${scheduleHtml}
-      ${paymentsHtml}
-      ${notesHtml}
-      ${privateHtml}
-      ${photosHtml}
+      <div class="cdv-job-tabs">
+        ${tabBtn('itinerary', 'Job Itinerary')}
+        ${tabBtn('notes', 'Job Notes')}
+        ${tabBtn('status', 'Job Status')}
+        ${tabBtn('payments', 'Job Payments')}
+      </div>
+      ${panel('itinerary', `<div class="cdv-items">${itemsHtml}</div>${totalsHtml}`)}
+      ${panel('notes', `${notesHtml}${privateHtml}${customerExtrasHtml}`)}
+      ${panel('status', `${acceptanceHtml}${progressionHtml}${scheduleHtml}`)}
+      ${panel('payments', paymentsHtml)}
     </div>`;
 }
 
@@ -10358,9 +10427,8 @@ function renderSingleCustomerDashboard(group, groups) {
   const contentHtml = `
     <div class="customer-dashboard-card printable-customer-dashboard">
       <div class="cdv-jobs-list">
-        ${group.docs.map((d, i) => buildCustomerJobSection(d, group.docs.length > 1 ? i + 1 : 0)).join('')}
+        ${group.docs.map((d, i) => buildCustomerJobSection(d, group.docs.length > 1 ? i + 1 : 0, group.name, i === 0)).join('')}
       </div>
-      ${buildCustomerExtras(group.name)}
     </div>`;
 
   body.innerHTML = contentHtml;
@@ -10380,10 +10448,22 @@ function renderSingleCustomerDashboard(group, groups) {
   if (!body._cdvProgClickWired) {
     body._cdvProgClickWired = true;
     body.addEventListener('click', e => {
+      // Per-job tab switching (Job Itinerary / Notes / Status / Payments)
+      const jtabBtn = e.target.closest('.cdv-jtab');
+      if (jtabBtn) {
+        const card = jtabBtn.closest('.cdv-job-card');
+        const tab  = jtabBtn.dataset.jtab;
+        _cdvJobTab[jtabBtn.dataset.docId] = tab;
+        card.querySelectorAll('.cdv-jtab').forEach(b => b.classList.toggle('active', b.dataset.jtab === tab));
+        card.querySelectorAll('.cdv-jpanel').forEach(p => { p.style.display = p.dataset.jpanel === tab ? '' : 'none'; });
+        return;
+      }
       const btn = e.target.closest('[data-prog-doc-id]');
       if (!btn) return;
       const docId  = btn.dataset.progDocId;
       const action = btn.dataset.progAction;
+
+      if (action === 'logPayment') { logInlinePayment(docId, btn); return; }
 
       if (action === 'receipt') {
         _previewReturnDocId = docId;   // X on the preview returns to this dashboard
