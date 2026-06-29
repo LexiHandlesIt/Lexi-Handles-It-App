@@ -3026,6 +3026,13 @@ function initQuoteBuilderTabs() {
       if (!activePage) return;
       const pageId = activePage.id;
       if (!QB_PAGES.includes(pageId)) return;
+      // If the builder was opened via "Edit job details" from a customer dashboard
+      // job card, the phone back button should return to that job card.
+      if (_builderReturnDocId) {
+        history.pushState({}, '');   // keep a state so the app doesn't exit
+        exitQuoteBuilder();          // back to the customer dashboard / job card
+        return;
+      }
       const idx = QB_TAB_ORDER.indexOf(pageId);
       if (idx <= 0) {
         // First QB page — ask if they want to exit
@@ -10231,24 +10238,24 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
   const payFormHtml = outstanding > 0 ? `
     <div class="cdv-pay-form">
       <div class="cdv-pay-form-title">Money In</div>
-      <div class="form-group">
-        <label>Payment Type</label>
-        <select class="cdv-payin-type">
-          <option value="Full Payment">Full Payment</option>
-          <option value="Deposit">Deposit</option>
-          <option value="Part Payment">Part Payment</option>
-          <option value="Final Payment">Final Payment</option>
-        </select>
-      </div>
       <div class="cdv-pay-form-grid">
         <div class="form-group">
-          <label>Amount Received</label>
-          <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" class="cdv-payin-amount" min="0" step="any" placeholder="0" value="${outstanding > 0 ? outstanding.toFixed(2) : ''}"></div>
+          <label>Payment Type</label>
+          <select class="cdv-payin-type">
+            <option value="Full Payment">Full Payment</option>
+            <option value="Deposit">Deposit</option>
+            <option value="Part Payment">Part Payment</option>
+            <option value="Final Payment">Final Payment</option>
+          </select>
         </div>
         <div class="form-group">
           <label>Date Received</label>
           <input type="date" class="cdv-payin-date" value="${todayStr()}">
         </div>
+      </div>
+      <div class="form-group">
+        <label>Amount Received</label>
+        <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" class="cdv-payin-amount" min="0" step="any" placeholder="0" value="${outstanding > 0 ? outstanding.toFixed(2) : ''}"></div>
       </div>
       <button type="button" class="cdv-pay-log-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="logPayment">Log Payment</button>
     </div>` : '';
@@ -10436,7 +10443,7 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
       </div>
       ${panel('itinerary', `<div class="cdv-items">${itemsHtml}</div>${totalsHtml}<button type="button" class="cdv-edit-job-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="editJob">Edit job details</button>`)}
       ${panel('notes', `${notesHtml}${privateHtml}${customerExtrasHtml}`)}
-      ${panel('status', `${progressionHtml}${scheduleHtml}`)}
+      ${panel('status', `${acceptanceHtml}${progressionHtml}${scheduleHtml}`)}
       ${panel('payments', paymentsHtml)}
     </div>`;
 }
@@ -11924,11 +11931,19 @@ function buildDocHtml(doc, docType, extra = {}) {
     const sigText    = q.custSigText || '';
     const authName   = q.authSig || authFullName || bizName;
     const sigContent = sigText ? `<span class="doc-sig-typed">${esc(sigText)}</span>` : '';
+    // Once the customer has signed via the acceptance link, their signature, name
+    // and date are captured on the doc — surface them on the document automatically.
+    const isAccepted   = doc.acceptStatus === 'accepted' || doc.jobAccepted;
+    const custSignName = doc.acceptedBy || '';
+    const custSignDate = doc.acceptedAt ? new Date(doc.acceptedAt).toLocaleDateString('en-GB') : '';
+    const introText = isAccepted
+      ? `This ${(q.type||'quote').toLowerCase()} was accepted${custSignName ? ` by ${esc(custSignName)}` : ''}${custSignDate ? ` on ${custSignDate}` : ''}.`
+      : `Please let me know if this meets your needs. To accept this ${(q.type||'quote').toLowerCase()}, click the button below to sign.`;
     acceptancePage = `
       <div class="doc-accept" style="background:${bgCol};-webkit-print-color-adjust:exact;print-color-adjust:exact">
         <div class="doc-accept-body">
           <div class="doc-accept-heading">Acceptance</div>
-          <p>Please let me know if this meets your needs. To accept this ${(q.type||'quote').toLowerCase()}, click the button below to sign.</p>
+          <p>${introText}</p>
           <div class="doc-sig-grid">
             <div class="doc-sig-box">
               ${sigContent}
@@ -11936,7 +11951,8 @@ function buildDocHtml(doc, docType, extra = {}) {
               <div class="doc-sig-label">Authorised Signature</div>
             </div>
             <div class="doc-sig-box">
-              <div class="doc-sig-label">Customer Signature</div>
+              ${isAccepted && custSignName ? `<span class="doc-sig-typed">${esc(custSignName)}</span><div class="doc-sig-name">${esc(custSignName)}</div>` : ''}
+              <div class="doc-sig-label">Customer Signature${isAccepted && custSignDate ? ` &middot; ${custSignDate}` : ''}</div>
             </div>
           </div>
           <p class="doc-accept-thanks">Thank you for the opportunity. I look forward to hearing from you.<br>Kind regards, ${esc(authName)}</p>
