@@ -3810,7 +3810,7 @@ input[type="text"].sig-text-input:focus {
 }
 /* Row 2: reversed right-to-left (Job Complete, Job Started, Job Booked) */
 .cdv-tube-row2 {
-  margin-top: 100px;
+  margin-top: 52px;
 }
 /* Corner connector: tall vertical line so the down arrow sits on its own line between rows */
 .cdv-tube-corner-wrap {
@@ -3846,7 +3846,7 @@ input[type="text"].sig-text-input:focus {
 }
 .cdv-tube-corner.done::after { border-top-color: var(--gold); }
 /* Row 3: third row of the snake */
-.cdv-tube-row3 { margin-top: 100px; }
+.cdv-tube-row3 { margin-top: 52px; }
 /* Invisible end spacer (20px) so all three rows are the same width and columns align */
 .cdv-tube-end { flex-shrink: 0; width: 20px; }
 /* Left corner connector: drops from Job Complete (row 1 left) down to Invoiced (row 3 left) */
@@ -3916,11 +3916,11 @@ input[type="text"].sig-text-input:focus {
    directly below it in the next row. Arrow sits at the bottom. */
 .cdv-tube-down {
   position: absolute;
-  top: 80px;            /* below the label, floating centred in the gap */
+  top: 52px;            /* just below the label, close to the circles */
   left: 50%;
   transform: translateX(-50%);
   width: 3px;
-  height: 20px;         /* half the previous length */
+  height: 20px;
   background: #e0d8cc;
   border-radius: 2px;
 }
@@ -4659,6 +4659,26 @@ input[type="text"].sig-text-input:focus {
   transition: background var(--transition);
 }
 .cdv-pay-log-btn:hover { background: var(--walnut-d); }
+
+.cdv-edit-job-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1.5px solid var(--walnut);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--walnut);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.cdv-edit-job-btn:hover { background: var(--walnut-tint); }
+
+.cdv-extras-hint { font-size: 0.72rem; color: #888; margin: 0 0 6px; font-style: italic; }
+.cdv-recurring-custom { margin-top: 6px; width: 100%; }
 
 /* Notes */
 .cdv-note-text {

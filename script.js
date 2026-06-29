@@ -2274,7 +2274,33 @@ function mergeSavedDocs(localDocs = [], remoteDocs = []) {
     byId.set(doc.id, { ...local, ...doc, quote: mergedQ, custName: mergedName });
   });
 
-  return [...byId.values()].sort((a, b) => (b.date || b.quote?.date || '').localeCompare(a.date || a.quote?.date || ''));
+  const merged = [...byId.values()].sort((a, b) => (b.date || b.quote?.date || '').localeCompare(a.date || a.quote?.date || ''));
+  return collapseDocsByRef(merged);
+}
+
+// Job references are server-allocated and unique, so two saved docs with the same
+// ref are the SAME job that ended up under two ids (e.g. created on two devices).
+// Collapse them into one, keeping the union of progress so nothing is lost — this
+// prevents duplicate job cards for one customer.
+function mergeDuplicateInto(kept, dup) {
+  ['jobAccepted','jobStarted','jobCompleted','invoiceSent','paid','receiptSent'].forEach(f => { if (dup[f] && !kept[f]) kept[f] = dup[f]; });
+  ['invoiceRef','invoiceDueDate','receiptRef','receiptDate','jobStartDate','jobCompletedDate','acceptStatus','acceptedBy','acceptedAt','acceptToken','bookingToken','bookingStatus'].forEach(f => { if (!kept[f] && dup[f]) kept[f] = dup[f]; });
+  const sum = a => (a || []).reduce((s, p) => s + (p.amount || 0), 0);
+  if (sum(dup.payments) > sum(kept.payments)) kept.payments = dup.payments;
+  if (!kept.total && dup.total) kept.total = dup.total;
+}
+
+function collapseDocsByRef(docs) {
+  const byRef = new Map();
+  const out = [];
+  for (const doc of docs) {
+    const ref = String(doc.ref || doc.quote?.ref || '').trim();
+    if (!ref) { out.push(doc); continue; }          // drafts with no ref stay separate
+    const kept = byRef.get(ref);
+    if (!kept) { byRef.set(ref, doc); out.push(doc); }
+    else mergeDuplicateInto(kept, doc);             // fold the duplicate into the first
+  }
+  return out;
 }
 
 function getDocStatus(doc = {}) {
@@ -6942,18 +6968,31 @@ function renderAttentionWidget() {
   const today2 = todayStr();
   groups.forEach(g => {
     const data = getCustData(g.name);
-    if (!data.recurringDays) return;
+    const rd = data.recurringDays;
+    if (!rd || rd === '0' || rd === 0) return;
     // Find the most recent job date for this customer
     const lastJobDate = g.docs
       .map(d => d.jobCompletedDate || d.quote?.date || d.date || '')
       .filter(Boolean).sort().pop();
     if (!lastJobDate) return;
-    const daysSince = Math.floor((new Date(today2) - new Date(lastJobDate)) / 86400000);
-    if (daysSince >= data.recurringDays) {
-      const overdueDays = daysSince - data.recurringDays;
+    // Work out the next due date + a human label for the interval.
+    let nextDue, intervalLabel;
+    if (rd === 'month') {
+      const nd = new Date(lastJobDate + 'T00:00:00');
+      nd.setMonth(nd.getMonth() + 1);
+      nextDue = nd.toISOString().slice(0, 10);
+      intervalLabel = 'month';
+    } else {
+      const n = parseInt(rd, 10);
+      if (!n) return;
+      nextDue = addDays(lastJobDate, n);
+      intervalLabel = n === 7 ? 'week' : n === 14 ? 'fortnight' : n === 28 ? '4 weeks' : `${n} days`;
+    }
+    if (today2 >= nextDue) {
+      const overdueDays = Math.floor((new Date(today2) - new Date(nextDue)) / 86400000);
       items.push({
         docId: g.docs[0].id, custName: g.name, ref: '',
-        msg: `Regular visit ${overdueDays === 0 ? 'due today' : `${overdueDays}d overdue`} (every ${data.recurringDays === 7 ? 'week' : data.recurringDays === 14 ? '2 weeks' : data.recurringDays === 28 ? 'month' : data.recurringDays + ' days'})`,
+        msg: `Regular visit ${overdueDays === 0 ? 'due today' : `${overdueDays}d overdue`} (every ${intervalLabel})`,
         action: 'recurring', color: '#8e44ad'
       });
     }
@@ -8952,9 +8991,9 @@ function logInlinePayment(docId, btn) {
   if (!doc) return;
   const card = btn.closest('.cdv-job-card');
   if (!card) return;
-  const amount = parseFloat(card.querySelector('.cdv-pay-amount')?.value) || 0;
-  const date   = card.querySelector('.cdv-pay-date')?.value || todayStr();
-  const type   = card.querySelector('.cdv-pay-type')?.value || 'Full Payment';
+  const amount = parseFloat(card.querySelector('.cdv-payin-amount')?.value) || 0;
+  const date   = card.querySelector('.cdv-payin-date')?.value || todayStr();
+  const type   = card.querySelector('.cdv-payin-type')?.value || 'Full Payment';
   if (amount <= 0) { toast('Enter an amount received.', 'error'); return; }
   if (!Array.isArray(doc.payments)) doc.payments = getDocPayments(doc);
   if (!hasLexiFeature('part_payments', 'full')) {
@@ -10194,7 +10233,7 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
       <div class="cdv-pay-form-title">Money In</div>
       <div class="form-group">
         <label>Payment Type</label>
-        <select class="cdv-pay-type">
+        <select class="cdv-payin-type">
           <option value="Full Payment">Full Payment</option>
           <option value="Deposit">Deposit</option>
           <option value="Part Payment">Part Payment</option>
@@ -10204,11 +10243,11 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
       <div class="cdv-pay-form-grid">
         <div class="form-group">
           <label>Amount Received</label>
-          <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" class="cdv-pay-amount" min="0" step="any" placeholder="0" value="${outstanding > 0 ? outstanding.toFixed(2) : ''}"></div>
+          <div class="input-pfx"><span class="pfx-symbol">£</span><input type="number" class="cdv-payin-amount" min="0" step="any" placeholder="0" value="${outstanding > 0 ? outstanding.toFixed(2) : ''}"></div>
         </div>
         <div class="form-group">
           <label>Date Received</label>
-          <input type="date" class="cdv-pay-date" value="${todayStr()}">
+          <input type="date" class="cdv-payin-date" value="${todayStr()}">
         </div>
       </div>
       <button type="button" class="cdv-pay-log-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="logPayment">Log Payment</button>
@@ -10307,9 +10346,18 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
       <div class="cdv-tube-row cdv-tube-row3">${row2}</div>
     </div>`;
 
-  const acceptedNeedsDate = d.jobAccepted && !d.jobStartDate;
-  const acceptDateHintHtml = acceptedNeedsDate ? `
-        <div class="cdv-accept-date-hint">Customer accepted. Add the date you have booked them in for to move this to Job Booked.</div>` : '';
+  // When a job is accepted but no date is booked yet, show a prompt (mirrors the
+  // Job Completed prompt) asking for the Date Booked For.
+  const acceptedPromptHtml = (d.jobAccepted && !d.jobStartDate) ? `
+        <div class="cdv-accepted-prompt" data-doc-id="${esc(d.id)}">
+          <p class="cdv-prompt-msg">This job is accepted. When have you booked them in for?</p>
+          <div class="cdv-prompt-actions">
+            <span class="cdv-prompt-or">Date Booked For:</span>
+            <button type="button" class="cdv-accepted-today-btn" data-doc-id="${esc(d.id)}">Today</button>
+            <span class="cdv-prompt-or">or</span>
+            <input type="date" class="cdv-accepted-prompt-date" data-doc-id="${esc(d.id)}">
+          </div>
+        </div>` : '';
   const scheduleHtml = `
     <div class="cdv-job-schedule">
       <div class="cdv-schedule-row">
@@ -10317,13 +10365,13 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
           <input type="checkbox" class="cdv-accepted-cb" data-doc-id="${esc(d.id)}"${d.jobAccepted ? ' checked' : ''}>
           Job Accepted
         </label>
-        <div class="cdv-start-date-wrap"${!d.jobAccepted ? ' style="display:none"' : ''}>
+        <div class="cdv-start-date-wrap"${!(d.jobAccepted && d.jobStartDate) ? ' style="display:none"' : ''}>
           <span class="cdv-start-date-label">Date Booked For</span>
           <input type="date" class="cdv-start-date-input" data-doc-id="${esc(d.id)}"
             value="${esc(d.jobStartDate || '')}">
         </div>
       </div>
-      ${acceptDateHintHtml}
+      ${acceptedPromptHtml}
       <div class="cdv-schedule-row">
         <label class="cdv-accepted-label">
           <input type="checkbox" class="cdv-completed-cb" data-doc-id="${esc(d.id)}"${d.jobCompleted ? ' checked' : ''}>
@@ -10386,9 +10434,9 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
         ${tabBtn('status', 'Job Status')}
         ${tabBtn('payments', 'Job Payments')}
       </div>
-      ${panel('itinerary', `<div class="cdv-items">${itemsHtml}</div>${totalsHtml}`)}
+      ${panel('itinerary', `<div class="cdv-items">${itemsHtml}</div>${totalsHtml}<button type="button" class="cdv-edit-job-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="editJob">Edit job details</button>`)}
       ${panel('notes', `${notesHtml}${privateHtml}${customerExtrasHtml}`)}
-      ${panel('status', `${acceptanceHtml}${progressionHtml}${scheduleHtml}`)}
+      ${panel('status', `${progressionHtml}${scheduleHtml}`)}
       ${panel('payments', paymentsHtml)}
     </div>`;
 }
@@ -10423,9 +10471,8 @@ function renderSingleCustomerDashboard(group, groups) {
   // Contact / Share / More now live per job (built inside buildCustomerJobSection),
   // because those actions are always about a specific document.
 
-  // contentHtml = pure dashboard content (used for download -no buttons)
   const contentHtml = `
-    <div class="customer-dashboard-card printable-customer-dashboard">
+    <div class="customer-dashboard-card">
       <div class="cdv-jobs-list">
         ${group.docs.map((d, i) => buildCustomerJobSection(d, group.docs.length > 1 ? i + 1 : 0, group.name, i === 0)).join('')}
       </div>
@@ -10476,6 +10523,12 @@ function renderSingleCustomerDashboard(group, groups) {
         openSendChoiceModal();
       } else if (action === 'deleteJob') {
         if (activeCustomerGroup) openCustomerDeleteChoice(activeCustomerGroup);
+      } else if (action === 'editJob') {
+        // Open the builder for this job and land on The Work → My Rates so the
+        // tradie can flick through My Rates / Services / Materials / Photos.
+        loadQuoteIntoBuilder(docId, true);
+        showPage('page-jobs');
+        document.querySelector('#pjCatSelector .obo-tab[data-pjtab="rates"]')?.click();
       } else if (action === 'chase') {
         openChaseForDoc(docId);
       } else if (action === 'reminder') {
@@ -10490,23 +10543,48 @@ function renderSingleCustomerDashboard(group, groups) {
     });
   }
 
-  // Job Accepted checkbox -show/hide date, auto-fill today, save
+  // Schedule + booked/completed date handlers — wired ONCE (body persists across
+  // re-renders; re-adding would stack duplicate listeners and, with the re-render
+  // calls below, spiral into repeated refreshes).
+  if (!body._cdvChangeWired) {
+    body._cdvChangeWired = true;
+
+  // Job Accepted checkbox — re-render so the "when have you booked them in?" prompt
+  // (or the date field) and the status trail update together.
   body.addEventListener('change', e => {
     const cb = e.target.closest('.cdv-accepted-cb');
     if (!cb) return;
     const doc = state.saved.find(d => d.id === cb.dataset.docId);
     if (!doc) return;
     doc.jobAccepted = cb.checked;
-    const wrap = cb.closest('.cdv-schedule-row')?.querySelector('.cdv-start-date-wrap');
-    if (wrap) {
-      wrap.style.display = cb.checked ? '' : 'none';
-      if (cb.checked) {
-        const inp = wrap.querySelector('.cdv-start-date-input');
-        // Do not auto-fill today — leave blank so user picks an actual booking date
-      }
-    }
     save();
     queueSavedDocsSync(true);
+    refreshSavedDocs();
+    _cdvJobTab[doc.id] = 'status';
+    refreshActiveDashboard();
+  });
+
+  // Booked-date confirmed (Today button or the date picker in the accepted prompt)
+  function applyBookedDate(docId, dateStr) {
+    const doc = state.saved.find(d => d.id === docId);
+    if (!doc || !dateStr) return;
+    doc.jobAccepted  = true;
+    doc.jobStartDate = dateStr;
+    save();
+    queueSavedDocsSync(true);
+    refreshSavedDocs();
+    _cdvJobTab[docId] = 'status';
+    refreshActiveDashboard();
+  }
+  body.addEventListener('click', e => {
+    const btn = e.target.closest('.cdv-accepted-today-btn');
+    if (!btn) return;
+    applyBookedDate(btn.dataset.docId, todayStr());
+  });
+  body.addEventListener('change', e => {
+    const inp = e.target.closest('.cdv-accepted-prompt-date');
+    if (!inp) return;
+    if (inp.value) applyBookedDate(inp.dataset.docId, inp.value);
   });
 
   // Helper: date confirmed -hide prompt, show compact date wrap
@@ -10593,6 +10671,8 @@ function renderSingleCustomerDashboard(group, groups) {
     save();
     queueSavedDocsSync(true);
   });
+
+  } // end _cdvChangeWired
 
 }
 
@@ -12089,63 +12169,6 @@ function wrapDoc(inner) {
 
 function printDoc(html) {
   printRaw(html);
-}
-
-function downloadCustomerDashboard(groupName, html) {
-  const safeName = (groupName || 'Customer').replace(/[^a-zA-Z0-9 \-_.]/g, '').trim().replace(/\s+/g, '-');
-  const filename = `${safeName}-Dashboard.html`;
-  const css = `
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;color:#2C2C2C;background:#fff;padding:24px;max-width:700px;margin:0 auto}
-    .customer-dashboard-card{border:1px solid #DDD5C8;border-radius:8px;overflow:hidden;padding:16px}
-    .cdv-header{border-bottom:1.5px solid #DDD5C8;padding-bottom:12px;margin-bottom:14px}
-    .cdv-contact{display:flex;flex-direction:column;gap:4px}
-    .cdv-contact-line{display:flex;align-items:flex-start;gap:6px;font-size:0.88rem;color:#2C2C2C;line-height:1.4}
-    .cdv-summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#F5F0E8;border-radius:8px;padding:12px;margin-bottom:16px}
-    .cdv-summary-item{display:flex;flex-direction:column;gap:2px;text-align:center}
-    .cdv-summary-label{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:2px}
-    .cdv-summary-value{font-size:1rem;font-weight:700;color:#2C2C2C}
-    .cdv-paid{color:#4A7C59}.cdv-outstanding{color:#C0392B}
-    .cdv-jobs-list{display:flex;flex-direction:column;gap:12px}
-    .cdv-job-card{border:1.5px solid #DDD5C8;border-radius:10px;overflow:hidden}
-    .cdv-job-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#F5F0E8;border-bottom:1px solid #DDD5C8}
-    .cdv-job-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .cdv-job-ref{font-weight:700;font-size:0.95rem;color:#7D5730}
-    .cdv-job-date{font-size:0.82rem;color:#888}
-    .cdv-items{padding:10px 14px 6px}
-    .cdv-item-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0ebe3;font-size:0.9rem}
-    .cdv-item-row:last-child{border-bottom:none}
-    .cdv-item-name{flex:1;color:#2C2C2C}.cdv-item-qty{font-size:0.78rem;color:#999;margin-left:4px}.cdv-item-price{font-weight:600;white-space:nowrap}
-    .cdv-totals{padding:8px 14px 10px;border-top:1px solid #DDD5C8;background:#F5F0E8}
-    .cdv-total-row{display:flex;justify-content:space-between;padding:2px 0;font-size:0.92rem;color:#2C2C2C}
-    .cdv-discount-row{color:#4A7C59}.cdv-vat-row{opacity:0.75}
-    .cdv-grand-total{font-weight:700;font-size:1rem;margin-top:4px;border-top:1px solid #DDD5C8;padding-top:4px}
-    .cdv-section{padding:10px 14px;border-top:1px solid #DDD5C8}
-    .cdv-section-label{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:#888;font-weight:600;margin-bottom:6px}
-    .cdv-payment-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #DDD5C8;font-size:0.88rem}
-    .cdv-payment-row:last-child{border-bottom:none}
-    .cdv-pay-num{min-width:82px;color:#888;font-size:0.82rem;flex-shrink:0}.cdv-pay-date{flex:1;color:#2C2C2C}.cdv-pay-amount{font-weight:700;white-space:nowrap}
-    .cdv-outstanding-row .cdv-pay-amount{color:#C0392B}
-    .cdv-paid-stamp{font-size:0.82rem;color:#4A7C59;font-weight:600}
-    .cdv-note-text{font-size:0.88rem;line-height:1.55;color:#2C2C2C;white-space:pre-wrap}
-    .cdv-private{background:#fffbf0;border-left:3px solid #e6b800}
-    .cdv-photo-group{margin-bottom:8px}.cdv-photo-label{font-size:0.78rem;font-weight:600;color:#888;margin-bottom:4px}
-    .cdv-photo-grid{display:flex;gap:8px;flex-wrap:wrap}.cdv-photo-thumb{width:80px;height:80px;object-fit:cover;border-radius:6px;border:1.5px solid #DDD5C8}
-    .cdv-job-actions{display:none}
-    .type-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:12px;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
-    .type-badge.estimate{background:#e3f0d4;color:#6B7C5C}.type-badge.quote{background:#7D5730;color:#fff}
-    .type-badge.invoiced{background:#dbeafe;color:#1d4ed8}.type-badge.paid{background:#dcfce7;color:#166534}
-    .type-badge.overdue{background:#fecaca;color:#C0392B}`;
-  const fullHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${esc(groupName)} - Dashboard</title><style>${css}</style></head><body>${html}</body></html>`;
-  const blob = new Blob([fullHtml], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function printRaw(inner) {
@@ -15146,14 +15169,19 @@ function setupReviewModal() {
 function buildCustomerExtras(groupName) {
   const data = getCustData(groupName);
   const note = data.note || '';
-  const recurringDays = data.recurringDays || 0;
+  const rd = data.recurringDays;                      // 0 | 7 | 14 | 28 | 'month' | custom number
+  const presetVals = ['0', '7', '14', '28', 'month'];
+  const rdStr = (rd === undefined || rd === null || rd === '') ? '0' : String(rd);
+  const isCustom = !presetVals.includes(rdStr);       // a custom day count
+  const selectedVal = isCustom ? 'custom' : rdStr;
 
   const recurringOptions = [
-    { val: 0,  label: 'Not a regular customer' },
-    { val: 7,  label: 'Weekly' },
-    { val: 14, label: 'Every 2 weeks' },
-    { val: 28, label: 'Monthly' },
-    { val: 42, label: 'Every 6 weeks' },
+    { val: '0',     label: 'Not a regular customer' },
+    { val: '7',     label: 'Once a week' },
+    { val: '14',    label: 'Once a fortnight' },
+    { val: '28',    label: 'Every four weeks' },
+    { val: 'month', label: 'On this date every month' },
+    { val: 'custom', label: 'Custom…' },
   ];
 
   return `
@@ -15163,6 +15191,7 @@ function buildCustomerExtras(groupName) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           Customer Notes
         </label>
+        <p class="cdv-extras-hint">Private notes for you only, the customer never sees these.</p>
         <textarea class="cdv-sticky-note" data-cust="${esc(groupName)}" rows="3"
           placeholder="e.g. Dog in garden, parking at front, prefers WhatsApp…">${esc(note)}</textarea>
       </div>
@@ -15172,8 +15201,10 @@ function buildCustomerExtras(groupName) {
           Regular Visit
         </label>
         <select class="cdv-recurring-select" data-cust="${esc(groupName)}">
-          ${recurringOptions.map(o => `<option value="${o.val}"${o.val === recurringDays ? ' selected' : ''}>${o.label}</option>`).join('')}
+          ${recurringOptions.map(o => `<option value="${o.val}"${o.val === selectedVal ? ' selected' : ''}>${o.label}</option>`).join('')}
         </select>
+        <input type="number" class="cdv-recurring-custom" data-cust="${esc(groupName)}" min="1" step="1"
+          placeholder="Days between visits" value="${isCustom ? esc(rdStr) : ''}"${isCustom ? '' : ' style="display:none"'}>
       </div>
     </div>`;
 }
@@ -15187,12 +15218,24 @@ function wireCustomerExtras(body, groupName) {
       saveCustData(groupName, { note: e.target.value });
     }, 600);
   });
-  // Recurring -save immediately on change
-  body.querySelector('.cdv-recurring-select')?.addEventListener('change', e => {
-    saveCustData(groupName, { recurringDays: parseInt(e.target.value) || 0 });
+  // Recurring -save immediately on change. Value is 0 | 7 | 14 | 28 | 'month' | 'custom'.
+  const customInput = body.querySelector('.cdv-recurring-custom');
+  const saveRecurring = val => {
+    saveCustData(groupName, { recurringDays: val });
     updateChasePaymentsBadge(); // refresh badge in case recurring state changed
     renderAttentionWidget();
+  };
+  body.querySelector('.cdv-recurring-select')?.addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === 'custom') {
+      if (customInput) { customInput.style.display = ''; customInput.focus(); }
+      saveRecurring(parseInt(customInput?.value, 10) || 0);
+    } else {
+      if (customInput) customInput.style.display = 'none';
+      saveRecurring(v === 'month' ? 'month' : (parseInt(v, 10) || 0));
+    }
   });
+  customInput?.addEventListener('input', e => saveRecurring(parseInt(e.target.value, 10) || 0));
 }
 
 /* ═══════════════════════════════════════════════════════════
