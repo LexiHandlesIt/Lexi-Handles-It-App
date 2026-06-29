@@ -6264,11 +6264,23 @@ input[type="text"].sig-text-input:focus {
 .cdv-more-wrap { position: relative; }
 .cdv-more-wrap .cdv-more-btn { width: 100%; }
 .cdv-job-actions .cal-icon-btn.cdv-labeled { flex: 1; }
+.cdv-job-contact-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 48px;
+}
 .cdv-job-contact-actions .cdv-docs-btn,
-.cdv-job-contact-actions .cdv-contact-customer-btn { flex: 1.25; }
+.cdv-job-contact-actions .cdv-contact-customer-btn {
+  width: 100%;
+  min-width: 0;
+}
 .cdv-job-contact-actions .cdv-delete-btn {
-  flex: 0.75;
-  min-width: 78px;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  padding: 6px;
+}
+.cdv-job-contact-actions .cdv-delete-btn span {
+  display: none;
 }
 .cdv-job-actions .cdv-more-wrap { flex: 1; }
 /* The per-job Contact/Share/More row sits directly under Edit/Invoice/Receipt */
@@ -7193,6 +7205,15 @@ input[type="text"].sig-text-input:focus {
 .attn-book:hover  { background: #d0e2fc; }
 .attn-send  { background: #fef3e2; color: #8a5a00; }
 .attn-send:hover  { background: #fde8c0; }
+.attn-widget-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
+  align-items: stretch;
+}
+.attn-action-btn.attn-dash { background: var(--walnut); color: #fff; white-space: nowrap; }
+.attn-action-btn.attn-dash:hover { background: var(--walnut-d); }
 
 /* ===== FILTER TOGGLE ===== */
 .jobs-search-row {

@@ -6904,7 +6904,7 @@ function startJobForCustomer(quote = {}) {
   state.quote.custPhone     = q.custPhone     || '';
   state.quote.custEmail     = q.custEmail     || '';
   populateQuoteForm();
-  showPage('page-jobs');
+  showPage('page3'); // start on The Customer with the contact details pre-filled
 }
 
 function renderExistingCustList(query) {
@@ -6986,20 +6986,11 @@ function setupPage4() {
     if (label)   label.textContent = isOpen ? 'Filter & Sort' : 'Filter & Sort';
   });
 
-  // Quick Quote banner -goes straight to a blank quote form, one tap
+  // New Job banner -> ask who it is for (new or existing customer) first
   document.getElementById('quickQuoteBtn')?.addEventListener('click', () => {
     if (!canUseMainApp()) { requireSetupGuard(); return; }
     if (quietSeasonGuard()) return;
-    prepareNewQuote();
-    showPage('page3');
-    // Collapse extra customer fields for a clean start
-    const extra   = document.getElementById('custExtraFields');
-    const toggle  = document.getElementById('custMoreToggle');
-    const chevron = document.getElementById('custMoreChevron');
-    const label   = document.getElementById('custMoreLabel');
-    if (extra)  extra.style.display = 'none';
-    if (toggle) toggle.checked = false;
-    if (label)  label.textContent = 'Add more details';
+    openNewJobPicker();
   });
 
 
@@ -7117,16 +7108,19 @@ function renderAttentionWidget() {
               <span class="attn-widget-name">${esc(item.custName)}</span>
               <span class="attn-widget-msg">${esc(item.msg)}</span>
             </div>
-            ${item.action === 'chase'
-              ? `<button type="button" class="attn-action-btn attn-chase" onclick="openChaseForDoc('${esc(item.docId)}')">Chase</button>`
-              : item.action === 'invoice'
-                ? `<button type="button" class="attn-action-btn attn-invoice" onclick="previewInvoice('${esc(item.docId)}')">Invoice</button>`
-                : item.action === 'book'
-                  ? `<button type="button" class="attn-action-btn attn-book" onclick="showBookingContactModal(state.saved.find(d=>d.id==='${esc(item.docId)}'))">Book In</button>`
-                  : item.action === 'recurring'
-                    ? `<button type="button" class="attn-action-btn attn-recurring" onclick="openCustomerDashboardForDoc('${esc(item.docId)}')">Book In</button>`
-                    : `<button type="button" class="attn-action-btn attn-send" onclick="openQuoteModal('${esc(item.docId)}')">Follow Up</button>`
-            }
+            <div class="attn-widget-actions">
+              ${item.action === 'chase'
+                ? `<button type="button" class="attn-action-btn attn-chase" onclick="openChaseForDoc('${esc(item.docId)}')">Chase</button>`
+                : item.action === 'invoice'
+                  ? `<button type="button" class="attn-action-btn attn-invoice" onclick="previewInvoice('${esc(item.docId)}')">Invoice</button>`
+                  : item.action === 'book'
+                    ? `<button type="button" class="attn-action-btn attn-book" onclick="showBookingContactModal(state.saved.find(d=>d.id==='${esc(item.docId)}'))">Book In</button>`
+                    : item.action === 'recurring'
+                      ? `<button type="button" class="attn-action-btn attn-recurring" onclick="openCustomerDashboardForDoc('${esc(item.docId)}')">Book In</button>`
+                      : `<button type="button" class="attn-action-btn attn-send" onclick="openQuoteModal('${esc(item.docId)}')">Follow Up</button>`
+              }
+              <button type="button" class="attn-action-btn attn-dash" onclick="openCustomerDashboardForDoc('${esc(item.docId)}')">Open Dashboard</button>
+            </div>
           </div>`).join('')}
       </div>
     </div>`;
