@@ -112,7 +112,7 @@ function normaliseEntitlementRpcRow(data) {
 }
 
 function getLexiOwnerName() {
-  return (state.company?.preferredName || state.company?.firstName || '').trim() || 'Your';
+  return (state.company?.preferredName || state.company?.firstName || '').trim();
 }
 
 function getLexiPlanDisplayName(planCode = lexiEntitlement?.planCode) {
@@ -123,10 +123,16 @@ function getLexiPlanDisplayName(planCode = lexiEntitlement?.planCode) {
   return 'Free Trial';
 }
 
-function getLexiPlanPossessiveLabel(planCode = lexiEntitlement?.planCode) {
-  const owner = getLexiOwnerName();
-  const suffix = owner.toLowerCase() === 'your' ? '' : "'s";
-  return `${owner}${suffix} ${getLexiPlanDisplayName(planCode)}`;
+function getLexiPlanHeaderParts(planCode = lexiEntitlement?.planCode) {
+  return {
+    owner: getLexiOwnerName(),
+    plan: getLexiPlanDisplayName(planCode)
+  };
+}
+
+function getLexiPlanHeaderLabel(planCode = lexiEntitlement?.planCode) {
+  const { owner, plan } = getLexiPlanHeaderParts(planCode);
+  return owner ? `${owner}: ${plan}` : plan;
 }
 
 function isLexiPaidPlan() {
@@ -137,7 +143,10 @@ function isLexiPaidPlan() {
 function updatePlanDisplay() {
   const badge = document.getElementById('headerPlanBadge');
   if (!badge) return;
-  badge.textContent = getLexiPlanPossessiveLabel();
+  const { owner, plan } = getLexiPlanHeaderParts();
+  badge.innerHTML = owner
+    ? `<span class="header-plan-owner">${esc(owner)}:</span> <span class="header-plan-title">${esc(plan)}</span>`
+    : `<span class="header-plan-title">${esc(plan)}</span>`;
   badge.title = `Lexi build ${LEXI_BUILD}`;
   const code = String(lexiEntitlement?.planCode || 'trial').toLowerCase();
   badge.dataset.plan = code;
@@ -1500,48 +1509,36 @@ async function ensureSupabaseProfile(user) {
 }
 
 async function signOutOfLexi() {
-  // Flush any not-yet-synced jobs to the cloud BEFORE signing out, so logging out
-  // (which clears the local cache on the next login) can never lose a job. If the
-  // flush fails after retries, let the user decide rather than silently losing data.
-  try {
-    if (lexiSupabase && lexiAuthSession?.user?.id && (state.saved || []).length) {
-      await Promise.race([
-        saveSavedDocsToSupabase(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud save timed out')), 5000))
-      ]);
-      localStorage.removeItem('lexi_last_documents_sync_error');
-    }
-  } catch (e) {
-    console.warn('Sign-out flush failed:', e);
-    const proceed = confirm('Some jobs have not finished saving to the cloud yet. If you sign out now they could be lost. Sign out anyway?');
-    if (!proceed) return;
+  // Sign out must be instant. Normal autosync already runs while the app is in
+  // use; do not block logout on a slow network/database call.
+  if (lexiSupabase && lexiAuthSession?.user?.id && (state.saved || []).length) {
+    saveSavedDocsToSupabase()
+      .then(() => localStorage.removeItem('lexi_last_documents_sync_error'))
+      .catch(e => console.warn('Background save during sign-out did not finish:', e));
   }
   _authReloading = true; // we're about to reload; suppress the auth-change listener
   try {
     if (lexiSupabase) {
-      await Promise.race([
-        lexiSupabase.auth.signOut({ scope: 'local' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Sign out timed out')), 4000))
-      ]);
+      lexiSupabase.auth.signOut({ scope: 'local' })
+        .catch(e => console.warn('Supabase sign-out did not finish cleanly; clearing local session anyway:', e));
     }
   } catch (e) {
     console.warn('Supabase sign-out did not finish cleanly; clearing local session anyway:', e);
-  } finally {
-    lexiAuthSession = null;
-    localStorage.removeItem(KEY_ONBOARDED);
-    localStorage.removeItem(KEY_PL_ONBOARDED);
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith('sb-')) localStorage.removeItem(k);
-    });
-    try {
-      sessionStorage.clear();
-    } catch (_) {}
-    // NOTE: intentionally keep 'lexi_user_id'. Removing it forced a full local wipe on
-    // the next login, which could delete a job that had not yet reached the cloud. A
-    // same-user re-login now preserves the cache; a DIFFERENT user still triggers the
-    // cross-account wipe in initialiseAuth (storedUserId !== currentUserId).
-    location.reload();
   }
+  lexiAuthSession = null;
+  localStorage.removeItem(KEY_ONBOARDED);
+  localStorage.removeItem(KEY_PL_ONBOARDED);
+  Object.keys(localStorage).forEach(k => {
+    if (k.startsWith('sb-')) localStorage.removeItem(k);
+  });
+  try {
+    sessionStorage.clear();
+  } catch (_) {}
+  // NOTE: intentionally keep 'lexi_user_id'. Removing it forced a full local wipe on
+  // the next login, which could delete a job that had not yet reached the cloud. A
+  // same-user re-login now preserves the cache; a DIFFERENT user still triggers the
+  // cross-account wipe in initialiseAuth (storedUserId !== currentUserId).
+  location.reload();
 }
 window.signOutOfLexi = signOutOfLexi;
 
@@ -3124,9 +3121,11 @@ function initQuoteBuilderTabs() {
       if (idx <= 0) {
         // First QB page — ask if they want to exit
         history.pushState({}, '');
-        if (confirm('Do you want to exit without finishing your quote?')) {
-          showPage('page4');
-        }
+        lexiConfirm(
+          'Do you want to exit without finishing your quote?',
+          () => showPage('page4'),
+          { title: 'Lexi says', okText: 'Exit quote', cancelText: 'Stay here' }
+        );
         return;
       }
       history.pushState({}, '');
@@ -3714,7 +3713,7 @@ function openTrialPlansModal() {
   const title = document.getElementById('trialStatusTitle');
   const copy = document.getElementById('trialStatusCopy');
   const paidPlan = isLexiPaidPlan();
-  if (modalTitle) modalTitle.textContent = paidPlan ? getLexiPlanPossessiveLabel() : 'Your Lexi trial';
+  if (modalTitle) modalTitle.textContent = paidPlan ? getLexiPlanHeaderLabel() : 'Your Lexi trial';
   if (title && copy) {
     if (paidPlan) {
       const planName = getLexiPlanDisplayName();
@@ -5915,6 +5914,7 @@ function populateQuoteForm() {
   // (payment30 / depositRequired) still light the matching new checkbox.
   const _sel = q.selectedTerms || [];
   const _has = { payment: _sel.includes('payment') || _sel.includes('payment30') || _sel.includes('payment14') || _sel.includes('payment7'),
+                 paymentCompletion: _sel.includes('paymentCompletion'),
                  deposit: _sel.includes('deposit') || _sel.includes('depositRequired'),
                  cancellation: _sel.includes('cancellation') };
   document.querySelectorAll('[name="terms"]').forEach(cb => {
@@ -7890,12 +7890,17 @@ function editDoc(id) {
 }
 
 function deleteDoc(id) {
-  if (!confirm('Lexi says: Are you sure you want to delete this? Once it\'s gone, it\'s gone!')) return;
-  state.saved = state.saved.filter(d => d.id !== id);
-  save();
-  updateSavedBadge();
-  refreshSavedDocs();
-  toast('Document deleted.');
+  lexiConfirm(
+    "Are you sure you want to delete this? Once it's gone, it's gone!",
+    () => {
+      state.saved = state.saved.filter(d => d.id !== id);
+      save();
+      updateSavedBadge();
+      refreshSavedDocs();
+      toast('Document deleted.');
+    },
+    { title: 'Lexi says', okText: 'Delete', cancelText: 'Cancel' }
+  );
 }
 
 function openCustomerDeleteChoice(group) {
@@ -7952,39 +7957,54 @@ function openCustomerDeleteChoice(group) {
         btn.onclick = () => {
           const docId = btn.dataset.id;
           pickerOverlay.remove();
-          if (!confirm('Are you sure you want to delete this document? This cannot be undone.')) return;
-          state.saved = state.saved.filter(d => d.id !== docId);
-          save(); updateSavedBadge(); refreshSavedDocs();
-          document.getElementById('customerDashboardModal').style.display = 'none';
-          toast('Document deleted.');
+          lexiConfirm(
+            'Are you sure you want to delete this document? This cannot be undone.',
+            () => {
+              state.saved = state.saved.filter(d => d.id !== docId);
+              save(); updateSavedBadge(); refreshSavedDocs();
+              document.getElementById('customerDashboardModal').style.display = 'none';
+              toast('Document deleted.');
+            },
+            { title: 'Lexi says', okText: 'Delete', cancelText: 'Cancel' }
+          );
         };
       });
     } else {
       const docId = group.docs[0].id;
       close();
-      if (!confirm(`Are you sure you want to delete this document for ${group.name}? This cannot be undone.`)) return;
-      state.saved = state.saved.filter(d => d.id !== docId);
-      save(); updateSavedBadge(); refreshSavedDocs();
-      document.getElementById('customerDashboardModal').style.display = 'none';
-      toast('Document deleted.');
+      lexiConfirm(
+        `Are you sure you want to delete this document for ${group.name}? This cannot be undone.`,
+        () => {
+          state.saved = state.saved.filter(d => d.id !== docId);
+          save(); updateSavedBadge(); refreshSavedDocs();
+          document.getElementById('customerDashboardModal').style.display = 'none';
+          toast('Document deleted.');
+        },
+        { title: 'Lexi says', okText: 'Delete', cancelText: 'Cancel' }
+      );
     }
   };
 
   overlay.querySelector('#_delCustBtn').onclick = () => {
     close();
-    if (!confirm(`Are you sure you want to delete ${group.name} and ALL their documents? This cannot be undone.`)) return;
-    const docIds = group.docs.map(d => d.id);
-    state.saved = state.saved.filter(d => !docIds.includes(d.id));
-    save(); updateSavedBadge(); refreshSavedDocs();
-    document.getElementById('customerDashboardModal').style.display = 'none';
-    // Also remove from Supabase if connected
-    if (lexiSupabase && lexiAuthSession?.user?.id) {
-      docIds.forEach(id => {
-        lexiSupabase.from('documents').delete().eq('local_id', id).eq('user_id', lexiAuthSession.user.id)
-          .then(() => {}).catch(() => {});
-      });
-    }
-    toast(`${group.name} and all their documents have been removed.`);
+    lexiConfirm(
+      `Are you sure you want to delete ${group.name} and ALL their documents? This cannot be undone.`,
+      () => {
+        const docIds = group.docs.map(d => d.id);
+        state.saved = state.saved.filter(d => !docIds.includes(d.id));
+        save(); updateSavedBadge(); refreshSavedDocs();
+        document.getElementById('customerDashboardModal').style.display = 'none';
+        // Also remove from Supabase if connected
+        if (lexiSupabase && lexiAuthSession?.user?.id) {
+          docIds.forEach(id => {
+            lexiSupabase.from('documents').delete().eq('local_id', id).eq('user_id', lexiAuthSession.user.id)
+              .then(() => {}).catch(() => {});
+          });
+        }
+        toast(`${group.name} and all their documents have been removed.`);
+      },
+      { title: 'Lexi says', okText: 'Delete customer', cancelText: 'Cancel' }
+    );
   };
 }
 
@@ -8121,13 +8141,18 @@ function setupModals() {
   document.getElementById('custEditDeleteBtn')?.addEventListener('click', () => {
     const docId = activeEditDocId || activeCustomerGroup?.docs[0]?.id;
     if (!docId) return;
-    if (!confirm('Lexi says: Are you sure you want to delete this? Once it\'s gone, it\'s gone!')) return;
-    document.getElementById('customerDashboardModal').style.display = 'none';
-    state.saved = state.saved.filter(d => d.id !== docId);
-    save();
-    updateSavedBadge();
-    refreshSavedDocs();
-    toast('Document deleted.');
+    lexiConfirm(
+      "Are you sure you want to delete this? Once it's gone, it's gone!",
+      () => {
+        document.getElementById('customerDashboardModal').style.display = 'none';
+        state.saved = state.saved.filter(d => d.id !== docId);
+        save();
+        updateSavedBadge();
+        refreshSavedDocs();
+        toast('Document deleted.');
+      },
+      { title: 'Lexi says', okText: 'Delete', cancelText: 'Cancel' }
+    );
   });
   document.getElementById('closeCustDetailsEditBtn')?.addEventListener('click', () => document.getElementById('customerDetailsEditModal').style.display = 'none');
   document.getElementById('saveCustDetailsBtn')?.addEventListener('click', saveCustomerDetails);
@@ -8340,7 +8365,7 @@ function setupModals() {
     } else {
       sendDoc(html, getDocFilenameFromRef(quoteData.ref || editedDoc.ref || 'quote'), quoteData.quoteNotes || '');
     }
-    toast('Quote shared!', 'success');
+    toast('Choose how to send this quote.', 'info', 4000);
   }
 
   // Invoice modal
@@ -9367,15 +9392,29 @@ function resetEpType() {
   if (sel) sel.value = 'full';
 }
 
+function normalisePaymentType(type) {
+  const t = String(type || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+  if (t.includes('deposit')) return 'deposit';
+  if (t.includes('part')) return 'part';
+  if (t.includes('final')) return 'final';
+  if (t.includes('full')) return 'full';
+  return '';
+}
+
 function paymentTypeLabel(type) {
-  if (type === 'deposit') return 'Deposit';
-  if (type === 'part')    return 'Part Payment';
+  const normalised = normalisePaymentType(type);
+  if (normalised === 'deposit') return 'Deposit';
+  if (normalised === 'part') return 'Part payment';
+  if (normalised === 'final') return 'Final payment';
+  if (normalised === 'full') return 'Full payment';
   return 'Payment';
 }
 
 function paymentTypeDocLabel(type) {
-  if (type === 'deposit') return 'Deposit Received';
-  if (type === 'part')    return 'Part Payment Received';
+  const normalised = normalisePaymentType(type);
+  if (normalised === 'deposit') return 'Deposit Received';
+  if (normalised === 'part') return 'Part Payment Received';
+  if (normalised === 'final') return 'Final Payment Received';
   return 'Payment Received';
 }
 
@@ -10319,14 +10358,18 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
 
   // Full record of money in (date, type, amount).
   const payRecordHtml = payments.length
-    ? payments.map((p, i) => `
+    ? payments.map((p) => {
+        const typeLabel = paymentTypeLabel(p.type);
+        return `
         <div class="cdv-payment-row">
-          <span class="cdv-pay-num">${p.type && p.type !== 'full' ? paymentTypeLabel(p.type) : `Payment ${i + 1}`}</span>
-          <span class="cdv-pay-date">${formatDate(p.date)}</span>
-          <span class="cdv-pay-amount">${fmtPrice(p.amount)}</span>
-        </div>`).join('') +
+          <span class="cdv-pay-num">Payment</span>
+          <span class="cdv-pay-date">${formatPaymentDate(p.date)}</span>
+          <span class="cdv-pay-type">${typeLabel === 'Payment' ? '' : esc(typeLabel)}</span>
+          <span class="cdv-pay-amount">${fmtPaymentAmount(p.amount)}</span>
+        </div>`;
+      }).join('') +
       (outstanding > 0
-        ? `<div class="cdv-payment-row cdv-outstanding-row"><span class="cdv-pay-num">Outstanding</span><span></span><span class="cdv-pay-amount">${fmtPrice(outstanding)}</span></div>`
+        ? `<div class="cdv-payment-row cdv-outstanding-row"><span class="cdv-pay-num">Outstanding</span><span class="cdv-pay-date"></span><span class="cdv-pay-type"></span><span class="cdv-pay-amount">${fmtPrice(outstanding)}</span></div>`
         : `<div class="cdv-paid-stamp">✓ Paid in full</div>`)
     : `<p class="cdv-empty">No payments recorded yet.</p>`;
   // Always-visible "Money In" entry form (no extra button/modal) — shown while money is owed.
@@ -10448,15 +10491,14 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
       <div class="cdv-tube-row cdv-tube-row3">${row2}</div>
     </div>`;
 
-  // When a job is accepted but no date is booked yet, show a prompt (mirrors the
-  // Job Completed prompt) asking for the Date Booked For.
+  // When a job is accepted but no date is booked yet, show the same style of
+  // date prompt as Job Completed.
   const acceptedPromptHtml = (d.jobAccepted && !d.jobStartDate) ? `
-        <div class="cdv-accepted-prompt" data-doc-id="${esc(d.id)}">
+        <div class="cdv-completed-prompt cdv-accepted-prompt" data-doc-id="${esc(d.id)}">
           <p class="cdv-prompt-msg">This job is accepted. When have you booked them in for?</p>
           <div class="cdv-prompt-actions">
-            <span class="cdv-prompt-or">Date Booked For:</span>
             <button type="button" class="cdv-accepted-today-btn" data-doc-id="${esc(d.id)}">Today</button>
-            <span class="cdv-prompt-or">or</span>
+            <span class="cdv-prompt-or">or select a date</span>
             <input type="date" class="cdv-accepted-prompt-date" data-doc-id="${esc(d.id)}">
           </div>
         </div>` : '';
@@ -10468,7 +10510,7 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
           Job Accepted
         </label>
         <div class="cdv-start-date-wrap"${!(d.jobAccepted && d.jobStartDate) ? ' style="display:none"' : ''}>
-          <span class="cdv-start-date-label">Date Booked For</span>
+          <span class="cdv-start-date-label">Booked date</span>
           <input type="date" class="cdv-start-date-input" data-doc-id="${esc(d.id)}"
             value="${esc(d.jobStartDate || '')}">
         </div>
@@ -10506,8 +10548,8 @@ function buildCustomerJobSection(d, jobNum = 0, groupName = '', isFirst = false)
   const JSVG_DELETE  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
   const jobContactBtns = `
     <div class="cdv-job-actions cdv-job-contact-actions">
-      <button type="button" class="cal-icon-btn cdv-labeled" data-prog-doc-id="${esc(d.id)}" data-prog-action="share">${JSVG_SEND}<span>Send</span></button>
-      <button type="button" class="cal-icon-btn cdv-labeled" data-prog-doc-id="${esc(d.id)}" data-prog-action="contact">${JSVG_CONTACT}<span>Contact</span></button>
+      <button type="button" class="cal-icon-btn cdv-labeled cdv-docs-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="share">${JSVG_SEND}<span>Send/View Documents</span></button>
+      <button type="button" class="cal-icon-btn cdv-labeled cdv-contact-customer-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="contact">${JSVG_CONTACT}<span>Contact Customer</span></button>
       <button type="button" class="cal-icon-btn cdv-labeled cdv-delete-btn" data-prog-doc-id="${esc(d.id)}" data-prog-action="deleteJob">${JSVG_DELETE}<span>Delete</span></button>
     </div>`;
 
@@ -10658,7 +10700,9 @@ function renderSingleCustomerDashboard(group, groups) {
     if (!cb) return;
     const doc = state.saved.find(d => d.id === cb.dataset.docId);
     if (!doc) return;
+    activeDocId = doc.id;
     doc.jobAccepted = cb.checked;
+    if (!doc.jobAccepted) doc.jobStartDate = '';
     save();
     queueSavedDocsSync(true);
     refreshSavedDocs();
@@ -12176,6 +12220,7 @@ function buildPhotosSection(doc, include) {
 function getPaymentTermDays(q) {
   q = q || {};
   const sel = q.selectedTerms || [];
+  if (sel.includes('paymentCompletion')) return 0;
   if (sel.includes('payment') && Number(q.paymentDays) > 0) return Number(q.paymentDays);
   if (sel.includes('payment7'))  return 7;
   if (sel.includes('payment14')) return 14;
@@ -12196,6 +12241,7 @@ function collectTermLines(q) {
   const conLines = [];
   // New editable clauses
   if (sel.includes('payment')) payLines.push(`Payment due within ${days} days of invoice date.`);
+  if (sel.includes('paymentCompletion')) payLines.push('Full payment due upon completion.');
   if (sel.includes('deposit')) payLines.push(`A ${dep}% deposit is required before work commences.`);
   if (sel.includes('cancellation')) conLines.push(`Cancellation within ${hrs} hours of scheduled start date may incur a charge.`);
   // Legacy clauses from older saved docs
@@ -12311,6 +12357,33 @@ function warmupSupabase() {
 }
 
 /* ── Upload a document to Supabase Storage and return its public URL ── */
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function verifyPublicDocumentUrl(storageUrl) {
+  if (!storageUrl) throw new Error('No document URL was returned.');
+  const verifiedUrl = storageUrl + (storageUrl.includes('?') ? '&' : '?') + 'lexi_verify=' + Date.now();
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetchWithTimeout(verifiedUrl, { cache: 'no-store' }, 15000);
+      if (response.ok) return true;
+      lastError = new Error(`Customer document link returned status ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1200 * (attempt + 1)));
+  }
+  throw lastError || new Error('Customer document link could not be verified.');
+}
+
 async function uploadDocToStorage(htmlStr, filename, acceptToken = '', docType = '') {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) {
     console.warn('Document storage skipped: not logged in or Supabase not ready');
@@ -12357,6 +12430,7 @@ async function uploadDocToStorage(htmlStr, filename, acceptToken = '', docType =
     // ALWAYS point at the live app: this link is opened by the customer on
     // their own device, and the doc itself lives in Supabase cloud storage,
     // so a localhost/file:// origin would produce a dead link.
+    await verifyPublicDocumentUrl(storageUrl);
     const appBase = LIVE_APP_URL.replace(/\/$/, '');
     let viewUrl = `${appBase}/view.html?path=${encodeURIComponent(path)}`;
     // Carry the acceptance token + business name + doc type so the single
@@ -12587,18 +12661,23 @@ function importData(e) {
     try {
       const data = JSON.parse(ev.target.result);
       if (!data.company && !data.priceList) throw new Error('Invalid backup file.');
-      if (!confirm('This will replace all your current data. Continue?')) return;
-      if (data.company)   state.company   = data.company;
-      if (data.priceList) state.priceList = data.priceList;
-      if (data.saved)     state.saved     = data.saved;
-      if (data.refSeq)    localStorage.setItem(KEY_REF, data.refSeq);
-      if (data.invSeq)    localStorage.setItem(KEY_INV, data.invSeq);
-      save();
-      populatePage1Fields();
-      refreshPriceList();
-      refreshSavedDocs();
-      updateSavedBadge();
-      toast("I've restored your backup.", 'success');
+      lexiConfirm(
+        'This will replace all your current data. Continue?',
+        () => {
+          if (data.company)   state.company   = data.company;
+          if (data.priceList) state.priceList = data.priceList;
+          if (data.saved)     state.saved     = data.saved;
+          if (data.refSeq)    localStorage.setItem(KEY_REF, data.refSeq);
+          if (data.invSeq)    localStorage.setItem(KEY_INV, data.invSeq);
+          save();
+          populatePage1Fields();
+          refreshPriceList();
+          refreshSavedDocs();
+          updateSavedBadge();
+          toast("I've restored your backup.", 'success');
+        },
+        { title: 'Lexi says', okText: 'Restore backup', cancelText: 'Cancel' }
+      );
     } catch(err) {
       toast('Invalid backup file. Please check and try again.', 'error');
     }
@@ -12636,6 +12715,19 @@ function formatDate(str) {
   try {
     return new Date(str).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   } catch { return str; }
+}
+
+function formatPaymentDate(str) {
+  if (!str) return '';
+  try {
+    const m = String(str).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(str);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch { return str; }
+}
+
+function fmtPaymentAmount(n) {
+  return fmtPrice(n).replace(/\.00$/, '');
 }
 
 function todayStr() {

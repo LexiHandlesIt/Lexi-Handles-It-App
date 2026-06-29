@@ -19,7 +19,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
   <!-- Auto cache-buster: always fetch the latest CSS/JS, no manual version bumps -->
   <script>
-    window.LEXI_BUILD = '2026-06-29-plan-status-logout-v2';
+    window.LEXI_BUILD = '2026-06-29-plan-status-logout-v3';
     window.lexiEmergencySignOut = function () {
       try {
         Object.keys(localStorage).forEach(function (key) {
@@ -1497,6 +1497,10 @@
               <span class="term-text">Payment due within <input type="number" id="termPaymentDays" class="term-num" value="30" min="0" step="1"> days of invoice date.</span>
             </label>
             <label class="checkbox-label compact term-line">
+              <input type="checkbox" name="terms" value="paymentCompletion">
+              <span class="term-text">Full payment due upon completion.</span>
+            </label>
+            <label class="checkbox-label compact term-line">
               <input type="checkbox" name="terms" value="deposit">
               <span class="term-text">A <input type="number" id="termDepositPct" class="term-num" value="50" min="0" max="100" step="1">% deposit is required before work commences.</span>
             </label>
@@ -2540,6 +2544,7 @@
           <label>Terms &amp; Conditions</label>
           <div class="terms-options">
             <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="payment30"> Payment due within 30 days of invoice date.</label>
+            <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="paymentCompletion"> Full payment due upon completion.</label>
             <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="depositRequired"> A 50% deposit is required before work commences.</label>
             <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="quotationValid"> This quotation is valid for 30 days from the date shown.</label>
             <label class="checkbox-label compact"><input type="checkbox" name="jteTerms" value="materialsExtra"> Materials are not included unless stated above.</label>

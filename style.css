@@ -302,27 +302,21 @@ h3 { font-size: 1rem; font-weight: 600; }
 
 .header-plan-badge {
   max-width: 190px;
-  padding: 7px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: #fff;
+  padding: 0 2px;
   color: var(--walnut);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 800;
   line-height: 1.15;
   text-align: right;
   white-space: normal;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
-.header-plan-badge[data-plan="tradesman"] {
-  border-color: var(--sage);
-  color: var(--sage);
+.header-plan-owner {
+  color: var(--walnut);
 }
 
-.header-plan-badge[data-plan="master"] {
-  border-color: var(--terracotta);
-  color: var(--terracotta);
+.header-plan-title {
+  color: var(--gold);
 }
 
 .nav-btn {
@@ -4620,6 +4614,7 @@ input[type="text"].sig-text-input:focus {
 .cdv-payment-row:last-child { border-bottom: none; }
 .cdv-pay-num   { min-width: 82px; color: #888; font-size: 0.82rem; flex-shrink: 0; }
 .cdv-pay-date  { flex: 1; color: var(--charcoal); }
+.cdv-pay-type  { color: var(--walnut); font-weight: 700; white-space: nowrap; }
 .cdv-pay-amount { font-weight: 700; white-space: nowrap; }
 .cdv-outstanding-row .cdv-pay-amount { color: var(--danger); }
 .cdv-paid-stamp {
@@ -6258,8 +6253,9 @@ input[type="text"].sig-text-input:focus {
   font-weight: 600;
 }
 .cal-icon-btn.cdv-labeled span {
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.08;
+  white-space: normal;
+  text-align: center;
 }
 
 /* Customer dashboard: one consistent grid of equal-width labelled tiles */
@@ -6268,6 +6264,12 @@ input[type="text"].sig-text-input:focus {
 .cdv-more-wrap { position: relative; }
 .cdv-more-wrap .cdv-more-btn { width: 100%; }
 .cdv-job-actions .cal-icon-btn.cdv-labeled { flex: 1; }
+.cdv-job-contact-actions .cdv-docs-btn,
+.cdv-job-contact-actions .cdv-contact-customer-btn { flex: 1.25; }
+.cdv-job-contact-actions .cdv-delete-btn {
+  flex: 0.75;
+  min-width: 78px;
+}
 .cdv-job-actions .cdv-more-wrap { flex: 1; }
 /* The per-job Contact/Share/More row sits directly under Edit/Invoice/Receipt */
 .cdv-job-contact-actions { border-bottom: 1px solid var(--border); }
@@ -6469,7 +6471,8 @@ input[type="text"].sig-text-input:focus {
   gap: 8px;
   flex-wrap: wrap;
 }
-.cdv-today-btn {
+.cdv-today-btn,
+.cdv-accepted-today-btn {
   background: var(--walnut);
   color: var(--white);
   border: none;
@@ -6482,13 +6485,15 @@ input[type="text"].sig-text-input:focus {
   transition: background var(--transition);
   white-space: nowrap;
 }
-.cdv-today-btn:hover { background: var(--walnut-d); }
+.cdv-today-btn:hover,
+.cdv-accepted-today-btn:hover { background: var(--walnut-d); }
 .cdv-prompt-or {
   font-size: 0.73rem;
   color: #999;
   white-space: nowrap;
 }
-.cdv-prompt-date {
+.cdv-prompt-date,
+.cdv-accepted-prompt-date {
   flex: 1;
   border: 1.5px solid var(--border);
   border-radius: 8px;
@@ -6498,7 +6503,8 @@ input[type="text"].sig-text-input:focus {
   color: var(--charcoal);
   min-width: 0;
 }
-.cdv-prompt-date:focus { border-color: var(--walnut); outline: none; }
+.cdv-prompt-date:focus,
+.cdv-accepted-prompt-date:focus { border-color: var(--walnut); outline: none; }
 .cdv-start-date-label { font-size: 0.72rem; color: #888; white-space: nowrap; font-weight: 600; }
 .cdv-start-date-input,
 .cdv-completed-date-input {
@@ -7920,8 +7926,8 @@ input[type="text"].sig-text-input:focus {
   }
 
   .header-plan-badge {
-    max-width: 104px;
-    padding: 5px 7px;
+    max-width: 112px;
+    padding: 0;
     font-size: 0.62rem;
   }
 
