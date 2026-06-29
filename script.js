@@ -110,6 +110,37 @@ function normaliseEntitlementRpcRow(data) {
   };
 }
 
+function getLexiOwnerName() {
+  return (state.company?.preferredName || state.company?.firstName || '').trim() || 'Your';
+}
+
+function getLexiPlanDisplayName(planCode = lexiEntitlement?.planCode) {
+  const code = String(planCode || 'trial').toLowerCase();
+  if (code === 'tradesman') return 'Tradesman Plan';
+  if (code === 'master') return 'Master Plan';
+  if (code === 'apprentice') return 'Free Plan';
+  return 'Free Trial';
+}
+
+function getLexiPlanPossessiveLabel(planCode = lexiEntitlement?.planCode) {
+  const owner = getLexiOwnerName();
+  const suffix = owner.toLowerCase() === 'your' ? '' : "'s";
+  return `${owner}${suffix} ${getLexiPlanDisplayName(planCode)}`;
+}
+
+function isLexiPaidPlan() {
+  return ['tradesman', 'master'].includes(String(lexiEntitlement?.planCode || '').toLowerCase())
+    && ['active', 'trialing', 'past_due'].includes(String(lexiEntitlement?.subscriptionStatus || '').toLowerCase());
+}
+
+function updatePlanDisplay() {
+  const badge = document.getElementById('headerPlanBadge');
+  if (!badge) return;
+  badge.textContent = getLexiPlanPossessiveLabel();
+  const code = String(lexiEntitlement?.planCode || 'trial').toLowerCase();
+  badge.dataset.plan = code;
+}
+
 async function loadLexiEntitlement() {
   if (!lexiSupabase || !lexiAuthSession?.user?.id) return null;
   const { data, error } = await lexiSupabase.rpc('get_my_entitlement');
@@ -121,6 +152,7 @@ async function loadLexiEntitlement() {
   }
   lexiEntitlement = normaliseEntitlementRpcRow(data);
   applyLexiEntitlementRestrictions();
+  updatePlanDisplay();
   return lexiEntitlement;
 }
 
@@ -1057,6 +1089,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEarnings();
   setupLexiEntitlementGuards();
   applyLexiEntitlementRestrictions();
+  updatePlanDisplay();
   updateSavedBadge();
   populatePage1Fields();
   updateQrMenuLabel();
@@ -1639,6 +1672,7 @@ async function loadBusinessFromSupabase() {
 
   state.company = { ...state.company, ...businessRowToCompany(data) };
   save();
+  updatePlanDisplay();
   return true;
 }
 
@@ -3624,9 +3658,14 @@ function openTrialPlansModal() {
   const modalTitle = document.getElementById('trialPlansTitle');
   const title = document.getElementById('trialStatusTitle');
   const copy = document.getElementById('trialStatusCopy');
-  if (modalTitle) modalTitle.textContent = 'Your Lexi trial';
+  const paidPlan = isLexiPaidPlan();
+  if (modalTitle) modalTitle.textContent = paidPlan ? getLexiPlanPossessiveLabel() : 'Your Lexi trial';
   if (title && copy) {
-    if (days > 0) {
+    if (paidPlan) {
+      const planName = getLexiPlanDisplayName();
+      title.textContent = `You are on ${planName}.`;
+      copy.textContent = 'Your subscription is active. Every plan keeps your work safe, and you can change plan as your business grows.';
+    } else if (days > 0) {
       title.textContent = `${days} day${days === 1 ? '' : 's'} left in your free trial.`;
       copy.textContent = 'No card needed today. Keep using Lexi and choose a plan near the end if she is earning her keep.';
     } else {
@@ -4299,6 +4338,7 @@ function saveBusinessDetails(showToast = true) {
   });
   updateColourPreview();
   personaliseText();
+  updatePlanDisplay();
   updateQrMenuLabel();
   if (showToast) showSavedPopup(
     businessNameCompliment(getVal('p1BusinessName') || (firstName + ' ' + lastName)),
