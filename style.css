@@ -367,6 +367,15 @@ h3 { font-size: 1rem; font-weight: 600; }
   pointer-events: none;
 }
 
+.nav-build-version {
+  margin: 12px 18px 6px;
+  color: var(--text-light);
+  font-size: 0.68rem;
+  opacity: 0.75;
+  text-align: center;
+  word-break: break-word;
+}
+
 /* ===== MAIN & PAGES ===== */
 .app-main {
   max-width: 720px;

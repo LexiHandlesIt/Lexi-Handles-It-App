@@ -2,7 +2,7 @@
   "name": "Lexi Handles It",
   "short_name": "Lexi",
   "description": "Trade business management - quotes, invoices and jobs handled.",
-  "start_url": "/index.html",
+  "start_url": "/index.html?v=2026-06-29-plan-status-logout-v2",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F9F5F0",

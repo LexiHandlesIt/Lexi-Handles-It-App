@@ -85,6 +85,7 @@ const KEY_TRIAL_START  = 'lexi_trial_start';
 const KEY_TRIAL_END    = 'lexi_trial_end';
 const KEY_AUTH_REMEMBER_EMAIL = 'lexi_auth_remember_email';
 const TRIAL_DAYS       = 30;
+const LEXI_BUILD       = window.LEXI_BUILD || 'local-dev';
 
 /* ===== SUBSCRIPTION ENTITLEMENTS ===== */
 function normaliseEntitlementRpcRow(data) {
@@ -137,8 +138,46 @@ function updatePlanDisplay() {
   const badge = document.getElementById('headerPlanBadge');
   if (!badge) return;
   badge.textContent = getLexiPlanPossessiveLabel();
+  badge.title = `Lexi build ${LEXI_BUILD}`;
   const code = String(lexiEntitlement?.planCode || 'trial').toLowerCase();
   badge.dataset.plan = code;
+}
+
+async function loadLexiEntitlementDirectFallback() {
+  if (!lexiSupabase || !lexiAuthSession?.user?.id) return null;
+  const { data: account, error: accountError } = await lexiSupabase
+    .from('account_entitlements')
+    .select('plan_code, subscription_status, early_adopter, trial_started_at, trial_ends_at, entitlement_period_start, entitlement_period_end, cancel_at_period_end, quiet_season_active')
+    .eq('user_id', lexiAuthSession.user.id)
+    .maybeSingle();
+  if (accountError || !account) {
+    if (accountError) console.warn('Direct entitlement fallback failed:', accountError);
+    return null;
+  }
+
+  const { data: plan, error: planError } = await lexiSupabase
+    .from('subscription_plans')
+    .select('display_name, monthly_job_limit, entitlements')
+    .eq('code', account.plan_code)
+    .maybeSingle();
+  if (planError) console.warn('Direct plan fallback failed:', planError);
+
+  return normaliseEntitlementRpcRow({
+    plan_code: account.plan_code,
+    plan_name: plan?.display_name || account.plan_code || 'Free Trial',
+    subscription_status: account.subscription_status,
+    early_adopter: account.early_adopter,
+    trial_started_at: account.trial_started_at,
+    trial_ends_at: account.trial_ends_at,
+    period_start: account.entitlement_period_start,
+    period_end: account.entitlement_period_end,
+    monthly_job_limit: plan?.monthly_job_limit ?? null,
+    jobs_used: 0,
+    jobs_remaining: plan?.monthly_job_limit ?? null,
+    quiet_season_active: account.quiet_season_active,
+    cancel_at_period_end: account.cancel_at_period_end,
+    entitlements: plan?.entitlements || {}
+  });
 }
 
 async function loadLexiEntitlement() {
@@ -148,9 +187,19 @@ async function loadLexiEntitlement() {
     // The migration can be deployed independently of this client release.
     // Until it is present, the existing trial behaviour remains unchanged.
     console.warn('Could not load subscription entitlements:', error);
-    return null;
+    lexiEntitlement = await loadLexiEntitlementDirectFallback();
+    if (!lexiEntitlement) return null;
+    applyLexiEntitlementRestrictions();
+    updatePlanDisplay();
+    return lexiEntitlement;
   }
   lexiEntitlement = normaliseEntitlementRpcRow(data);
+  if (!isLexiPaidPlan()) {
+    const directEntitlement = await loadLexiEntitlementDirectFallback();
+    if (directEntitlement && ['tradesman', 'master'].includes(String(directEntitlement.planCode || '').toLowerCase())) {
+      lexiEntitlement = directEntitlement;
+    }
+  }
   applyLexiEntitlementRestrictions();
   updatePlanDisplay();
   return lexiEntitlement;
@@ -1456,7 +1505,10 @@ async function signOutOfLexi() {
   // flush fails after retries, let the user decide rather than silently losing data.
   try {
     if (lexiSupabase && lexiAuthSession?.user?.id && (state.saved || []).length) {
-      await saveSavedDocsToSupabase();
+      await Promise.race([
+        saveSavedDocsToSupabase(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud save timed out')), 5000))
+      ]);
       localStorage.removeItem('lexi_last_documents_sync_error');
     }
   } catch (e) {
@@ -1491,6 +1543,7 @@ async function signOutOfLexi() {
     location.reload();
   }
 }
+window.signOutOfLexi = signOutOfLexi;
 
 function businessRowToCompany(row) {
   if (!row) return {};
@@ -3296,8 +3349,10 @@ function setupNavigation() {
     const email = lexiAuthSession?.user?.email || '';
     const emailEl = document.getElementById('navAccountEmail');
     const emailWrap = document.getElementById('navAccountEmailWrap');
+    const buildEl = document.getElementById('navBuildVersion');
     if (emailEl) emailEl.textContent = email;
     if (emailWrap) emailWrap.style.display = email ? '' : 'none';
+    if (buildEl) buildEl.textContent = `Build ${LEXI_BUILD}`;
   }
 
   function closeMenu() {

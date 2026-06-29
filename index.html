@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#7D5730">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -15,6 +18,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
   <!-- Auto cache-buster: always fetch the latest CSS/JS, no manual version bumps -->
+  <script>
+    window.LEXI_BUILD = '2026-06-29-plan-status-logout-v2';
+    window.lexiEmergencySignOut = function () {
+      try {
+        Object.keys(localStorage).forEach(function (key) {
+          if (key.indexOf('sb-') === 0 || key.indexOf('supabase') >= 0) localStorage.removeItem(key);
+        });
+        sessionStorage.clear();
+      } catch (_) {}
+      location.replace(location.pathname + '?signed_out=' + Date.now());
+    };
+  </script>
   <script>window.LEXI_BUST = Date.now();</script>
   <script>document.write('<link rel="stylesheet" href="style.css?v=' + window.LEXI_BUST + '">');</script>
 </head>
@@ -249,11 +264,12 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
       Share Lexi
     </button>
-<button class="nav-menu-item nav-menu-signout" id="menuSignOut">
+<button class="nav-menu-item nav-menu-signout" id="menuSignOut" onclick="if(!window.signOutOfLexi){ window.lexiEmergencySignOut(); return false; }">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       Sign Out
     </button>
     <div class="nav-account-email" id="navAccountEmailWrap" style="display:none">Signed in as <span id="navAccountEmail"></span></div>
+    <div class="nav-build-version" id="navBuildVersion"></div>
   </div>
   <div class="nav-menu-overlay" id="navMenuOverlay"></div>
 
